@@ -55,8 +55,10 @@ DEFAULT_SETTINGS = {
     "delivery_pricing": {"mode":"distance","base_fee":55,"per_km_fee":9,"maximum_km":15,"store_latitude":None,"store_longitude":None},
 }
 DEFAULT_MENU = [
-    {"id": "classic", "name": "หมูปิ้ววว ต้นตำรับ", "description": "หมูหมักนุ่ม ย่างหอมถ่าน", "price": 15, "available": True},
-    {"id": "spicy", "name": "หมูปิ้ววว เผ็ดนัว", "description": "รสจัดจ้าน กลมกล่อม", "price": 18, "available": True},
+    {"id": "classic", "name": "หมูปิ้ววว ต้นตำรับ", "description": "หมูหมักนุ่ม ย่างหอมถ่าน", "price": 10, "available": True},
+    {"id": "milk-tender", "name": "หมูปิ้ววว นมสุดดด", "description": "หมูหมักนมเนื้อนุ่ม ย่างหอมถ่าน", "price": 10, "available": True},
+    {"id": "fatty", "name": "หมูปิ้ววว ติดมันส์", "description": "หมูติดมันย่างหอมถ่าน นุ่มฉ่ำ", "price": 10, "available": True},
+    {"id": "spicy", "name": "หมูปิ้ววว เผ็ดนัว", "description": "รสจัดจ้าน กลมกล่อม", "price": 10, "available": True},
     {"id": "sticky-rice", "name": "ข้าวเหนียว", "description": "ห่อละกำลังดี", "price": 10, "available": True},
 ]
 DELIVERY_STATUSES = ("queued", "assigned", "picked_up", "on_the_way", "delivered", "failed", "cancelled")
