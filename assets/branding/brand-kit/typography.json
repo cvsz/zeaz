@@ -1,0 +1,8 @@
+{
+  "project": "moopiew",
+  "fonts": {
+    "display": {"family": "'Kanit', sans-serif", "source": "Google Fonts", "weights": [600, 700], "usage": "Headlines and app bar titles; supports Thai and English."},
+    "body": {"family": "'Sarabun', sans-serif", "source": "Google Fonts", "weights": [400, 500], "usage": "Restaurant descriptions, menus and body text."}
+  },
+  "sizes": {"h1": {"size": "32px", "weight": 700, "lineHeight": "1.2"}, "h2": {"size": "24px", "weight": 600, "lineHeight": "1.3"}, "body1": {"size": "16px", "weight": 400, "lineHeight": "1.5"}, "caption": {"size": "12px", "weight": 400, "lineHeight": "1.4"}}
+}

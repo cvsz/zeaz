@@ -1,21 +1,10 @@
 {
-  "schema_version": 1,
-  "name": "moopiew-assets",
+  "project": "moopiew",
+  "version": "1.0.0",
   "visibility": "proprietary",
-  "directories": [
-    "brand-kit",
-    "food/ai-generated",
-    "marketing",
-    "product",
-    "print",
-    "social",
-    "asset-generator"
-  ],
-  "required_files": [
-    "README.md",
-    "manifest.json",
-    "brand-kit/colors.json",
-    "brand-kit/typography.json",
-    "food/ai-generated/prompts.json"
-  ]
+  "assetCategories": ["branding", "social", "ads", "print", "food", "icons", "illustrations", "videos"],
+  "formats": {"images": ["svg", "png", "webp"], "videos": ["mp4", "webm"], "documents": ["pdf"]},
+  "optimization": {"imageMaxWidth": 2048, "compression": true, "webpPreferred": true},
+  "directories": ["branding/logo", "branding/brand-kit", "branding/app-icons", "branding/watermark", "social", "ads", "print", "food/ai-generated/generated", "icons", "illustrations", "videos", "asset-generator"],
+  "required_files": ["README.md", "LICENSE.md", "manifest.json", "branding/brand-kit/colors.json", "branding/brand-kit/typography.json", "branding/brand-kit/design-token.json", "food/ai-generated/prompts.json", "branding/logo/moopiew-logo.svg"]
 }
