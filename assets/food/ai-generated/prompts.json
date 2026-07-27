@@ -1,0 +1,9 @@
+{
+  "style_guide": "photorealistic, cinematic lighting, shallow depth of field, natural textures, warm color balance, rustic-modern setting.",
+  "default_negative_prompt": "cartoon, illustration, painting, deformed, messy, low quality, dark, cold lighting, blurry, text, watermark.",
+  "prompts": {
+    "menu_item_pork_neck": "High-angle, close-up photograph of sliced, charcoal-grilled Thai pork neck (Moo Yang). The meat is juicy, glazed with a caramelized marinade, featuring slight char marks. Served on a ceramic plate with a small ceramic bowl of Nam Jim Jaew (spicy dipping sauce). Rustic wooden table background. Soft, natural daylight from the side. 8k, hyperrealistic. --ar 4:3",
+    "lifestyle_eating": "A young, happy Thai couple sitting at a wooden table in a brightly lit, modern-rustic restaurant. They are sharing multiple plates of Moopiew grilled meats and sticky rice. The woman is laughing while holding a piece of food with chopsticks. Background is softly blurred restaurant interior with warm ambient lighting. Cinematic photo, f/1.8. --ar 16:9",
+    "delivery_app_hero": "A neatly organized spread of various Moopiew grilled delivery containers (eco-friendly packaging) on a clean, light stone countertop. The food inside looks hot and fresh. Hands are reaching into the frame to pick up a box. Shot from slightly above. Minimalist, clean, appetizing. --ar 16:9"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "name": "moopiew-assets",
+  "visibility": "proprietary",
+  "directories": [
+    "brand-kit",
+    "food/ai-generated",
+    "marketing",
+    "product",
+    "print",
+    "social",
+    "asset-generator"
+  ],
+  "required_files": [
+    "README.md",
+    "manifest.json",
+    "brand-kit/colors.json",
+    "brand-kit/typography.json",
+    "food/ai-generated/prompts.json"
+  ]
+}

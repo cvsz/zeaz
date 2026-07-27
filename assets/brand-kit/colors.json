@@ -1,0 +1,32 @@
+{
+  "theme": "moopiew-pork-grill",
+  "palette": {
+    "primary": {
+      "main": "#E64A19",
+      "light": "#FF7D47",
+      "dark": "#AC0800",
+      "contrastText": "#FFFFFF",
+      "description": "Inspired by char-grilled pork glaze."
+    },
+    "secondary": {
+      "main": "#FFC107",
+      "light": "#FFF350",
+      "dark": "#C79100",
+      "contrastText": "#212121",
+      "description": "The rich color of golden-fried garlic or egg yolk."
+    },
+    "neutral": {
+      "background": "#F5F5F7",
+      "paper": "#FFFFFF",
+      "textPrimary": "#212121",
+      "textSecondary": "#666666",
+      "divider": "#E0E0E0"
+    },
+    "semantic": {
+      "success": "#4CAF50",
+      "warning": "#FF9800",
+      "error": "#F44336",
+      "info": "#2196F3"
+    }
+  }
+}
