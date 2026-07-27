@@ -1,1 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 160" role="img" aria-label="Moopiew"><path d="M38 112V48h30l18 25 18-25h30v64h-25V84L86 116 63 84v28z" fill="#E64A19"/><text x="154" y="106" fill="#212121" font-family="Kanit,Arial,sans-serif" font-size="58" font-weight="700">หมูปิ้ววว</text></svg>
+<svg width="320" height="96" viewBox="0 0 320 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Moopiew">
+  <circle cx="48" cy="48" r="40" fill="#FF8A4C"/>
+  <path d="M25 55C25 39 35 28 48 28C61 28 71 39 71 55C71 67 61 75 48 75C35 75 25 67 25 55Z" fill="white"/>
+  <circle cx="38" cy="48" r="5" fill="#FF8A4C"/><circle cx="58" cy="48" r="5" fill="#FF8A4C"/>
+  <path d="M38 60C43 65 53 65 58 60" stroke="#FF8A4C" stroke-width="4" stroke-linecap="round"/>
+  <text x="105" y="62" font-family="Inter,Arial,sans-serif" font-size="52" font-weight="800" fill="#FFFFFF">Moopiew</text>
+</svg>

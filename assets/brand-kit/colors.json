@@ -2,9 +2,9 @@
   "theme": "moopiew-pork-grill",
   "palette": {
     "primary": {
-      "main": "#E64A19",
-      "light": "#FF7D47",
-      "dark": "#AC0800",
+      "main": "#FF6B35",
+      "light": "#FF8A4C",
+      "dark": "#C94B22",
       "contrastText": "#FFFFFF",
       "description": "Inspired by char-grilled pork glaze."
     },

@@ -1,6 +1,6 @@
 # Moopiew brand guidelines
 
-Use the charcoal-grill orange (`primary.main`) for primary actions and brand
+Use the friendly food-tech orange (`primary.main`, `#FF6B35`) for primary actions and brand
 surfaces. Use golden yellow (`secondary.main`) only as an accent. Keep text on
 light surfaces in `neutral.textPrimary`; only use white copy on the dark primary
 color. Headlines use Kanit; menus and body copy use Sarabun.

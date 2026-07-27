@@ -1,1 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Moopiew symbol"><rect width="128" height="128" rx="28" fill="#E64A19"/><path d="M25 90V38h24l15 21 15-21h24v52H83V67L64 94 45 67v23z" fill="#FFC107"/></svg>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Moopiew symbol">
+  <rect width="512" height="512" rx="120" fill="#FF6B35"/>
+  <path d="M150 280C150 180 205 125 256 125C307 125 362 180 362 280C362 360 307 400 256 400C205 400 150 360 150 280Z" fill="white"/>
+  <circle cx="215" cy="245" r="28" fill="#FF6B35"/><circle cx="297" cy="245" r="28" fill="#FF6B35"/>
+  <path d="M215 310C235 340 277 340 297 310" stroke="#FF6B35" stroke-width="20" stroke-linecap="round"/>
+</svg>
