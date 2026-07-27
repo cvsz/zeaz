@@ -7,6 +7,7 @@ first start it imports legacy data/orders.json and data/settings.json safely.
 from __future__ import annotations
 
 import json
+import math
 import base64
 import hashlib
 import hmac
@@ -51,6 +52,7 @@ DEFAULT_SETTINGS = {
     "store_name": "หมูปิ้ววว", "slot_capacity": 80, "advance_days": 14,
     "pickup_slots": ["09:00–10:00", "10:00–11:00", "11:00–12:00", "12:00–13:00"],
     "business_profile": {"legal_name":"", "tax_id":"", "address":"", "branch":"สำนักงานใหญ่", "vat_registered":False, "vat_rate":7},
+    "delivery_pricing": {"mode":"distance","base_fee":55,"per_km_fee":9,"maximum_km":15,"store_latitude":None,"store_longitude":None},
 }
 DEFAULT_MENU = [
     {"id": "classic", "name": "หมูปิ้ววว ต้นตำรับ", "description": "หมูหมักนุ่ม ย่างหอมถ่าน", "price": 15, "available": True},
@@ -119,6 +121,8 @@ def initialise_database() -> None:
         CREATE INDEX IF NOT EXISTS idx_inventory_movements_item ON inventory_movements(inventory_item_id, created_at DESC);
         """)
         con.execute("INSERT OR IGNORE INTO menu_display_order(menu_item_id,position) VALUES ('classic',1),('milk-tender',2),('fatty',3),('spicy',4),('sticky-rice',5)")
+        if "distance_km" not in {row[1] for row in con.execute("PRAGMA table_info(deliveries)")}:
+            con.execute("ALTER TABLE deliveries ADD COLUMN distance_km REAL NOT NULL DEFAULT 0")
         now=utcnow()
         con.execute("INSERT OR IGNORE INTO delivery_zones VALUES (?,?,?,?,?,?,?)", ("central", "พื้นที่จัดส่งหลัก", 30, 0, 1, now, now))
         if con.execute("SELECT COUNT(*) FROM settings").fetchone()[0]: return
@@ -383,6 +387,25 @@ def active_coupon(con, code: str, subtotal: int) -> dict | None:
 
 def delivery_zones(con):
     return [dict(row) for row in con.execute("SELECT id,name,fee,minimum_order FROM delivery_zones WHERE active=1 ORDER BY fee,name")]
+
+def valid_coordinate(value, low, high):
+    try: value=float(value)
+    except (TypeError,ValueError): raise ValueError("พิกัดตำแหน่งไม่ถูกต้อง")
+    if not low<=value<=high: raise ValueError("พิกัดตำแหน่งไม่ถูกต้อง")
+    return value
+
+def distance_km(lat1, lon1, lat2, lon2):
+    radius=6371.0088; phi1,phi2=math.radians(lat1),math.radians(lat2); dphi=math.radians(lat2-lat1); dlambda=math.radians(lon2-lon1)
+    a=math.sin(dphi/2)**2+math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    return radius*2*math.atan2(math.sqrt(a),math.sqrt(1-a))
+
+def quote_delivery(pricing, latitude, longitude):
+    store_lat,store_lon=pricing.get("store_latitude"),pricing.get("store_longitude")
+    if store_lat is None or store_lon is None: raise ValueError("ร้านยังไม่ได้ตั้งพิกัดสำหรับคำนวณค่าส่ง")
+    customer_lat=valid_coordinate(latitude,-90,90);customer_lon=valid_coordinate(longitude,-180,180);km=distance_km(float(store_lat),float(store_lon),customer_lat,customer_lon)
+    if km>float(pricing["maximum_km"]):raise ValueError(f"อยู่นอกพื้นที่จัดส่ง ({pricing['maximum_km']} กม.)")
+    fee=math.ceil(int(pricing["base_fee"])+float(pricing["per_km_fee"])*km)
+    return round(km,2),fee
 def valid_pickup(day, conf):
     try: picked = date.fromisoformat(day)
     except ValueError: return False
@@ -397,7 +420,7 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs): super().__init__(*args, directory=str(WEB), **kwargs)
     def log_message(self, format, *args): print(f"[{self.log_date_time_string()}] {format % args}")
     def end_headers(self):
-        self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("X-Frame-Options", "DENY"); self.send_header("Referrer-Policy", "strict-origin-when-cross-origin"); self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("X-Frame-Options", "DENY"); self.send_header("Referrer-Policy", "strict-origin-when-cross-origin"); self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)")
         self.send_header("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
         if urlparse(self.path).path in {"/admin.html", "/admin.js", "/ops.html", "/ops.js"}: self.send_header("Cache-Control", "no-store, max-age=0")
         super().end_headers()
@@ -481,6 +504,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "date":day,
                     "advance_days":conf["advance_days"],
                     "delivery_zones":delivery_zones(con),
+                    "delivery_pricing":{"mode":conf["delivery_pricing"]["mode"],"base_fee":conf["delivery_pricing"]["base_fee"],"per_km_fee":conf["delivery_pricing"]["per_km_fee"],"maximum_km":conf["delivery_pricing"]["maximum_km"],"configured":conf["delivery_pricing"].get("store_latitude") is not None},
                     "links":{"order":"/","dashboard":"/dashboard.html","platform":"/platform/","preview":"/menu-preview.html","health":"/api/health"}
                 })
             if path=="/api/admin/dashboard":
@@ -502,7 +526,7 @@ class Handler(SimpleHTTPRequestHandler):
                 receipts=[dict(row) for row in con.execute("SELECT * FROM pos_receipts ORDER BY issued_at DESC LIMIT 100")]
                 invoices=[dict(row) for row in con.execute("SELECT * FROM tax_invoices ORDER BY issued_at DESC LIMIT 100")]
                 recipes=[dict(row) for row in con.execute("SELECT r.menu_item_id,r.inventory_item_id,r.quantity,m.name AS menu_name,i.name AS inventory_name,i.unit FROM menu_recipes r JOIN menu_items m ON m.id=r.menu_item_id JOIN inventory_items i ON i.id=r.inventory_item_id ORDER BY m.name,i.name")]
-                return self.json({"delivery_zones":delivery_zones(con),"deliveries":deliveries,"riders":riders,"inventory":inventory,"menu":conf["menu"],"recipes":recipes,"coupons":coupons,"receipts":receipts,"tax_invoices":invoices,"business_profile":conf["business_profile"]})
+                return self.json({"delivery_zones":delivery_zones(con),"delivery_pricing":conf["delivery_pricing"],"deliveries":deliveries,"riders":riders,"inventory":inventory,"menu":conf["menu"],"recipes":recipes,"coupons":coupons,"receipts":receipts,"tax_invoices":invoices,"business_profile":conf["business_profile"]})
             printable=re.fullmatch(r"/api/admin/receipts/(RCT-[A-Z0-9-]+)/print",path)
             if printable:
                 if not self.require("admin"): return
@@ -548,6 +572,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "/api/admin/inventory/recipes":self.set_menu_recipe,
                 "/api/admin/coupons":self.create_coupon,
                 "/api/admin/business-profile":self.update_business_profile,
+                "/api/admin/delivery-pricing":self.update_delivery_pricing,
             }
             if path in admin_actions:
                 role=self.require("admin")
@@ -622,13 +647,16 @@ class Handler(SimpleHTTPRequestHandler):
             if fulfillment=="pickup":
                 remaining=next(slot["remaining"] for slot in slots_for(pickup_date,all_orders(con),conf) if slot["time"]==pickup_slot)
                 if sum(q for _,q in lines)>remaining:raise ValueError(f"รอบนี้เหลือรับได้ {remaining} ชิ้น กรุณาลดจำนวนหรือเลือกรอบอื่น")
-            delivery_fee=0; delivery=None
+            delivery_fee=0; delivery=None; delivery_distance=0
             if fulfillment=="delivery":
                 zone_id=str(form.get("delivery_zone_id","")).strip(); zone=con.execute("SELECT * FROM delivery_zones WHERE id=? AND active=1",(zone_id,)).fetchone()
                 recipient=str(form.get("recipient_name",name)).strip()[:80]; recipient_phone=re.sub(r"[^0-9+]","",str(form.get("recipient_phone",phone))); address=str(form.get("delivery_address","")).strip()[:500]; landmark=str(form.get("delivery_landmark","")).strip()[:160]
                 if not zone or not address or not 2<=len(recipient)<=80 or not re.fullmatch(r"(?:\+66|0)\d{8,9}",recipient_phone): raise ValueError("กรุณาระบุข้อมูลจัดส่งให้ครบถ้วน")
                 if total<int(zone["minimum_order"]): raise ValueError(f"ยอดสั่งขั้นต่ำสำหรับพื้นที่นี้คือ {zone['minimum_order']} บาท")
-                delivery_fee=int(zone["fee"]); delivery=(zone_id,recipient,recipient_phone,address,landmark)
+                pricing=conf["delivery_pricing"]
+                if pricing.get("mode")=="distance": delivery_distance,delivery_fee=quote_delivery(pricing,form.get("delivery_latitude"),form.get("delivery_longitude"))
+                else: delivery_fee=int(zone["fee"])
+                delivery=(zone_id,recipient,recipient_phone,address,landmark)
             now=utcnow(); con.execute("INSERT INTO customers(phone,name,points_balance,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(phone) DO UPDATE SET name=excluded.name,updated_at=excluded.updated_at",(phone,name,0,now,now))
             customer=con.execute("SELECT points_balance FROM customers WHERE phone=?",(phone,)).fetchone()
             coupon=active_coupon(con,coupon_code,total) if coupon_code else None
@@ -645,7 +673,7 @@ class Handler(SimpleHTTPRequestHandler):
             if points_redeemed:
                 con.execute("UPDATE customers SET points_balance=points_balance-?,updated_at=? WHERE phone=?",(points_redeemed,now,phone));con.execute("INSERT INTO loyalty_ledger VALUES (?,?,?,?,?,?)",(f"LOY-{secrets.token_hex(4).upper()}",phone,-points_redeemed,"order_redeemed",oid,now))
             if delivery:
-                tracking=f"TRK-{secrets.token_hex(4).upper()}"; con.execute("INSERT INTO deliveries(order_id,zone_id,recipient_name,recipient_phone,address,landmark,tracking_code,updated_at) VALUES (?,?,?,?,?,?,?,?)",(oid,*delivery,tracking,now))
+                tracking=f"TRK-{secrets.token_hex(4).upper()}"; con.execute("INSERT INTO deliveries(order_id,zone_id,recipient_name,recipient_phone,address,landmark,tracking_code,updated_at,distance_km) VALUES (?,?,?,?,?,?,?,?,?)",(oid,*delivery,tracking,now,delivery_distance))
             if coupon:
                 con.execute("UPDATE coupons SET used_count=used_count+1 WHERE id=?",(coupon["id"],)); con.execute("INSERT INTO coupon_redemptions VALUES (?,?,?,?,?)",(coupon["id"],oid,phone,discount,now))
             con.execute("INSERT INTO order_history(order_id,at,status,actor_role,note) VALUES (?,?,?,?,?)",(oid,now,status,"automation" if AUTO_CONFIRM_ORDERS else "customer","auto_confirmed" if AUTO_CONFIRM_ORDERS else "")); audit(con,"automation" if AUTO_CONFIRM_ORDERS else "customer","create","order",oid,{"total":final_total,"status":status,"fulfillment":fulfillment})
@@ -676,7 +704,10 @@ class Handler(SimpleHTTPRequestHandler):
             zone=con.execute("SELECT id,name,fee,minimum_order FROM delivery_zones WHERE id=? AND active=1",(zone_id,)).fetchone()
             if not zone:return self.json({"error":"ไม่พบพื้นที่จัดส่ง"},404)
             if subtotal<int(zone["minimum_order"]):raise ValueError(f"ยอดสั่งขั้นต่ำสำหรับพื้นที่นี้คือ {zone['minimum_order']} บาท")
-            return self.json({"zone":dict(zone),"subtotal":subtotal,"delivery_fee":int(zone["fee"]),"total":subtotal+int(zone["fee"])})
+            pricing=config(con)["delivery_pricing"]
+            if pricing.get("mode")=="distance": distance,fee=quote_delivery(pricing,form.get("latitude"),form.get("longitude"))
+            else:distance,fee=0,int(zone["fee"])
+            return self.json({"zone":dict(zone),"subtotal":subtotal,"distance_km":distance,"delivery_fee":fee,"total":subtotal+fee})
     def create_scb_qr(self,oid,form):
         phone=re.sub(r"[^0-9+]","",str(form.get("phone","")))
         if not scb_active(): raise ValueError("SCB QR ยังไม่เปิดให้บริการ")
@@ -837,6 +868,14 @@ class Handler(SimpleHTTPRequestHandler):
         if profile["vat_registered"] and len(profile["tax_id"])!=13:raise ValueError("เลขประจำตัวผู้เสียภาษีต้องมี 13 หลัก")
         with db() as con:set_setting(con,"business_profile",profile);audit(con,role,"update","business_profile","store",{"vat_registered":profile["vat_registered"]})
         self.json({"business_profile":profile})
+    def update_delivery_pricing(self,form,role):
+        try:
+            base_fee=int(form.get("base_fee",0));per_km_fee=float(form.get("per_km_fee",0));maximum_km=float(form.get("maximum_km",0))
+        except (ValueError,TypeError):raise ValueError("อัตราค่าส่งไม่ถูกต้อง")
+        if base_fee<0 or per_km_fee<0 or not 0<maximum_km<=100:raise ValueError("อัตราค่าส่งไม่ถูกต้อง")
+        profile={"mode":"distance","base_fee":base_fee,"per_km_fee":per_km_fee,"maximum_km":maximum_km,"store_latitude":valid_coordinate(form.get("store_latitude"),-90,90),"store_longitude":valid_coordinate(form.get("store_longitude"),-180,180)}
+        with db() as con:set_setting(con,"delivery_pricing",profile);audit(con,role,"update","delivery_pricing","store",{key:profile[key] for key in ("base_fee","per_km_fee","maximum_km")})
+        self.json({"delivery_pricing":profile})
     def issue_tax_invoice(self,receipt_id,form,role):
         with STORE_LOCK,db() as con:
             receipt=con.execute("SELECT * FROM pos_receipts WHERE id=?",(receipt_id,)).fetchone()
