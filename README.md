@@ -14,6 +14,8 @@ ADMIN_KEY='owner-secret' EMPLOYEE_KEY='staff-secret' KITCHEN_KEY='kitchen-secret
 เปิด [http://127.0.0.1:8000](http://127.0.0.1:8000) เพื่อลูกค้าสั่งล่วงหน้า,
 `/dashboard.html` เป็นทางเข้ารวม: `/admin.html` สำหรับ Owner, `/ops.html` สำหรับ Staff และ `/ops.html?role=kitchen` สำหรับ Kitchen.
 
+Premium React platform shell อยู่ที่ `/platform/` และใช้ API/database เดียวกับหน้า preorder ปัจจุบัน.
+
 ## Features
 
 - SQLite database (`data/moopiew.sqlite3`) พร้อม WAL, foreign keys และ atomic transactions

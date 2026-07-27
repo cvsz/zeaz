@@ -18,7 +18,8 @@ Customer browser → Cloudflare Tunnel → Caddy :8080 → Python app :8000 → 
 - `packages/` contains TypeScript types, design tokens, config, icons, UI and SDK
   for future web/mobile services without coupling them to the current runtime.
 - `apps/web/` is a React/Vite migration shell. It consumes the same Python API
-  via `@moopiew/sdk`; it does not create a second order database or API.
+  via `@moopiew/sdk`; it does not create a second order database or API. Its
+  Premium build is published by the current service at `/platform/`.
 - `docs/openapi.yaml` is the API contract; `/api/health` and `/api/ready` are
   unauthenticated liveness/readiness probes.
 - `data/moopiew.sqlite3` is private service state; it is never committed.
