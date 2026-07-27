@@ -165,8 +165,13 @@ class Handler(SimpleHTTPRequestHandler):
         self.json({"error":"ไม่ได้รับอนุญาต"},401); return None
     def do_GET(self):
         parsed=urlparse(self.path); path, query=parsed.path, parse_qs(parsed.query)
+        if path == "/api/health":
+            return self.json({"status": "ok", "service": "moopiew", "time": utcnow()})
         with db() as con:
             conf=config(con)
+            if path == "/api/ready":
+                con.execute("SELECT 1 FROM settings LIMIT 1").fetchone()
+                return self.json({"status": "ready", "database": "ok"})
             if path=="/api/menu":
                 day=query.get("date",[date.today().isoformat()])[0]
                 if not valid_pickup(day,conf): return self.json({"error":"วันรับสินค้าไม่พร้อมให้บริการ"},400)

@@ -22,6 +22,9 @@ for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_ZONE_ID CLOUDFL
   [[ -n "${!key:-}" ]] || { echo "Missing $key" >&2; exit 1; }
 done
 python3 -m py_compile "$ROOT/app.py"
+curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:${PORT:-8000}/api/health" >/dev/null || {
+  echo "Local health endpoint failed" >&2; exit 1;
+}
 curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:${PORT:-8000}/api/menu" >/dev/null || {
   echo "Local app health check failed; start moopiew.service first" >&2; exit 1;
 }

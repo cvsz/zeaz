@@ -4,6 +4,10 @@ info:
   version: 1.0.0
   description: Preorder and restaurant operations API. Protected endpoints require their role-specific API key header.
 paths:
+  /api/health:
+    get: {summary: Liveness probe, responses: {'200': {description: Service process is healthy}}}
+  /api/ready:
+    get: {summary: Readiness probe, responses: {'200': {description: Database is reachable}}}
   /api/menu:
     get: {summary: Get purchasable menu and pickup capacity, responses: {'200': {description: Menu and pickup slots}}}
   /api/orders:
