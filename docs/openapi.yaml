@@ -16,6 +16,14 @@ paths:
     post: {summary: Create preorder, responses: {'201': {description: Created}}}
   /api/order-lookup:
     post: {summary: Look up an order using ID and phone, responses: {'200': {description: Found}}}
+  /api/payments/scb/config:
+    get: {summary: Public SCB QR capability flag; never exposes credentials, responses: {'200': {description: Payment capability}}}
+  /api/orders/{orderId}/payments/scb/qr:
+    post: {summary: Create an SCB Mae Manee QR for an existing SCB QR order; matching customer phone required, parameters: [{name: orderId, in: path, required: true, schema: {type: string}}], responses: {'201': {description: QR payment attempt}}}
+  /api/scb/payment/confirm:
+    post: {summary: SCB payment-confirmation callback; payment is verified by a server-side SCB inquiry before state changes, responses: {'200': {description: Verified payment state}, '401': {description: Invalid optional callback signature}, '503': {description: SCB inquiry is unavailable}}}
+  /api/admin/payments/scb/{paymentId}/inquire:
+    post: {summary: Owner-only fallback SCB payment inquiry, security: [{adminKey: []}], parameters: [{name: paymentId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Payment status}}}
   /api/admin/dashboard:
     get: {summary: Owner dashboard, security: [{adminKey: []}], responses: {'200': {description: Dashboard}}}
   /api/staff/dashboard:

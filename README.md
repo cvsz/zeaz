@@ -21,6 +21,7 @@ Premium React platform shell อยู่ที่ `/platform/` และใช�
 - SQLite database (`data/moopiew.sqlite3`) พร้อม WAL, foreign keys และ atomic transactions
 - import ข้อมูล `data/orders.json` และ `data/settings.json` เดิมอัตโนมัติครั้งแรก โดยไม่ลบต้นฉบับ
 - pickup capacity, customer order lookup/cancellation และ payment state
+- `AUTO_CONFIRM_ORDERS=true` ยืนยันการรับออเดอร์โดยอัตโนมัติ แต่ไม่ยืนยันว่าได้รับชำระเงิน
 - Owner dashboard: ยอดจอง เมนู ความจุ การชำระเงิน และ audit log
 - Staff dashboard: ยืนยันและส่งมอบออเดอร์
 - Kitchen dashboard: คิวที่ต้องเตรียมและเปลี่ยนเป็นพร้อมรับ

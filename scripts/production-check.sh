@@ -10,6 +10,7 @@ CF_ENV="$ROOT/.env.cloudflare"
 set -a
 # shellcheck disable=SC1090
 source "$APP_ENV"
+[[ -f "$ROOT/.env.payment" ]] && source "$ROOT/.env.payment"
 # shellcheck disable=SC1090
 source "$CF_ENV"
 set +a

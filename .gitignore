@@ -14,6 +14,24 @@ node_modules/
 .env.*
 !.env.example
 !.env.*.example
+# Make the payment-secret rule explicit because this file contains bank-issued
+# credentials and encrypted-token configuration. The example remains tracked.
+.env.payment
+.env.payment.*
+!.env.payment.example
+
+# Bank-issued encryption material is deployment-specific, including public keys
+# whose rotation must not be coupled to source releases.
+.public.pub
+secrets/scb/
+
+# Cloudflared writes account certificates and tunnel credentials locally. Keep
+# deployment manifests and scripts in git, never these runtime credentials.
+.cloudflared/
+cloudflared/
+*.tunnel.json
+
+# Payment secrets stay local; .env.payment.example is the reviewed template.
 infrastructure/terraform/cloudflare/terraform.tfvars
 infrastructure/terraform/cloudflare/.terraform/
 infrastructure/terraform/cloudflare/*.tfstate*

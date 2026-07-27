@@ -7,18 +7,27 @@ first start it imports legacy data/orders.json and data/settings.json safely.
 from __future__ import annotations
 
 import json
+import base64
+import hashlib
+import hmac
 import os
 import re
 import secrets
 import sqlite3
+import ssl
 import time
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
+from cryptography.fernet import Fernet, InvalidToken
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from html import escape as escape_html
 from pathlib import Path
 from threading import Lock
-from urllib.parse import parse_qs, urlparse
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, quote, urlparse
+from urllib.request import Request, urlopen
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
@@ -31,7 +40,13 @@ STORE_LOCK, RATE_LOCK = Lock(), Lock()
 RATE_BUCKETS: dict[tuple[str, str], list[float]] = {}
 RATE_WINDOW_SECONDS, RATE_LIMITS = 60, {"order": 12, "lookup": 20, "admin": 60, "staff": 90}
 STATUS = ("new", "confirmed", "ready", "completed", "cancelled")
-PAYMENT_STATUSES, PAYMENT_METHODS = ("pending", "paid", "refunded"), ("cash", "transfer")
+PAYMENT_STATUSES, PAYMENT_METHODS = ("pending", "paid", "refunded"), ("cash", "transfer", "scb_qr")
+AUTO_CONFIRM_ORDERS = os.environ.get("AUTO_CONFIRM_ORDERS", "false").lower() == "true"
+PAYMENTS_ENABLED = os.environ.get("PAYMENTS_ENABLED", "false").lower() == "true"
+SCB_ENABLED = os.environ.get("SCB_ENABLED", "false").lower() == "true"
+SCB_TOKEN_CACHE: dict[str, object] = {}
+SCB_SERVICE_TOKEN_CACHE: dict[str, object] = {}
+SCB_TOKEN_LOCK = Lock()
 DEFAULT_SETTINGS = {
     "store_name": "หมูปิ้ววว", "slot_capacity": 80, "advance_days": 14,
     "pickup_slots": ["09:00–10:00", "10:00–11:00", "11:00–12:00", "12:00–13:00"],
@@ -43,6 +58,14 @@ DEFAULT_MENU = [
 ]
 
 def utcnow() -> str: return datetime.now(timezone.utc).isoformat()
+
+def header_secret(headers, name: str) -> str:
+    """Read an ASCII-safe Base64 UTF-8 credential, retaining legacy headers."""
+    encoded=headers.get(f"{name}-B64")
+    if encoded is not None:
+        try: return base64.b64decode(encoded, validate=True).decode("utf-8")
+        except (ValueError, UnicodeDecodeError): return ""
+    return headers.get(name, "")
 
 def load_legacy(path: Path, fallback):
     try: return json.loads(path.read_text(encoding="utf-8")) if path.exists() else fallback
@@ -69,9 +92,13 @@ def initialise_database() -> None:
         CREATE TABLE IF NOT EXISTS order_items (id INTEGER PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, menu_item_id TEXT NOT NULL, name TEXT NOT NULL, quantity INTEGER NOT NULL CHECK(quantity > 0), unit_price INTEGER NOT NULL CHECK(unit_price >= 0));
         CREATE TABLE IF NOT EXISTS order_history (id INTEGER PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, at TEXT NOT NULL, status TEXT NOT NULL, actor_role TEXT NOT NULL, note TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY, at TEXT NOT NULL, actor_role TEXT NOT NULL, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, details TEXT NOT NULL DEFAULT '{}');
+        CREATE TABLE IF NOT EXISTS payment_attempts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, provider TEXT NOT NULL, provider_reference TEXT NOT NULL UNIQUE, provider_order_id TEXT UNIQUE, amount INTEGER NOT NULL CHECK(amount >= 0), status TEXT NOT NULL CHECK(status IN ('created','pending','paid','failed','expired','cancelled')), qr_image TEXT NOT NULL DEFAULT '', qr_type TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, confirmed_at TEXT NOT NULL DEFAULT '', provider_response TEXT NOT NULL DEFAULT '{}');
+        CREATE TABLE IF NOT EXISTS oauth_tokens (subject TEXT PRIMARY KEY, access_cipher TEXT NOT NULL, refresh_cipher TEXT NOT NULL DEFAULT '', owner_cipher TEXT NOT NULL, access_expires_at TEXT NOT NULL, refresh_expires_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS idx_orders_pickup ON orders(pickup_date, pickup_slot);
         CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
         CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_logs(at DESC);
+        CREATE INDEX IF NOT EXISTS idx_payment_attempts_order ON payment_attempts(order_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_payment_attempts_provider_order ON payment_attempts(provider, provider_order_id);
         """)
         if con.execute("SELECT COUNT(*) FROM settings").fetchone()[0]: return
         legacy_settings = load_legacy(DATA / "settings.json", {})
@@ -97,6 +124,205 @@ def config(con: sqlite3.Connection) -> dict:
 
 def set_setting(con, key, value): con.execute("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, json.dumps(value, ensure_ascii=False)))
 def audit(con, role, action, entity_type, entity_id, details=None): con.execute("INSERT INTO audit_logs(at,actor_role,action,entity_type,entity_id,details) VALUES (?,?,?,?,?,?)", (utcnow(), role, action, entity_type, entity_id, json.dumps(details or {}, ensure_ascii=False)))
+
+def payment_public(row: dict) -> dict:
+    return {key: row[key] for key in ("id", "provider", "provider_reference", "provider_order_id", "amount", "status", "qr_image", "qr_type", "expires_at", "created_at", "confirmed_at")}
+
+def row_payment(con, payment_id: str) -> dict | None:
+    row = con.execute("SELECT * FROM payment_attempts WHERE id=?", (payment_id,)).fetchone()
+    return dict(row) if row else None
+
+def active_payment(con, order_id: str) -> dict | None:
+    row = con.execute("SELECT * FROM payment_attempts WHERE order_id=? AND provider='scb_maemanee' AND status IN ('created','pending') ORDER BY created_at DESC LIMIT 1", (order_id,)).fetchone()
+    return dict(row) if row else None
+
+def env(name: str, default="") -> str: return os.environ.get(name, default).strip()
+def scb_feature_enabled(feature: str, default="false") -> bool:
+    products={item.strip() for item in env("SCB_ENABLED_PRODUCTS", "maemanee_qr").split(",") if item.strip()}
+    return feature in products and env(f"SCB_{feature.upper()}_ENABLED",default).lower()=="true"
+def scb_active() -> bool:
+    # Existing deployments did not have the feature-gate variable. Preserve
+    # their qr_api behaviour until the reviewed .env.payment template is adopted.
+    return PAYMENTS_ENABLED and SCB_ENABLED and env("SCB_PRODUCT") == "qr_api" and scb_feature_enabled("maemanee_qr", "true")
+def scb_config_public() -> dict: return {"enabled":scb_active(), "provider":"scb_maemanee", "method":"scb_qr", "payment_types":[value for value in env("SCB_QR_PAYMENT_TYPES", "T30").split(",") if value], "environment":env("PAYMENT_ENVIRONMENT", "sandbox")}
+
+def iso_millis() -> str: return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+
+def scb_cipher() -> Fernet:
+    key=env("SCB_TOKEN_ENCRYPTION_KEY")
+    if not key: raise ValueError("ยังไม่ได้ตั้งค่า SCB_TOKEN_ENCRYPTION_KEY")
+    try: return Fernet(key.encode())
+    except (ValueError, TypeError) as error: raise ValueError("SCB_TOKEN_ENCRYPTION_KEY ไม่ถูกต้อง") from error
+
+def scb_ssl_context() -> ssl.SSLContext | None:
+    """Load SCB mTLS credentials only from local, ignored files."""
+    required=env("SCB_MTLS_REQUIRED", "false").lower()=="true"
+    certificate,key=env("SCB_CLIENT_CERT_FILE"),env("SCB_CLIENT_KEY_FILE")
+    if not required: return None
+    if not certificate and not key: raise ValueError("ยังไม่ได้ตั้งค่า SCB client certificate และ private key")
+    if not certificate or not key: raise ValueError("SCB mTLS configuration ไม่ครบ")
+    cert_path=Path(certificate) if Path(certificate).is_absolute() else ROOT / certificate
+    key_path=Path(key) if Path(key).is_absolute() else ROOT / key
+    if not cert_path.is_file() or not key_path.is_file(): raise ValueError("ไม่พบไฟล์ SCB client certificate หรือ private key")
+    try:
+        context=ssl.create_default_context(); context.load_cert_chain(str(cert_path),str(key_path)); return context
+    except ssl.SSLError as error: raise ValueError("SCB client certificate หรือ private key ไม่ถูกต้อง") from error
+
+def scb_urlopen(request: Request): return urlopen(request, timeout=15, context=scb_ssl_context())
+
+def scb_store_token(access_token: str, refresh_token: str, owner: str, expires_in=1800, refresh_expires_in=3600) -> None:
+    cipher=scb_cipher(); now=datetime.now(timezone.utc)
+    access_until=now+timedelta(seconds=max(60,int(expires_in or 1800))); refresh_until=now+timedelta(seconds=max(60,int(refresh_expires_in or 3600)))
+    encrypted=lambda value:cipher.encrypt(value.encode()).decode()
+    with db() as con: con.execute("INSERT INTO oauth_tokens(subject,access_cipher,refresh_cipher,owner_cipher,access_expires_at,refresh_expires_at,updated_at) VALUES ('scb_merchant',?,?,?,?,?,?) ON CONFLICT(subject) DO UPDATE SET access_cipher=excluded.access_cipher,refresh_cipher=excluded.refresh_cipher,owner_cipher=excluded.owner_cipher,access_expires_at=excluded.access_expires_at,refresh_expires_at=excluded.refresh_expires_at,updated_at=excluded.updated_at",(encrypted(access_token),encrypted(refresh_token) if refresh_token else "",encrypted(owner),access_until.isoformat(),refresh_until.isoformat() if refresh_token else "",utcnow()))
+    SCB_TOKEN_CACHE.update(token=access_token,owner=owner,expires=time.monotonic()+max(60,int(expires_in or 1800)-60))
+
+def scb_saved_token() -> tuple[str, str] | None:
+    with db() as con: row=con.execute("SELECT * FROM oauth_tokens WHERE subject='scb_merchant'").fetchone()
+    if not row or datetime.fromisoformat(row["access_expires_at"]) <= datetime.now(timezone.utc)+timedelta(seconds=60): return None
+    try:
+        cipher=scb_cipher(); return cipher.decrypt(row["access_cipher"].encode()).decode(),cipher.decrypt(row["owner_cipher"].encode()).decode()
+    except (InvalidToken, UnicodeDecodeError) as error: raise ValueError("ไม่สามารถอ่าน SCB token ที่เข้ารหัสไว้ได้") from error
+
+def scb_token_response(data: dict, headers: dict) -> tuple[str, str, str, int, int]:
+    body=data.get("data",data) if isinstance(data,dict) else {}
+    token=body.get("accessToken") or data.get("accessToken"); refresh=body.get("refreshToken") or data.get("refreshToken") or ""
+    owner=headers.get("resourceownerid") or body.get("resourceOwnerId") or data.get("resourceOwnerId") or env("SCB_API_KEY")
+    if not isinstance(token,str) or not token: raise ValueError("SCB OAuth ไม่ได้ส่ง access token")
+    return token, str(refresh), str(owner), int(body.get("expiresIn",data.get("expiresIn",1800)) or 1800), int(body.get("refreshExpiresIn",data.get("refreshExpiresIn",3600)) or 3600)
+
+def scb_exchange_auth_code(code: str) -> None:
+    key,secret,endpoint=env("SCB_API_KEY"),env("SCB_API_SECRET"),env("SCB_OAUTH_TOKEN_ENDPOINT")
+    if not key or not secret or not endpoint: raise ValueError("ยังไม่ได้ตั้งค่า SCB OAuth credentials")
+    data,headers=scb_http(endpoint,{"applicationKey":key,"applicationSecret":secret,"authCode":code},{"resourceOwnerId":key,"accept-language":"EN"})
+    scb_store_token(*scb_token_response(data,headers))
+
+def scb_refresh_saved_token() -> tuple[str,str] | None:
+    with db() as con: row=con.execute("SELECT * FROM oauth_tokens WHERE subject='scb_merchant'").fetchone()
+    if not row or not row["refresh_cipher"] or not row["refresh_expires_at"] or datetime.fromisoformat(row["refresh_expires_at"]) <= datetime.now(timezone.utc)+timedelta(seconds=60): return None
+    try: refresh=scb_cipher().decrypt(row["refresh_cipher"].encode()).decode()
+    except (InvalidToken, UnicodeDecodeError) as error: raise ValueError("ไม่สามารถอ่าน SCB refresh token ที่เข้ารหัสไว้ได้") from error
+    key,secret,endpoint=env("SCB_API_KEY"),env("SCB_API_SECRET"),env("SCB_OAUTH_REFRESH_ENDPOINT")
+    if not key or not secret or not endpoint: return None
+    data,headers=scb_http(endpoint,{"applicationKey":key,"applicationSecret":secret,"refreshToken":refresh},{"resourceOwnerId":key,"accept-language":"EN"})
+    scb_store_token(*scb_token_response(data,headers)); return scb_saved_token()
+
+def scb_token() -> tuple[str, str]:
+    """Return the merchant-payment token; profile consent is kept separate."""
+    now=time.monotonic()
+    with SCB_TOKEN_LOCK:
+        mode=env("SCB_PAYMENT_OAUTH_MODE", "client_credentials")
+        if mode == "client_credentials":
+            if SCB_SERVICE_TOKEN_CACHE.get("token") and float(SCB_SERVICE_TOKEN_CACHE.get("expires", 0)) > now:
+                return str(SCB_SERVICE_TOKEN_CACHE["token"]), str(SCB_SERVICE_TOKEN_CACHE["owner"])
+            key, secret, endpoint=env("SCB_API_KEY"),env("SCB_API_SECRET"),env("SCB_OAUTH_TOKEN_ENDPOINT")
+            if not key or not secret or not endpoint: raise ValueError("ยังไม่ได้ตั้งค่า SCB merchant OAuth credentials")
+            data,headers=scb_http(endpoint,{"applicationKey":key,"applicationSecret":secret},{"resourceOwnerId":key,"accept-language":"EN"})
+            token,_,owner,expires,_=scb_token_response(data,headers)
+            SCB_SERVICE_TOKEN_CACHE.update(token=token,owner=owner,expires=now+max(60,expires-60))
+            return token,owner
+        if mode != "authorization_code": raise ValueError("SCB_PAYMENT_OAUTH_MODE ต้องเป็น client_credentials หรือ authorization_code")
+        if SCB_TOKEN_CACHE.get("token") and float(SCB_TOKEN_CACHE.get("expires", 0)) > now:
+            return str(SCB_TOKEN_CACHE["token"]), str(SCB_TOKEN_CACHE["owner"])
+        saved=scb_saved_token()
+        if saved:
+            SCB_TOKEN_CACHE.update(token=saved[0],owner=saved[1],expires=now+600); return saved
+        refreshed=scb_refresh_saved_token()
+        if refreshed:
+            SCB_TOKEN_CACHE.update(token=refreshed[0],owner=refreshed[1],expires=now+600); return refreshed
+        key, secret, endpoint = env("SCB_API_KEY"), env("SCB_API_SECRET"), env("SCB_OAUTH_TOKEN_ENDPOINT")
+        if not key or not secret or not endpoint: raise ValueError("ยังไม่ได้ตั้งค่า SCB OAuth credentials")
+        raise ValueError("กรุณาเชื่อมต่อ SCB EASY จาก Owner dashboard ก่อนสร้าง QR")
+
+def scb_http(endpoint: str, payload: dict, extra_headers=None) -> tuple[dict, dict]:
+    request_id=str(uuid4()); headers={"Content-Type":"application/json","accept-language":"th","requestUId":request_id, **(extra_headers or {})}
+    try:
+        request=Request(endpoint, data=json.dumps(payload, ensure_ascii=False).encode(), headers=headers, method="POST")
+        with scb_urlopen(request) as response:
+            raw=response.read(1_000_000); response_headers={key.lower():value for key,value in response.headers.items()}
+    except HTTPError as error:
+        raw=error.read(100_000)
+        try: description=json.loads(raw.decode()).get("status",{}).get("description","SCB ปฏิเสธคำขอ")
+        except (UnicodeDecodeError,json.JSONDecodeError): description="SCB ปฏิเสธคำขอ"
+        raise ValueError(f"SCB API error ({error.code}): {description}") from error
+    except (URLError, OSError) as error: raise ValueError("ไม่สามารถเชื่อมต่อ SCB API ได้") from error
+    try: return json.loads(raw.decode()), response_headers
+    except (UnicodeDecodeError,json.JSONDecodeError) as error: raise ValueError("SCB gateway ตอบกลับไม่ใช่ JSON; ตรวจสอบสิทธิ์ product และการตั้งค่า Sandbox กับ SCB") from error
+
+def scb_http_get(endpoint: str, extra_headers=None) -> tuple[dict, dict]:
+    request_id=str(uuid4()); headers={"accept-language":"th","requestUId":request_id, **(extra_headers or {})}
+    try:
+        with scb_urlopen(Request(endpoint, headers=headers, method="GET")) as response:
+            raw=response.read(1_000_000); response_headers={key.lower():value for key,value in response.headers.items()}
+    except HTTPError as error:
+        raw=error.read(100_000)
+        try: description=json.loads(raw.decode()).get("status",{}).get("description","SCB ปฏิเสธคำขอ")
+        except (UnicodeDecodeError,json.JSONDecodeError): description="SCB ปฏิเสธคำขอ"
+        raise ValueError(f"SCB API error ({error.code}): {description}") from error
+    except (URLError, OSError) as error: raise ValueError("ไม่สามารถเชื่อมต่อ SCB API ได้") from error
+    try: return json.loads(raw.decode()), response_headers
+    except (UnicodeDecodeError,json.JSONDecodeError) as error: raise ValueError("SCB gateway ตอบกลับไม่ใช่ JSON; ตรวจสอบสิทธิ์ product และการตั้งค่า Sandbox กับ SCB") from error
+
+def scb_authorize() -> str:
+    endpoint,key,secret=env("SCB_AUTHORIZE_ENDPOINT"),env("SCB_API_KEY"),env("SCB_API_SECRET")
+    if not endpoint or not key or not secret: raise ValueError("ยังไม่ได้ตั้งค่า SCB authorization configuration")
+    headers={"accept-language":"EN","apikey":key,"apisecret":secret,"endState":"mobile_app","requestUId":str(uuid4()),"resourceOwnerId":key,"response-channel":"mobile"}
+    try:
+        with scb_urlopen(Request(endpoint,headers=headers,method="GET")) as response: raw=response.read(100_000)
+    except (HTTPError,URLError,OSError) as error: raise ValueError("ไม่สามารถเริ่ม SCB authorization ได้") from error
+    try: data=json.loads(raw.decode()).get("data",{})
+    except (UnicodeDecodeError,json.JSONDecodeError) as error: raise ValueError("SCB authorization ตอบกลับไม่ถูกต้อง") from error
+    callback=data.get("callbackUrl") if isinstance(data,dict) else ""
+    if not isinstance(callback,str) or not callback: raise ValueError("SCB authorization ไม่ได้ส่ง callback URL")
+    return callback
+
+def scb_create_qr(order: dict) -> dict:
+    if not scb_active(): raise ValueError("SCB QR ยังไม่เปิดให้บริการ")
+    wallet, endpoint=env("SCB_BILLER_ID"),env("SCB_QR_CREATE_ENDPOINT")
+    if not wallet or not endpoint: raise ValueError("SCB QR configuration ไม่ครบ")
+    token, owner=scb_token(); reference=f"{order['id']}-{secrets.token_hex(3).upper()}"
+    products=[{"customField1":line["id"][:255],"customField2":line["name"][:255],"customField3":"Moopiew","customField4":str(line["quantity"]),"customField5":f"{line['unit_price']:.2f}"} for line in order["items"][:20]]
+    payload={"partnerReferenceNo":reference,"walletId":wallet,"paymentType":scb_config_public()["payment_types"],"amount":float(order["total"]),"partnerOrderDate":iso_millis(),"partnerMetaData":{"product":products}}
+    response,_=scb_http(endpoint,payload,{"authorization":f"Bearer {token}","resourceOwnerId":owner})
+    data=response.get("data",{}) if isinstance(response,dict) else {}; tag30=data.get("tag30",{}) if isinstance(data,dict) else {}; result=tag30.get("result",{}) if isinstance(tag30,dict) else {}
+    if response.get("status",{}).get("code") not in (1000,"1000") or result.get("status") != "SUCCESS" or not isinstance(tag30.get("qrImage"),str): raise ValueError(result.get("moreInfo") or response.get("status",{}).get("description") or "SCB สร้าง QR ไม่สำเร็จ")
+    return {"id":f"PAY-SCB-{secrets.token_hex(6).upper()}","provider":"scb_maemanee","provider_reference":reference,"provider_order_id":str(data.get("orderId", "")),"amount":order["total"],"status":"pending","qr_image":tag30["qrImage"],"qr_type":"T30","expires_at":"","created_at":utcnow(),"updated_at":utcnow(),"confirmed_at":"","provider_response":json.dumps({"orderId":data.get("orderId"),"tag30":{"ref1":tag30.get("ref1"),"ref2":tag30.get("ref2"),"ref3":tag30.get("ref3")}},ensure_ascii=False)}
+
+def scb_inquiry_response(payment: dict, token: str, owner: str) -> dict:
+    """Call only the SCB inquiry API belonging to this stored payment product."""
+    qr_type=str(payment.get("qr_type","")).upper(); reference=str(payment.get("provider_reference", "")); provider_id=str(payment.get("provider_order_id", ""))
+    if not reference or not provider_id: raise ValueError("ข้อมูล SCB payment ไม่ครบสำหรับตรวจสอบ")
+    headers={"authorization":f"Bearer {token}","resourceOwnerId":owner}
+    if qr_type == "T30":
+        endpoint,wallet=env("SCB_QR_INQUIRY_ENDPOINT"),env("SCB_BILLER_ID")
+        if not endpoint or not wallet: raise ValueError("SCB QR 30 inquiry configuration ไม่ครบ")
+        response,_=scb_http(endpoint,{"walletId":wallet,"partnerReferenceNo":reference,"orderId":provider_id},headers)
+        return response
+    if qr_type == "QRCS":
+        endpoint=env("SCB_QRCS_INQUIRY_ENDPOINT")
+        if not endpoint or "{qrId}" not in endpoint: raise ValueError("SCB QR CS inquiry configuration ไม่ครบ")
+        response,_=scb_http_get(endpoint.replace("{qrId}",quote(provider_id,safe="")),headers)
+        return response
+    if qr_type in {"SCB_EASY", "DEEPLINK"}:
+        endpoint=env("SCB_EASY_TRANSACTION_INQUIRY_ENDPOINT")
+        if not endpoint or "{transactionId}" not in endpoint: raise ValueError("SCB EASY inquiry configuration ไม่ครบ")
+        response,_=scb_http_get(endpoint.replace("{transactionId}",quote(provider_id,safe="")),headers)
+        return response
+    if qr_type in {"ALIPAY", "WECHAT"}: raise ValueError("SCB e-wallet inquiry ต้องตั้ง request contract ที่อนุมัติโดย SCB ก่อนเปิดใช้งาน")
+    if qr_type == "BILLPAYMENT": raise ValueError("SCB Bill Payment inquiry ต้องตั้ง query parameter contract ที่อนุมัติโดย SCB ก่อนเปิดใช้งาน")
+    raise ValueError("ไม่รู้จักชนิด SCB payment สำหรับตรวจสอบ")
+
+def scb_inquire_payment(payment: dict) -> tuple[dict, bool]:
+    if not scb_active(): raise ValueError("SCB QR ยังไม่เปิดให้บริการ")
+    token,owner=scb_token(); response=scb_inquiry_response(payment,token,owner)
+    def payment_states(value):
+        if isinstance(value,dict):
+            for key,item in value.items():
+                if key in {"paymentStatus","transactionStatus","paymentResult","transactionResult"} and isinstance(item,str): yield item.upper()
+                elif key != "status": yield from payment_states(item)
+        elif isinstance(value,list):
+            for item in value: yield from payment_states(item)
+    return response, bool({"SUCCESS","PAID","COMPLETED"} & set(payment_states(response)))
 
 def row_order(con, order_id: str) -> dict | None:
     row = con.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
@@ -132,21 +358,25 @@ class Handler(SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("X-Frame-Options", "DENY"); self.send_header("Referrer-Policy", "strict-origin-when-cross-origin"); self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         self.send_header("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+        if urlparse(self.path).path in {"/admin.html", "/admin.js", "/ops.html", "/ops.js"}: self.send_header("Cache-Control", "no-store, max-age=0")
         super().end_headers()
     def json(self, payload, status=200):
         encoded=json.dumps(payload, ensure_ascii=False).encode(); self.send_response(status); self.send_header("Content-Type", "application/json; charset=utf-8"); self.send_header("Content-Length", str(len(encoded))); self.send_header("Cache-Control", "no-store"); self.end_headers(); self.wfile.write(encoded)
+    def html(self, content, status=200):
+        encoded=content.encode(); self.send_response(status); self.send_header("Content-Type", "text/html; charset=utf-8"); self.send_header("Content-Length",str(len(encoded))); self.send_header("Cache-Control","no-store"); self.end_headers(); self.wfile.write(encoded)
     def body(self):
         try: length=int(self.headers.get("Content-Length", "0"))
         except ValueError: raise ValueError("ขนาดข้อมูลไม่ถูกต้อง")
         if not 0 < length <= 100_000: raise ValueError("ขนาดข้อมูลไม่ถูกต้อง")
-        try: value=json.loads(self.rfile.read(length).decode())
+        raw=self.rfile.read(length); self.raw_body=raw
+        try: value=json.loads(raw.decode())
         except (UnicodeDecodeError,json.JSONDecodeError): raise ValueError("ข้อมูลที่ส่งมาไม่ถูกต้อง")
         if not isinstance(value,dict): raise ValueError("ข้อมูลที่ส่งมาไม่ถูกต้อง")
         return value
     def role(self):
         checks=(("admin", "X-Admin-Key", ADMIN_KEY), ("employee", "X-Employee-Key", EMPLOYEE_KEY), ("kitchen", "X-Kitchen-Key", KITCHEN_KEY))
         for role, header, key in checks:
-            supplied=self.headers.get(header, "")
+            supplied=header_secret(self.headers,header)
             if key and secrets.compare_digest(supplied, key): return role
         return None
     def client_key(self):
@@ -165,8 +395,23 @@ class Handler(SimpleHTTPRequestHandler):
         self.json({"error":"ไม่ได้รับอนุญาต"},401); return None
     def do_GET(self):
         parsed=urlparse(self.path); path, query=parsed.path, parse_qs(parsed.query)
+        if path == "/auth/scb/callback":
+            code=(query.get("code") or query.get("authCode") or [""])[0]
+            if not code: return self.html("<h1>SCB connection failed</h1><p>Authorization code is missing.</p>",400)
+            try: scb_exchange_auth_code(code)
+            except ValueError as error: return self.html(f"<h1>SCB connection failed</h1><p>{escape_html(str(error))}</p>",400)
+            return self.html("<h1>SCB connected</h1><p>Return to MooPiew Owner dashboard to enable and test QR payment.</p>")
         if path == "/api/health":
             return self.json({"status": "ok", "service": "moopiew", "time": utcnow()})
+        if path == "/api/payments/scb/config": return self.json(scb_config_public())
+        if path == "/api/admin/scb/auth/start":
+            if not self.require("admin"): return
+            try: return self.json({"authorization_url":scb_authorize()})
+            except ValueError as error: return self.json({"error":str(error)},400)
+        if path == "/api/admin/scb/auth/status":
+            if not self.require("admin"): return
+            with db() as con: row=con.execute("SELECT access_expires_at,refresh_expires_at,updated_at FROM oauth_tokens WHERE subject='scb_merchant'").fetchone()
+            return self.json({"connected":bool(row),"access_expires_at":row["access_expires_at"] if row else "","refresh_expires_at":row["refresh_expires_at"] if row else "","updated_at":row["updated_at"] if row else ""})
         with db() as con:
             conf=config(con)
             if path == "/api/ready":
@@ -222,12 +467,21 @@ class Handler(SimpleHTTPRequestHandler):
             if path=="/api/orders":
                 if not self.rate("order"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.create_order(form)
+            qr=re.fullmatch(r"/api/orders/(MPP-[A-Z0-9-]+)/payments/scb/qr",path)
+            if qr:
+                if not self.rate("order"): return self.json({"error":"คำขอมากเกินไป"},429)
+                return self.create_scb_qr(qr.group(1),form)
+            if path=="/api/scb/payment/confirm": return self.scb_payment_callback(form, getattr(self,"raw_body",b""))
             if path=="/api/order-lookup":
                 if not self.rate("lookup"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.lookup_order(form)
             if path=="/api/admin/menu":
                 role=self.require("admin")
                 if role: return self.create_menu_item(form,role)
+            inquiry=re.fullmatch(r"/api/admin/payments/scb/(PAY-SCB-[A-Z0-9-]+)/inquire",path)
+            if inquiry:
+                role=self.require("admin")
+                if role: return self.inquire_scb_payment(inquiry.group(1),role)
             if path.endswith("/cancel") and re.fullmatch(r"/api/orders/MPP-[A-Z0-9-]+/cancel",path):
                 if not self.rate("lookup"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.cancel_order(path.split("/")[3],form)
@@ -253,7 +507,8 @@ class Handler(SimpleHTTPRequestHandler):
         self.json({"error":"ไม่พบ API"},404)
     def admin_dashboard(self,con,conf):
         orders=all_orders(con); recent=[dict(row) for row in con.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 10")]
-        return self.json({"summary":summary(orders),"orders":orders,"settings":conf,"audit":recent})
+        payments=[payment_public(dict(row)) for row in con.execute("SELECT * FROM payment_attempts WHERE provider LIKE 'scb_%' ORDER BY created_at DESC LIMIT 50")]
+        return self.json({"summary":summary(orders),"orders":orders,"settings":conf,"payments":payments,"audit":recent})
     def create_order(self,form):
         name=str(form.get("name","")).strip(); phone=re.sub(r"[^0-9+]","",str(form.get("phone", ""))); pickup_date,pickup_slot=str(form.get("pickup_date", "")),str(form.get("pickup_slot", "")); payment=str(form.get("payment_method","cash")); notes=str(form.get("notes","")).strip()[:300]; requested=form.get("items",[])
         if not 2<=len(name)<=80:raise ValueError("กรุณาระบุชื่ออย่างน้อย 2 ตัวอักษร")
@@ -262,7 +517,7 @@ class Handler(SimpleHTTPRequestHandler):
             conf=config(con)
             if not valid_pickup(pickup_date,conf):raise ValueError("เลือกรับสินค้าได้เฉพาะวันที่เปิดให้สั่งล่วงหน้า")
             if pickup_slot not in conf["pickup_slots"]:raise ValueError("กรุณาเลือกรอบรับที่มีให้บริการ")
-            if payment not in PAYMENT_METHODS:raise ValueError("วิธีชำระเงินไม่ถูกต้อง")
+            if payment not in PAYMENT_METHODS or (payment=="scb_qr" and not scb_active()):raise ValueError("วิธีชำระเงินไม่ถูกต้อง")
             if not isinstance(requested,list):raise ValueError("รายการสั่งไม่ถูกต้อง")
             by_id={item["id"]:item for item in conf["menu"] if item["available"]}; lines=[]; total=0
             for line in requested:
@@ -274,12 +529,61 @@ class Handler(SimpleHTTPRequestHandler):
             if not lines:raise ValueError("กรุณาเลือกอย่างน้อย 1 รายการ")
             remaining=next(slot["remaining"] for slot in slots_for(pickup_date,all_orders(con),conf) if slot["time"]==pickup_slot)
             if sum(q for _,q in lines)>remaining:raise ValueError(f"รอบนี้เหลือรับได้ {remaining} ชิ้น กรุณาลดจำนวนหรือเลือกรอบอื่น")
-            oid=f"MPP-{datetime.now():%y%m%d}-{secrets.token_hex(3).upper()}"; now=utcnow()
-            con.execute("INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?)",(oid,now,"new",name,phone,pickup_date,pickup_slot,total,notes,payment,"pending"))
+            oid=f"MPP-{datetime.now():%y%m%d}-{secrets.token_hex(3).upper()}"; now=utcnow(); status="confirmed" if AUTO_CONFIRM_ORDERS else "new"
+            con.execute("INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?)",(oid,now,status,name,phone,pickup_date,pickup_slot,total,notes,payment,"pending"))
             con.executemany("INSERT INTO order_items(order_id,menu_item_id,name,quantity,unit_price) VALUES (?,?,?,?,?)",[(oid,i["id"],i["name"],q,i["price"]) for i,q in lines])
-            con.execute("INSERT INTO order_history(order_id,at,status,actor_role) VALUES (?,?,?,?)",(oid,now,"new","customer")); audit(con,"customer","create","order",oid,{"total":total})
+            con.execute("INSERT INTO order_history(order_id,at,status,actor_role,note) VALUES (?,?,?,?,?)",(oid,now,status,"automation" if AUTO_CONFIRM_ORDERS else "customer","auto_confirmed" if AUTO_CONFIRM_ORDERS else "")); audit(con,"automation" if AUTO_CONFIRM_ORDERS else "customer","create","order",oid,{"total":total,"status":status})
             order=row_order(con,oid)
         self.json({"order":public_order(order)},201)
+    def create_scb_qr(self,oid,form):
+        phone=re.sub(r"[^0-9+]","",str(form.get("phone","")))
+        if not scb_active(): raise ValueError("SCB QR ยังไม่เปิดให้บริการ")
+        with STORE_LOCK:
+            with db() as con:
+                order=row_order(con,oid)
+                if not order or not secrets.compare_digest(order["customer"]["phone"],phone): return self.json({"error":"ไม่พบออเดอร์ หรือเบอร์โทรศัพท์ไม่ตรงกัน"},404)
+                if order["status"]=="cancelled": raise ValueError("ออเดอร์ถูกยกเลิกแล้ว")
+                if order["payment"]["method"]!="scb_qr": raise ValueError("ออเดอร์นี้ไม่ได้เลือกชำระผ่าน SCB QR")
+                existing=active_payment(con,oid)
+                if existing: return self.json({"payment":payment_public(existing)})
+            payment=scb_create_qr(order)
+            with db() as con:
+                con.execute("INSERT INTO payment_attempts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(payment["id"],oid,payment["provider"],payment["provider_reference"],payment["provider_order_id"],payment["amount"],payment["status"],payment["qr_image"],payment["qr_type"],payment["expires_at"],payment["created_at"],payment["updated_at"],payment["confirmed_at"],payment["provider_response"]))
+                audit(con,"customer","create","payment_attempt",payment["id"],{"provider":"scb_maemanee","order_id":oid,"amount":payment["amount"]})
+            self.json({"payment":payment_public(payment)},201)
+    def scb_payment_callback(self,form,raw):
+        secret=env("SCB_WEBHOOK_SECRET"); signature=self.headers.get(env("SCB_WEBHOOK_SIGNATURE_HEADER","X-SCB-Signature"),"")
+        if secret:
+            if not signature: return self.json({"error":"SCB callback ไม่มีลายเซ็น"},401)
+            expected=hmac.new(secret.encode(),raw,hashlib.sha256).hexdigest(); supplied=signature.removeprefix("sha256=")
+            if not secrets.compare_digest(expected,supplied): return self.json({"error":"ลายเซ็น SCB ไม่ถูกต้อง"},401)
+        data=form.get("data",form) if isinstance(form.get("data",form),dict) else form
+        provider_order=str(data.get("orderId") or data.get("transactionId") or "")
+        if not provider_order: return self.json({"error":"SCB callback ไม่มี order identifier"},400)
+        with db() as con:
+            payment=con.execute("SELECT * FROM payment_attempts WHERE provider LIKE 'scb_%' AND provider_order_id=?",(provider_order,)).fetchone()
+            if not payment: return self.json({"error":"ไม่พบ payment attempt"},404)
+            payment=dict(payment)
+        try: response,paid=scb_inquire_payment(payment)
+        except ValueError as error: return self.json({"error":str(error)},503)
+        with STORE_LOCK,db() as con:
+            current=row_payment(con,payment["id"])
+            if paid and current["status"]!="paid":
+                now=utcnow(); con.execute("UPDATE payment_attempts SET status='paid',confirmed_at=?,updated_at=?,provider_response=? WHERE id=?",(now,now,json.dumps(response,ensure_ascii=False),current["id"])); con.execute("UPDATE orders SET payment_status='paid' WHERE id=?",(current["order_id"],)); audit(con,"scb_webhook","payment_confirmed","payment_attempt",current["id"],{"order_id":current["order_id"],"provider_order_id":provider_order,"signature_verified":bool(secret)})
+            elif not paid: con.execute("UPDATE payment_attempts SET updated_at=?,provider_response=? WHERE id=?",(utcnow(),json.dumps(response,ensure_ascii=False),current["id"]));audit(con,"scb_webhook","payment_callback_pending","payment_attempt",current["id"],{"provider_order_id":provider_order})
+        self.json({"status":"paid" if paid else "pending"})
+    def inquire_scb_payment(self,payment_id,role):
+        with db() as con:
+            payment=row_payment(con,payment_id)
+            if not payment or not payment["provider"].startswith("scb_"): return self.json({"error":"ไม่พบ SCB payment attempt"},404)
+            if payment["status"]=="paid": return self.json({"payment":payment_public(payment),"inquiry":"already_paid"})
+        response,paid=scb_inquire_payment(payment)
+        with STORE_LOCK,db() as con:
+            current=row_payment(con,payment_id)
+            if paid and current["status"]!="paid":
+                now=utcnow(); con.execute("UPDATE payment_attempts SET status='paid',confirmed_at=?,updated_at=?,provider_response=? WHERE id=?",(now,now,json.dumps(response,ensure_ascii=False),payment_id)); con.execute("UPDATE orders SET payment_status='paid' WHERE id=?",(current["order_id"],)); audit(con,role,"payment_inquiry_paid","payment_attempt",payment_id,{"order_id":current["order_id"]})
+            elif not paid: con.execute("UPDATE payment_attempts SET updated_at=?,provider_response=? WHERE id=?",(utcnow(),json.dumps(response,ensure_ascii=False),payment_id));audit(con,role,"payment_inquiry_pending","payment_attempt",payment_id)
+            return self.json({"payment":payment_public(row_payment(con,payment_id)),"inquiry":"paid" if paid else "pending"})
     def lookup_order(self,form):
         oid=str(form.get("order_id","")).upper().strip(); phone=re.sub(r"[^0-9+]","",str(form.get("phone","")))
         with db() as con:
@@ -292,7 +596,7 @@ class Handler(SimpleHTTPRequestHandler):
             order=row_order(con,oid)
             if not order or not secrets.compare_digest(order["customer"]["phone"],phone):return self.json({"error":"ไม่พบออเดอร์ หรือเบอร์โทรศัพท์ไม่ตรงกัน"},404)
             if order["status"] not in {"new","confirmed"}:raise ValueError("ออเดอร์นี้ไม่สามารถยกเลิกทางออนไลน์ได้")
-            con.execute("UPDATE orders SET status='cancelled' WHERE id=?",(oid,));con.execute("INSERT INTO order_history(order_id,at,status,actor_role) VALUES (?,?,?,?)",(oid,utcnow(),"cancelled","customer"));audit(con,"customer","cancel","order",oid)
+            con.execute("UPDATE orders SET status='cancelled' WHERE id=?",(oid,));con.execute("UPDATE payment_attempts SET status='cancelled',updated_at=? WHERE order_id=? AND status IN ('created','pending')",(utcnow(),oid));con.execute("INSERT INTO order_history(order_id,at,status,actor_role) VALUES (?,?,?,?)",(oid,utcnow(),"cancelled","customer"));audit(con,"customer","cancel","order",oid)
             return self.json({"order":public_order(row_order(con,oid))})
     def create_menu_item(self,form,role):
         name,description=str(form.get("name","")).strip(),str(form.get("description","")).strip()[:160]
