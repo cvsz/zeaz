@@ -90,6 +90,7 @@ def initialise_database() -> None:
         PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS menu_items (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', price INTEGER NOT NULL CHECK(price >= 0), available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS menu_display_order (menu_item_id TEXT PRIMARY KEY REFERENCES menu_items(id) ON DELETE CASCADE, position INTEGER NOT NULL CHECK(position >= 0));
         CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('new','confirmed','ready','completed','cancelled')), customer_name TEXT NOT NULL, customer_phone TEXT NOT NULL, pickup_date TEXT NOT NULL, pickup_slot TEXT NOT NULL, total INTEGER NOT NULL, notes TEXT NOT NULL DEFAULT '', payment_method TEXT NOT NULL, payment_status TEXT NOT NULL DEFAULT 'pending');
         CREATE TABLE IF NOT EXISTS order_items (id INTEGER PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, menu_item_id TEXT NOT NULL, name TEXT NOT NULL, quantity INTEGER NOT NULL CHECK(quantity > 0), unit_price INTEGER NOT NULL CHECK(unit_price >= 0));
         CREATE TABLE IF NOT EXISTS order_history (id INTEGER PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, at TEXT NOT NULL, status TEXT NOT NULL, actor_role TEXT NOT NULL, note TEXT NOT NULL DEFAULT '');
@@ -117,6 +118,7 @@ def initialise_database() -> None:
         CREATE INDEX IF NOT EXISTS idx_deliveries_status ON deliveries(status, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_inventory_movements_item ON inventory_movements(inventory_item_id, created_at DESC);
         """)
+        con.execute("INSERT OR IGNORE INTO menu_display_order(menu_item_id,position) VALUES ('classic',1),('milk-tender',2),('fatty',3),('spicy',4),('sticky-rice',5)")
         now=utcnow()
         con.execute("INSERT OR IGNORE INTO delivery_zones VALUES (?,?,?,?,?,?,?)", ("central", "พื้นที่จัดส่งหลัก", 30, 0, 1, now, now))
         if con.execute("SELECT COUNT(*) FROM settings").fetchone()[0]: return
@@ -138,7 +140,7 @@ def import_legacy_order(con: sqlite3.Connection, order: dict) -> None:
 
 def config(con: sqlite3.Connection) -> dict:
     result = DEFAULT_SETTINGS | {row["key"]: json.loads(row["value"]) for row in con.execute("SELECT key,value FROM settings")}
-    result["menu"] = [dict(row) | {"available": bool(row["available"])} for row in con.execute("SELECT id,name,description,price,available FROM menu_items ORDER BY created_at")]
+    result["menu"] = [dict(row) | {"available": bool(row["available"])} for row in con.execute("SELECT m.id,m.name,m.description,m.price,m.available FROM menu_items m LEFT JOIN menu_display_order o ON o.menu_item_id=m.id ORDER BY COALESCE(o.position,9999),m.created_at")]
     return result
 
 def set_setting(con, key, value): con.execute("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, json.dumps(value, ensure_ascii=False)))
