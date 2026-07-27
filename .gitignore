@@ -7,6 +7,8 @@ data/*.sqlite3-shm
 data/*.sqlite3-wal
 __pycache__/
 node_modules/
+.turbo/
+**/.turbo/
 # Local environment and Cloudflare credentials. Keep only reviewed examples.
 .env
 .env.*
