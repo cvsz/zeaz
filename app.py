@@ -175,7 +175,21 @@ class Handler(SimpleHTTPRequestHandler):
             if path=="/api/menu":
                 day=query.get("date",[date.today().isoformat()])[0]
                 if not valid_pickup(day,conf): return self.json({"error":"วันรับสินค้าไม่พร้อมให้บริการ"},400)
-                return self.json({"store_name":conf["store_name"],"items":[item for item in conf["menu"] if item["available"]],"slots":slots_for(day,all_orders(con),conf),"date":day,"advance_days":conf["advance_days"]})
+                available_items=[item for item in conf["menu"] if item["available"]]
+                pickup_slots=slots_for(day,all_orders(con),conf)
+                return self.json({
+                    "api_version":"1.1",
+                    "generated_at":utcnow(),
+                    "store":{"name":conf["store_name"],"locale":"th-TH","currency":"THB"},
+                    "store_name":conf["store_name"],
+                    "theme":{"name":"moopiew-food-tech","primary":"#FF6B35","primary_light":"#FF8A4C","secondary":"#FFC107","surface":"#FFF8EF","text":"#211B18"},
+                    "items":available_items,
+                    "pickup":{"date":day,"slots":pickup_slots,"capacity_per_slot":conf["slot_capacity"],"remaining_total":sum(slot["remaining"] for slot in pickup_slots)},
+                    "slots":pickup_slots,
+                    "date":day,
+                    "advance_days":conf["advance_days"],
+                    "links":{"order":"/","dashboard":"/dashboard.html","platform":"/platform/","health":"/api/health"}
+                })
             if path=="/api/admin/dashboard":
                 if not self.require("admin"): return
                 return self.admin_dashboard(con, conf)
