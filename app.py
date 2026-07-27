@@ -50,12 +50,14 @@ SCB_TOKEN_LOCK = Lock()
 DEFAULT_SETTINGS = {
     "store_name": "หมูปิ้ววว", "slot_capacity": 80, "advance_days": 14,
     "pickup_slots": ["09:00–10:00", "10:00–11:00", "11:00–12:00", "12:00–13:00"],
+    "business_profile": {"legal_name":"", "tax_id":"", "address":"", "branch":"สำนักงานใหญ่", "vat_registered":False, "vat_rate":7},
 }
 DEFAULT_MENU = [
     {"id": "classic", "name": "หมูปิ้ววว ต้นตำรับ", "description": "หมูหมักนุ่ม ย่างหอมถ่าน", "price": 15, "available": True},
     {"id": "spicy", "name": "หมูปิ้ววว เผ็ดนัว", "description": "รสจัดจ้าน กลมกล่อม", "price": 18, "available": True},
     {"id": "sticky-rice", "name": "ข้าวเหนียว", "description": "ห่อละกำลังดี", "price": 10, "available": True},
 ]
+DELIVERY_STATUSES = ("queued", "assigned", "picked_up", "on_the_way", "delivered", "failed", "cancelled")
 
 def utcnow() -> str: return datetime.now(timezone.utc).isoformat()
 
@@ -94,12 +96,29 @@ def initialise_database() -> None:
         CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY, at TEXT NOT NULL, actor_role TEXT NOT NULL, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, details TEXT NOT NULL DEFAULT '{}');
         CREATE TABLE IF NOT EXISTS payment_attempts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, provider TEXT NOT NULL, provider_reference TEXT NOT NULL UNIQUE, provider_order_id TEXT UNIQUE, amount INTEGER NOT NULL CHECK(amount >= 0), status TEXT NOT NULL CHECK(status IN ('created','pending','paid','failed','expired','cancelled')), qr_image TEXT NOT NULL DEFAULT '', qr_type TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, confirmed_at TEXT NOT NULL DEFAULT '', provider_response TEXT NOT NULL DEFAULT '{}');
         CREATE TABLE IF NOT EXISTS oauth_tokens (subject TEXT PRIMARY KEY, access_cipher TEXT NOT NULL, refresh_cipher TEXT NOT NULL DEFAULT '', owner_cipher TEXT NOT NULL, access_expires_at TEXT NOT NULL, refresh_expires_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS delivery_zones (id TEXT PRIMARY KEY, name TEXT NOT NULL, fee INTEGER NOT NULL CHECK(fee >= 0), minimum_order INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS riders (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS deliveries (order_id TEXT PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE, zone_id TEXT NOT NULL REFERENCES delivery_zones(id), recipient_name TEXT NOT NULL, recipient_phone TEXT NOT NULL, address TEXT NOT NULL, landmark TEXT NOT NULL DEFAULT '', rider_id TEXT REFERENCES riders(id), status TEXT NOT NULL CHECK(status IN ('queued','assigned','picked_up','on_the_way','delivered','failed','cancelled')) DEFAULT 'queued', tracking_code TEXT NOT NULL UNIQUE, assigned_at TEXT NOT NULL DEFAULT '', picked_up_at TEXT NOT NULL DEFAULT '', delivered_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS order_financials (order_id TEXT PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE, subtotal INTEGER NOT NULL, delivery_fee INTEGER NOT NULL DEFAULT 0, discount INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL, coupon_code TEXT NOT NULL DEFAULT '', points_earned INTEGER NOT NULL DEFAULT 0, points_redeemed INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS inventory_items (id TEXT PRIMARY KEY, name TEXT NOT NULL, unit TEXT NOT NULL, on_hand REAL NOT NULL DEFAULT 0, reorder_level REAL NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS menu_recipes (menu_item_id TEXT NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE, inventory_item_id TEXT NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE, quantity REAL NOT NULL CHECK(quantity > 0), PRIMARY KEY(menu_item_id,inventory_item_id));
+        CREATE TABLE IF NOT EXISTS inventory_movements (id TEXT PRIMARY KEY, inventory_item_id TEXT NOT NULL REFERENCES inventory_items(id), delta REAL NOT NULL, reason TEXT NOT NULL, order_id TEXT REFERENCES orders(id), note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, actor_role TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS customers (phone TEXT PRIMARY KEY, name TEXT NOT NULL, points_balance INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS loyalty_ledger (id TEXT PRIMARY KEY, customer_phone TEXT NOT NULL REFERENCES customers(phone), points_delta INTEGER NOT NULL, reason TEXT NOT NULL, order_id TEXT REFERENCES orders(id), created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS coupons (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, kind TEXT NOT NULL CHECK(kind IN ('fixed','percent')), value INTEGER NOT NULL CHECK(value > 0), minimum_order INTEGER NOT NULL DEFAULT 0, maximum_uses INTEGER NOT NULL DEFAULT 0, used_count INTEGER NOT NULL DEFAULT 0, starts_at TEXT NOT NULL DEFAULT '', ends_at TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS coupon_redemptions (coupon_id TEXT NOT NULL REFERENCES coupons(id), order_id TEXT PRIMARY KEY REFERENCES orders(id), customer_phone TEXT NOT NULL, discount INTEGER NOT NULL, created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS pos_receipts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL UNIQUE REFERENCES orders(id), receipt_number TEXT NOT NULL UNIQUE, customer_tax_name TEXT NOT NULL DEFAULT '', customer_tax_id TEXT NOT NULL DEFAULT '', subtotal INTEGER NOT NULL, discount INTEGER NOT NULL, delivery_fee INTEGER NOT NULL, total INTEGER NOT NULL, issued_at TEXT NOT NULL, issued_by TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS tax_invoices (receipt_id TEXT PRIMARY KEY REFERENCES pos_receipts(id), tax_invoice_number TEXT NOT NULL UNIQUE, seller_name TEXT NOT NULL, seller_tax_id TEXT NOT NULL, seller_address TEXT NOT NULL, seller_branch TEXT NOT NULL, buyer_name TEXT NOT NULL, buyer_tax_id TEXT NOT NULL DEFAULT '', buyer_address TEXT NOT NULL DEFAULT '', amount_before_vat INTEGER NOT NULL, vat_rate INTEGER NOT NULL, vat_amount INTEGER NOT NULL, total INTEGER NOT NULL, issued_at TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS idx_orders_pickup ON orders(pickup_date, pickup_slot);
         CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
         CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_logs(at DESC);
         CREATE INDEX IF NOT EXISTS idx_payment_attempts_order ON payment_attempts(order_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_payment_attempts_provider_order ON payment_attempts(provider, provider_order_id);
+        CREATE INDEX IF NOT EXISTS idx_deliveries_status ON deliveries(status, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_inventory_movements_item ON inventory_movements(inventory_item_id, created_at DESC);
         """)
+        now=utcnow()
+        con.execute("INSERT OR IGNORE INTO delivery_zones VALUES (?,?,?,?,?,?,?)", ("central", "พื้นที่จัดส่งหลัก", 30, 0, 1, now, now))
         if con.execute("SELECT COUNT(*) FROM settings").fetchone()[0]: return
         legacy_settings = load_legacy(DATA / "settings.json", {})
         config = {**DEFAULT_SETTINGS, **legacy_settings}
@@ -118,7 +137,7 @@ def import_legacy_order(con: sqlite3.Connection, order: dict) -> None:
     for event in order.get("history", [{"at": values[1], "status": values[2], "by": "legacy"}]): con.execute("INSERT INTO order_history(order_id,at,status,actor_role) VALUES (?,?,?,?)", (order["id"], event.get("at", values[1]), event.get("status", values[2]), event.get("by", "legacy")))
 
 def config(con: sqlite3.Connection) -> dict:
-    result = {row["key"]: json.loads(row["value"]) for row in con.execute("SELECT key,value FROM settings")}
+    result = DEFAULT_SETTINGS | {row["key"]: json.loads(row["value"]) for row in con.execute("SELECT key,value FROM settings")}
     result["menu"] = [dict(row) | {"available": bool(row["available"])} for row in con.execute("SELECT id,name,description,price,available FROM menu_items ORDER BY created_at")]
     return result
 
@@ -333,6 +352,15 @@ def row_order(con, order_id: str) -> dict | None:
     order["payment"] = {"method": order.pop("payment_method"), "status": order.pop("payment_status")}
     order["items"] = [dict(item) for item in con.execute("SELECT menu_item_id AS id,name,quantity,unit_price FROM order_items WHERE order_id=?", (order_id,))]
     order["history"] = [dict(event) for event in con.execute("SELECT at,status,actor_role AS by,note FROM order_history WHERE order_id=? ORDER BY id", (order_id,))]
+    financial=con.execute("SELECT subtotal,delivery_fee,discount,total,coupon_code,points_earned,points_redeemed FROM order_financials WHERE order_id=?", (order_id,)).fetchone()
+    order["financial"] = dict(financial) if financial else {"subtotal":order["total"],"delivery_fee":0,"discount":0,"total":order["total"],"coupon_code":"","points_earned":0,"points_redeemed":0}
+    delivery=con.execute("SELECT d.*,z.name AS zone_name,r.name AS rider_name,r.phone AS rider_phone FROM deliveries d JOIN delivery_zones z ON z.id=d.zone_id LEFT JOIN riders r ON r.id=d.rider_id WHERE d.order_id=?", (order_id,)).fetchone()
+    if delivery:
+        detail=dict(delivery); detail.pop("order_id",None); detail.pop("rider_id",None)
+        order["fulfillment"]={"type":"delivery","delivery":detail}
+    else: order["fulfillment"]={"type":"pickup"}
+    receipt=con.execute("SELECT id,receipt_number,issued_at,customer_tax_name,customer_tax_id FROM pos_receipts WHERE order_id=?", (order_id,)).fetchone()
+    if receipt: order["receipt"]=dict(receipt)
     return order
 
 def all_orders(con, pickup_date=None):
@@ -341,7 +369,18 @@ def all_orders(con, pickup_date=None):
     query += " ORDER BY pickup_date DESC, created_at DESC"
     return [row_order(con, row["id"]) for row in con.execute(query, args)]
 
-def public_order(order): return {key: order[key] for key in ("id", "status", "pickup", "items", "total", "payment", "created_at", "notes")}
+def public_order(order): return {key: order[key] for key in ("id", "status", "pickup", "items", "total", "payment", "created_at", "notes", "financial", "fulfillment") if key in order} | ({"receipt":order["receipt"]} if "receipt" in order else {})
+
+def active_coupon(con, code: str, subtotal: int) -> dict | None:
+    now=utcnow(); row=con.execute("SELECT * FROM coupons WHERE upper(code)=? AND active=1", (code.upper(),)).fetchone()
+    if not row: return None
+    coupon=dict(row)
+    if coupon["minimum_order"]>subtotal or (coupon["maximum_uses"] and coupon["used_count"]>=coupon["maximum_uses"]): return None
+    if coupon["starts_at"] and coupon["starts_at"]>now or coupon["ends_at"] and coupon["ends_at"]<now: return None
+    return coupon
+
+def delivery_zones(con):
+    return [dict(row) for row in con.execute("SELECT id,name,fee,minimum_order FROM delivery_zones WHERE active=1 ORDER BY fee,name")]
 def valid_pickup(day, conf):
     try: picked = date.fromisoformat(day)
     except ValueError: return False
@@ -404,6 +443,10 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/health":
             return self.json({"status": "ok", "service": "moopiew", "time": utcnow()})
         if path == "/api/payments/scb/config": return self.json(scb_config_public())
+        tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]+)/events",path)
+        if tracking:return self.stream_tracking(tracking.group(1))
+        tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]+)",path)
+        if tracking:return self.tracking_snapshot(tracking.group(1))
         if path == "/api/admin/scb/auth/start":
             if not self.require("admin"): return
             try: return self.json({"authorization_url":scb_authorize()})
@@ -435,6 +478,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "slots":pickup_slots,
                     "date":day,
                     "advance_days":conf["advance_days"],
+                    "delivery_zones":delivery_zones(con),
                     "links":{"order":"/","dashboard":"/dashboard.html","platform":"/platform/","preview":"/menu-preview.html","health":"/api/health"}
                 })
             if path=="/api/admin/dashboard":
@@ -447,6 +491,20 @@ class Handler(SimpleHTTPRequestHandler):
                 if not self.require("admin"): return
                 logs=[dict(row) | {"details":json.loads(row["details"])} for row in con.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100")]
                 return self.json({"logs":logs})
+            if path=="/api/admin/operations":
+                if not self.require("admin"): return
+                inventory=[dict(row) for row in con.execute("SELECT * FROM inventory_items ORDER BY name")]
+                riders=[dict(row) for row in con.execute("SELECT * FROM riders ORDER BY active DESC,name")]
+                coupons=[dict(row) for row in con.execute("SELECT * FROM coupons ORDER BY created_at DESC")]
+                deliveries=[dict(row) for row in con.execute("SELECT d.*,o.id AS order_id,o.customer_name,o.total,z.name AS zone_name,r.name AS rider_name FROM deliveries d JOIN orders o ON o.id=d.order_id JOIN delivery_zones z ON z.id=d.zone_id LEFT JOIN riders r ON r.id=d.rider_id ORDER BY d.updated_at DESC")]
+                receipts=[dict(row) for row in con.execute("SELECT * FROM pos_receipts ORDER BY issued_at DESC LIMIT 100")]
+                invoices=[dict(row) for row in con.execute("SELECT * FROM tax_invoices ORDER BY issued_at DESC LIMIT 100")]
+                recipes=[dict(row) for row in con.execute("SELECT r.menu_item_id,r.inventory_item_id,r.quantity,m.name AS menu_name,i.name AS inventory_name,i.unit FROM menu_recipes r JOIN menu_items m ON m.id=r.menu_item_id JOIN inventory_items i ON i.id=r.inventory_item_id ORDER BY m.name,i.name")]
+                return self.json({"delivery_zones":delivery_zones(con),"deliveries":deliveries,"riders":riders,"inventory":inventory,"menu":conf["menu"],"recipes":recipes,"coupons":coupons,"receipts":receipts,"tax_invoices":invoices,"business_profile":conf["business_profile"]})
+            printable=re.fullmatch(r"/api/admin/receipts/(RCT-[A-Z0-9-]+)/print",path)
+            if printable:
+                if not self.require("admin"): return
+                return self.print_receipt(con,printable.group(1),conf)
             if path in ("/api/staff/dashboard","/api/kitchen/dashboard"):
                 expected="employee" if "staff" in path else "kitchen"; role=self.require(expected)
                 if not role: return
@@ -467,6 +525,8 @@ class Handler(SimpleHTTPRequestHandler):
             if path=="/api/orders":
                 if not self.rate("order"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.create_order(form)
+            if path=="/api/delivery/quote":
+                return self.delivery_quote(form)
             qr=re.fullmatch(r"/api/orders/(MPP-[A-Z0-9-]+)/payments/scb/qr",path)
             if qr:
                 if not self.rate("order"): return self.json({"error":"คำขอมากเกินไป"},429)
@@ -478,6 +538,26 @@ class Handler(SimpleHTTPRequestHandler):
             if path=="/api/admin/menu":
                 role=self.require("admin")
                 if role: return self.create_menu_item(form,role)
+            admin_actions={
+                "/api/admin/riders":self.create_rider,
+                "/api/admin/delivery-zones":self.create_delivery_zone,
+                "/api/admin/inventory":self.create_inventory_item,
+                "/api/admin/inventory/adjust":self.adjust_inventory,
+                "/api/admin/inventory/recipes":self.set_menu_recipe,
+                "/api/admin/coupons":self.create_coupon,
+                "/api/admin/business-profile":self.update_business_profile,
+            }
+            if path in admin_actions:
+                role=self.require("admin")
+                if role:return admin_actions[path](form,role)
+            receipt=re.fullmatch(r"/api/admin/orders/(MPP-[A-Z0-9-]+)/receipt",path)
+            if receipt:
+                role=self.require("admin")
+                if role:return self.issue_receipt(receipt.group(1),form,role)
+            invoice=re.fullmatch(r"/api/admin/receipts/(RCT-[A-Z0-9-]+)/tax-invoice",path)
+            if invoice:
+                role=self.require("admin")
+                if role:return self.issue_tax_invoice(invoice.group(1),form,role)
             inquiry=re.fullmatch(r"/api/admin/payments/scb/(PAY-SCB-[A-Z0-9-]+)/inquire",path)
             if inquiry:
                 role=self.require("admin")
@@ -496,6 +576,11 @@ class Handler(SimpleHTTPRequestHandler):
             area, order_id=match.groups(); expected={"admin":"admin","staff":"employee","kitchen":"kitchen"}[area]; role=self.require(expected)
             if role: return self.update_order(order_id,form,role,area)
             return
+        delivery=re.fullmatch(r"/api/(admin|staff)/deliveries/(MPP-[A-Z0-9-]+)",path)
+        if delivery:
+            area,order_id=delivery.groups(); role=self.require("admin" if area=="admin" else "employee")
+            if role:return self.update_delivery(order_id,form,role,area)
+            return
         if not path.startswith("/api/admin/"): return self.json({"error":"ไม่พบ API"},404)
         role=self.require("admin")
         if not role:return
@@ -511,12 +596,17 @@ class Handler(SimpleHTTPRequestHandler):
         return self.json({"summary":summary(orders),"orders":orders,"settings":conf,"payments":payments,"audit":recent})
     def create_order(self,form):
         name=str(form.get("name","")).strip(); phone=re.sub(r"[^0-9+]","",str(form.get("phone", ""))); pickup_date,pickup_slot=str(form.get("pickup_date", "")),str(form.get("pickup_slot", "")); payment=str(form.get("payment_method","cash")); notes=str(form.get("notes","")).strip()[:300]; requested=form.get("items",[])
+        fulfillment=str(form.get("fulfillment_type","pickup")); coupon_code=str(form.get("coupon_code","")).strip().upper()
         if not 2<=len(name)<=80:raise ValueError("กรุณาระบุชื่ออย่างน้อย 2 ตัวอักษร")
         if not re.fullmatch(r"(?:\+66|0)\d{8,9}",phone):raise ValueError("กรุณาระบุเบอร์โทรศัพท์ที่ถูกต้อง")
+        if fulfillment not in {"pickup","delivery"}: raise ValueError("รูปแบบการรับสินค้าไม่ถูกต้อง")
         with STORE_LOCK,db() as con:
             conf=config(con)
-            if not valid_pickup(pickup_date,conf):raise ValueError("เลือกรับสินค้าได้เฉพาะวันที่เปิดให้สั่งล่วงหน้า")
-            if pickup_slot not in conf["pickup_slots"]:raise ValueError("กรุณาเลือกรอบรับที่มีให้บริการ")
+            if fulfillment=="pickup":
+                if not valid_pickup(pickup_date,conf):raise ValueError("เลือกรับสินค้าได้เฉพาะวันที่เปิดให้สั่งล่วงหน้า")
+                if pickup_slot not in conf["pickup_slots"]:raise ValueError("กรุณาเลือกรอบรับที่มีให้บริการ")
+            else:
+                pickup_date=date.today().isoformat(); pickup_slot="จัดส่งตามลำดับคิว"
             if payment not in PAYMENT_METHODS or (payment=="scb_qr" and not scb_active()):raise ValueError("วิธีชำระเงินไม่ถูกต้อง")
             if not isinstance(requested,list):raise ValueError("รายการสั่งไม่ถูกต้อง")
             by_id={item["id"]:item for item in conf["menu"] if item["available"]}; lines=[]; total=0
@@ -527,14 +617,64 @@ class Handler(SimpleHTTPRequestHandler):
                 except (TypeError,ValueError):raise ValueError("รายการสั่งไม่ถูกต้อง")
                 if item and 0<quantity<=100:lines.append((item,quantity));total+=item["price"]*quantity
             if not lines:raise ValueError("กรุณาเลือกอย่างน้อย 1 รายการ")
-            remaining=next(slot["remaining"] for slot in slots_for(pickup_date,all_orders(con),conf) if slot["time"]==pickup_slot)
-            if sum(q for _,q in lines)>remaining:raise ValueError(f"รอบนี้เหลือรับได้ {remaining} ชิ้น กรุณาลดจำนวนหรือเลือกรอบอื่น")
-            oid=f"MPP-{datetime.now():%y%m%d}-{secrets.token_hex(3).upper()}"; now=utcnow(); status="confirmed" if AUTO_CONFIRM_ORDERS else "new"
-            con.execute("INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?)",(oid,now,status,name,phone,pickup_date,pickup_slot,total,notes,payment,"pending"))
+            if fulfillment=="pickup":
+                remaining=next(slot["remaining"] for slot in slots_for(pickup_date,all_orders(con),conf) if slot["time"]==pickup_slot)
+                if sum(q for _,q in lines)>remaining:raise ValueError(f"รอบนี้เหลือรับได้ {remaining} ชิ้น กรุณาลดจำนวนหรือเลือกรอบอื่น")
+            delivery_fee=0; delivery=None
+            if fulfillment=="delivery":
+                zone_id=str(form.get("delivery_zone_id","")).strip(); zone=con.execute("SELECT * FROM delivery_zones WHERE id=? AND active=1",(zone_id,)).fetchone()
+                recipient=str(form.get("recipient_name",name)).strip()[:80]; recipient_phone=re.sub(r"[^0-9+]","",str(form.get("recipient_phone",phone))); address=str(form.get("delivery_address","")).strip()[:500]; landmark=str(form.get("delivery_landmark","")).strip()[:160]
+                if not zone or not address or not 2<=len(recipient)<=80 or not re.fullmatch(r"(?:\+66|0)\d{8,9}",recipient_phone): raise ValueError("กรุณาระบุข้อมูลจัดส่งให้ครบถ้วน")
+                if total<int(zone["minimum_order"]): raise ValueError(f"ยอดสั่งขั้นต่ำสำหรับพื้นที่นี้คือ {zone['minimum_order']} บาท")
+                delivery_fee=int(zone["fee"]); delivery=(zone_id,recipient,recipient_phone,address,landmark)
+            now=utcnow(); con.execute("INSERT INTO customers(phone,name,points_balance,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(phone) DO UPDATE SET name=excluded.name,updated_at=excluded.updated_at",(phone,name,0,now,now))
+            customer=con.execute("SELECT points_balance FROM customers WHERE phone=?",(phone,)).fetchone()
+            coupon=active_coupon(con,coupon_code,total) if coupon_code else None
+            if coupon_code and not coupon: raise ValueError("คูปองใช้ไม่ได้หรือไม่เข้าเงื่อนไข")
+            coupon_discount=min(total, int(coupon["value"]) if coupon and coupon["kind"]=="fixed" else total*int(coupon["value"])//100 if coupon else 0)
+            try: points_redeemed=int(form.get("points_to_redeem",0))
+            except (ValueError,TypeError):raise ValueError("จำนวนแต้มไม่ถูกต้อง")
+            if points_redeemed<0 or points_redeemed>int(customer["points_balance"]) or points_redeemed>total-coupon_discount:raise ValueError("แต้มคงเหลือไม่เพียงพอหรือใช้เกินยอดสินค้า")
+            discount=coupon_discount+points_redeemed; final_total=total+delivery_fee-discount; points_earned=final_total//25
+            oid=f"MPP-{datetime.now():%y%m%d}-{secrets.token_hex(3).upper()}"; status="confirmed" if AUTO_CONFIRM_ORDERS else "new"
+            con.execute("INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?)",(oid,now,status,name,phone,pickup_date,pickup_slot,final_total,notes,payment,"pending"))
             con.executemany("INSERT INTO order_items(order_id,menu_item_id,name,quantity,unit_price) VALUES (?,?,?,?,?)",[(oid,i["id"],i["name"],q,i["price"]) for i,q in lines])
-            con.execute("INSERT INTO order_history(order_id,at,status,actor_role,note) VALUES (?,?,?,?,?)",(oid,now,status,"automation" if AUTO_CONFIRM_ORDERS else "customer","auto_confirmed" if AUTO_CONFIRM_ORDERS else "")); audit(con,"automation" if AUTO_CONFIRM_ORDERS else "customer","create","order",oid,{"total":total,"status":status})
+            con.execute("INSERT INTO order_financials VALUES (?,?,?,?,?,?,?,?)",(oid,total,delivery_fee,discount,final_total,coupon_code,points_earned,points_redeemed))
+            if points_redeemed:
+                con.execute("UPDATE customers SET points_balance=points_balance-?,updated_at=? WHERE phone=?",(points_redeemed,now,phone));con.execute("INSERT INTO loyalty_ledger VALUES (?,?,?,?,?,?)",(f"LOY-{secrets.token_hex(4).upper()}",phone,-points_redeemed,"order_redeemed",oid,now))
+            if delivery:
+                tracking=f"TRK-{secrets.token_hex(4).upper()}"; con.execute("INSERT INTO deliveries(order_id,zone_id,recipient_name,recipient_phone,address,landmark,tracking_code,updated_at) VALUES (?,?,?,?,?,?,?,?)",(oid,*delivery,tracking,now))
+            if coupon:
+                con.execute("UPDATE coupons SET used_count=used_count+1 WHERE id=?",(coupon["id"],)); con.execute("INSERT INTO coupon_redemptions VALUES (?,?,?,?,?)",(coupon["id"],oid,phone,discount,now))
+            con.execute("INSERT INTO order_history(order_id,at,status,actor_role,note) VALUES (?,?,?,?,?)",(oid,now,status,"automation" if AUTO_CONFIRM_ORDERS else "customer","auto_confirmed" if AUTO_CONFIRM_ORDERS else "")); audit(con,"automation" if AUTO_CONFIRM_ORDERS else "customer","create","order",oid,{"total":final_total,"status":status,"fulfillment":fulfillment})
             order=row_order(con,oid)
         self.json({"order":public_order(order)},201)
+    def tracking_snapshot(self,tracking_code):
+        with db() as con:
+            row=con.execute("SELECT d.tracking_code,d.status,d.updated_at,d.assigned_at,d.picked_up_at,d.delivered_at,z.name AS zone_name,r.name AS rider_name FROM deliveries d JOIN delivery_zones z ON z.id=d.zone_id LEFT JOIN riders r ON r.id=d.rider_id WHERE d.tracking_code=?",(tracking_code,)).fetchone()
+            if not row:return self.json({"error":"ไม่พบรหัสติดตาม"},404)
+            return self.json({"tracking":dict(row)})
+    def stream_tracking(self,tracking_code):
+        if not self.rate("lookup"):return self.json({"error":"คำขอมากเกินไป"},429)
+        self.send_response(200);self.send_header("Content-Type","text/event-stream; charset=utf-8");self.send_header("Cache-Control","no-store");self.send_header("Connection","keep-alive");self.end_headers(); previous=""
+        try:
+            for _ in range(20):
+                with db() as con:
+                    row=con.execute("SELECT d.tracking_code,d.status,d.updated_at,d.assigned_at,d.picked_up_at,d.delivered_at,z.name AS zone_name,r.name AS rider_name FROM deliveries d JOIN delivery_zones z ON z.id=d.zone_id LEFT JOIN riders r ON r.id=d.rider_id WHERE d.tracking_code=?",(tracking_code,)).fetchone()
+                if not row:break
+                payload=json.dumps({"tracking":dict(row)},ensure_ascii=False)
+                if payload!=previous:self.wfile.write(f"event: tracking\ndata: {payload}\n\n".encode());self.wfile.flush();previous=payload
+                time.sleep(3)
+        except (BrokenPipeError,ConnectionResetError):pass
+    def delivery_quote(self,form):
+        try: subtotal=int(form.get("subtotal",0))
+        except (ValueError,TypeError): raise ValueError("ยอดสั่งไม่ถูกต้อง")
+        zone_id=str(form.get("zone_id","")).strip()
+        with db() as con:
+            zone=con.execute("SELECT id,name,fee,minimum_order FROM delivery_zones WHERE id=? AND active=1",(zone_id,)).fetchone()
+            if not zone:return self.json({"error":"ไม่พบพื้นที่จัดส่ง"},404)
+            if subtotal<int(zone["minimum_order"]):raise ValueError(f"ยอดสั่งขั้นต่ำสำหรับพื้นที่นี้คือ {zone['minimum_order']} บาท")
+            return self.json({"zone":dict(zone),"subtotal":subtotal,"delivery_fee":int(zone["fee"]),"total":subtotal+int(zone["fee"])})
     def create_scb_qr(self,oid,form):
         phone=re.sub(r"[^0-9+]","",str(form.get("phone","")))
         if not scb_active(): raise ValueError("SCB QR ยังไม่เปิดให้บริการ")
@@ -588,7 +728,9 @@ class Handler(SimpleHTTPRequestHandler):
         oid=str(form.get("order_id","")).upper().strip(); phone=re.sub(r"[^0-9+]","",str(form.get("phone","")))
         with db() as con:
             order=row_order(con,oid)
-            if order and secrets.compare_digest(order["customer"]["phone"],phone):return self.json({"order":public_order(order),"can_cancel":order["status"] in {"new","confirmed"}})
+            if order and secrets.compare_digest(order["customer"]["phone"],phone):
+                customer=con.execute("SELECT points_balance FROM customers WHERE phone=?",(phone,)).fetchone()
+                return self.json({"order":public_order(order),"can_cancel":order["status"] in {"new","confirmed"},"loyalty":{"points_balance":int(customer["points_balance"]) if customer else 0,"point_value_thb":1}})
         self.json({"error":"ไม่พบออเดอร์ หรือเบอร์โทรศัพท์ไม่ตรงกัน"},404)
     def cancel_order(self,oid,form):
         phone=re.sub(r"[^0-9+]","",str(form.get("phone","")))
@@ -596,7 +738,8 @@ class Handler(SimpleHTTPRequestHandler):
             order=row_order(con,oid)
             if not order or not secrets.compare_digest(order["customer"]["phone"],phone):return self.json({"error":"ไม่พบออเดอร์ หรือเบอร์โทรศัพท์ไม่ตรงกัน"},404)
             if order["status"] not in {"new","confirmed"}:raise ValueError("ออเดอร์นี้ไม่สามารถยกเลิกทางออนไลน์ได้")
-            con.execute("UPDATE orders SET status='cancelled' WHERE id=?",(oid,));con.execute("UPDATE payment_attempts SET status='cancelled',updated_at=? WHERE order_id=? AND status IN ('created','pending')",(utcnow(),oid));con.execute("INSERT INTO order_history(order_id,at,status,actor_role) VALUES (?,?,?,?)",(oid,utcnow(),"cancelled","customer"));audit(con,"customer","cancel","order",oid)
+            now=utcnow();self.reverse_order_redemptions(con,oid,order,phone,now)
+            con.execute("UPDATE orders SET status='cancelled' WHERE id=?",(oid,));con.execute("UPDATE payment_attempts SET status='cancelled',updated_at=? WHERE order_id=? AND status IN ('created','pending')",(now,oid));con.execute("INSERT INTO order_history(order_id,at,status,actor_role) VALUES (?,?,?,?)",(oid,now,"cancelled","customer"));audit(con,"customer","cancel","order",oid)
             return self.json({"order":public_order(row_order(con,oid))})
     def create_menu_item(self,form,role):
         name,description=str(form.get("name","")).strip(),str(form.get("description","")).strip()[:160]
@@ -606,6 +749,112 @@ class Handler(SimpleHTTPRequestHandler):
         item={"id":f"item-{secrets.token_hex(3)}","name":name,"description":description,"price":price,"available":True}
         with db() as con: con.execute("INSERT INTO menu_items VALUES (?,?,?,?,?,?,?)",(item["id"],name,description,price,1,utcnow(),utcnow()));audit(con,role,"create","menu_item",item["id"],item)
         self.json({"item":item},201)
+    def create_rider(self,form,role):
+        name=str(form.get("name","")).strip()[:80]; phone=re.sub(r"[^0-9+]","",str(form.get("phone", "")))
+        if len(name)<2: raise ValueError("กรุณาระบุชื่อไรเดอร์")
+        rider={"id":f"RDR-{secrets.token_hex(3).upper()}","name":name,"phone":phone}; now=utcnow()
+        with db() as con: con.execute("INSERT INTO riders VALUES (?,?,?,?,?,?,?)",(rider["id"],name,phone,1,1,now,now)); audit(con,role,"create","rider",rider["id"],rider)
+        self.json({"rider":rider},201)
+    def create_delivery_zone(self,form,role):
+        name=str(form.get("name","")).strip()[:80]
+        try: fee,minimum=int(form.get("fee",0)),int(form.get("minimum_order",0))
+        except (ValueError,TypeError): raise ValueError("ค่าจัดส่งไม่ถูกต้อง")
+        if len(name)<2 or fee<0 or minimum<0: raise ValueError("ข้อมูลพื้นที่จัดส่งไม่ถูกต้อง")
+        zone={"id":f"ZONE-{secrets.token_hex(3).upper()}","name":name,"fee":fee,"minimum_order":minimum}; now=utcnow()
+        with db() as con: con.execute("INSERT INTO delivery_zones VALUES (?,?,?,?,?,?,?)",(zone["id"],name,fee,minimum,1,now,now));audit(con,role,"create","delivery_zone",zone["id"],zone)
+        self.json({"zone":zone},201)
+    def create_inventory_item(self,form,role):
+        name=str(form.get("name","")).strip()[:100]; unit=str(form.get("unit","")).strip()[:20]
+        try: on_hand,reorder=float(form.get("on_hand",0)),float(form.get("reorder_level",0))
+        except (ValueError,TypeError):raise ValueError("จำนวนสต็อกไม่ถูกต้อง")
+        if len(name)<2 or not unit or on_hand<0 or reorder<0:raise ValueError("ข้อมูลวัตถุดิบไม่ถูกต้อง")
+        item={"id":f"INV-{secrets.token_hex(3).upper()}","name":name,"unit":unit,"on_hand":on_hand,"reorder_level":reorder};now=utcnow()
+        with db() as con:
+            con.execute("INSERT INTO inventory_items VALUES (?,?,?,?,?,?,?,?)",(item["id"],name,unit,on_hand,reorder,1,now,now));con.execute("INSERT INTO inventory_movements VALUES (?,?,?,?,?,?,?,?)",(f"MOV-{secrets.token_hex(4).upper()}",item["id"],on_hand,"opening",None,"ยอดยกมา",now,role));audit(con,role,"create","inventory_item",item["id"],item)
+        self.json({"item":item},201)
+    def adjust_inventory(self,form,role):
+        iid=str(form.get("inventory_item_id","")).strip()
+        try: delta=float(form.get("delta",0))
+        except (ValueError,TypeError):raise ValueError("จำนวนปรับสต็อกไม่ถูกต้อง")
+        reason=str(form.get("reason","adjustment")).strip()[:80]; note=str(form.get("note","")).strip()[:200]
+        if not iid or not delta:raise ValueError("กรุณาระบุรายการและจำนวนที่ต้องการปรับ")
+        with db() as con:
+            item=con.execute("SELECT * FROM inventory_items WHERE id=?",(iid,)).fetchone()
+            if not item:return self.json({"error":"ไม่พบวัตถุดิบ"},404)
+            next_value=float(item["on_hand"])+delta
+            if next_value<0:raise ValueError("สต็อกคงเหลือติดลบไม่ได้")
+            now=utcnow();con.execute("UPDATE inventory_items SET on_hand=?,updated_at=? WHERE id=?",(next_value,now,iid));con.execute("INSERT INTO inventory_movements VALUES (?,?,?,?,?,?,?,?)",(f"MOV-{secrets.token_hex(4).upper()}",iid,delta,reason,None,note,now,role));audit(con,role,"adjust","inventory_item",iid,{"delta":delta,"reason":reason})
+            return self.json({"item":dict(con.execute("SELECT * FROM inventory_items WHERE id=?",(iid,)).fetchone())})
+    def set_menu_recipe(self,form,role):
+        menu_item_id=str(form.get("menu_item_id","")).strip(); inventory_item_id=str(form.get("inventory_item_id","")).strip()
+        try: quantity=float(form.get("quantity",0))
+        except (ValueError,TypeError):raise ValueError("จำนวนในสูตรไม่ถูกต้อง")
+        if quantity<=0:raise ValueError("จำนวนในสูตรต้องมากกว่า 0")
+        with db() as con:
+            if not con.execute("SELECT 1 FROM menu_items WHERE id=?",(menu_item_id,)).fetchone() or not con.execute("SELECT 1 FROM inventory_items WHERE id=?",(inventory_item_id,)).fetchone():raise ValueError("ไม่พบเมนูหรือวัตถุดิบ")
+            con.execute("INSERT INTO menu_recipes VALUES (?,?,?) ON CONFLICT(menu_item_id,inventory_item_id) DO UPDATE SET quantity=excluded.quantity",(menu_item_id,inventory_item_id,quantity));audit(con,role,"set_recipe","menu_item",menu_item_id,{"inventory_item_id":inventory_item_id,"quantity":quantity})
+            return self.json({"recipe":{"menu_item_id":menu_item_id,"inventory_item_id":inventory_item_id,"quantity":quantity}})
+    def create_coupon(self,form,role):
+        code=re.sub(r"[^A-Z0-9_-]","",str(form.get("code","")).upper())[:32]; kind=str(form.get("kind","fixed"))
+        try:value,minimum,maximum=int(form.get("value",0)),int(form.get("minimum_order",0)),int(form.get("maximum_uses",0))
+        except (ValueError,TypeError):raise ValueError("ข้อมูลคูปองไม่ถูกต้อง")
+        if not 3<=len(code)<=32 or kind not in {"fixed","percent"} or value<=0 or minimum<0 or maximum<0 or (kind=="percent" and value>100):raise ValueError("ข้อมูลคูปองไม่ถูกต้อง")
+        coupon={"id":f"CPN-{secrets.token_hex(3).upper()}","code":code,"kind":kind,"value":value,"minimum_order":minimum,"maximum_uses":maximum};
+        try:
+            with db() as con:con.execute("INSERT INTO coupons VALUES (?,?,?,?,?,?,?,?,?,?,?)",(coupon["id"],code,kind,value,minimum,maximum,0,"","",1,utcnow()));audit(con,role,"create","coupon",coupon["id"],coupon)
+        except sqlite3.IntegrityError:raise ValueError("รหัสคูปองนี้มีอยู่แล้ว")
+        self.json({"coupon":coupon},201)
+    def update_delivery(self,oid,form,role,area):
+        status=str(form.get("status","")).strip(); rider_id=str(form.get("rider_id","")).strip()
+        if status and status not in DELIVERY_STATUSES:raise ValueError("สถานะจัดส่งไม่ถูกต้อง")
+        with STORE_LOCK,db() as con:
+            delivery=con.execute("SELECT * FROM deliveries WHERE order_id=?",(oid,)).fetchone()
+            if not delivery:return self.json({"error":"ไม่พบงานจัดส่ง"},404)
+            if rider_id:
+                rider=con.execute("SELECT * FROM riders WHERE id=? AND active=1",(rider_id,)).fetchone()
+                if not rider:raise ValueError("ไม่พบไรเดอร์")
+                con.execute("UPDATE deliveries SET rider_id=?,status='assigned',assigned_at=?,updated_at=? WHERE order_id=?",(rider_id,utcnow(),utcnow(),oid)); status="assigned"
+            if status:
+                now=utcnow(); columns={"picked_up":"picked_up_at","delivered":"delivered_at"};sql="UPDATE deliveries SET status=?,updated_at=?";params=[status,now]
+                if status in columns:sql+=f",{columns[status]}=?";params.append(now)
+                sql+=" WHERE order_id=?";params.append(oid);con.execute(sql,params)
+                if status=="delivered":
+                    order=row_order(con,oid); con.execute("UPDATE orders SET status='completed' WHERE id=?",(oid,)); self.complete_order_effects(con,oid,order,role)
+            audit(con,role,"delivery_update","delivery",oid,{"status":status,"rider_id":rider_id});return self.json({"order":row_order(con,oid)})
+    def issue_receipt(self,oid,form,role):
+        with db() as con:
+            order=row_order(con,oid)
+            if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
+            existing=con.execute("SELECT * FROM pos_receipts WHERE order_id=?",(oid,)).fetchone()
+            if existing:return self.json({"receipt":dict(existing)})
+            finance=order["financial"]; now=utcnow(); receipt={"id":f"RCT-{secrets.token_hex(4).upper()}","receipt_number":f"MP-{datetime.now():%Y%m%d}-{secrets.token_hex(3).upper()}","order_id":oid,"customer_tax_name":str(form.get("customer_tax_name","")).strip()[:160],"customer_tax_id":re.sub(r"[^0-9]","",str(form.get("customer_tax_id", "")))[:13],"subtotal":finance["subtotal"],"discount":finance["discount"],"delivery_fee":finance["delivery_fee"],"total":finance["total"],"issued_at":now,"issued_by":role}
+            con.execute("INSERT INTO pos_receipts VALUES (?,?,?,?,?,?,?,?,?,?,?)",tuple(receipt[key] for key in ("id","order_id","receipt_number","customer_tax_name","customer_tax_id","subtotal","discount","delivery_fee","total","issued_at","issued_by")));audit(con,role,"issue","pos_receipt",receipt["id"],{"order_id":oid});return self.json({"receipt":receipt},201)
+    def update_business_profile(self,form,role):
+        profile={"legal_name":str(form.get("legal_name","")).strip()[:160],"tax_id":re.sub(r"[^0-9]","",str(form.get("tax_id","")))[:13],"address":str(form.get("address","")).strip()[:500],"branch":str(form.get("branch","สำนักงานใหญ่")).strip()[:80] or "สำนักงานใหญ่","vat_registered":bool(form.get("vat_registered",False)),"vat_rate":7}
+        if not profile["legal_name"] or not profile["address"]:raise ValueError("กรุณาระบุชื่อกิจการและที่อยู่")
+        if profile["vat_registered"] and len(profile["tax_id"])!=13:raise ValueError("เลขประจำตัวผู้เสียภาษีต้องมี 13 หลัก")
+        with db() as con:set_setting(con,"business_profile",profile);audit(con,role,"update","business_profile","store",{"vat_registered":profile["vat_registered"]})
+        self.json({"business_profile":profile})
+    def issue_tax_invoice(self,receipt_id,form,role):
+        with STORE_LOCK,db() as con:
+            receipt=con.execute("SELECT * FROM pos_receipts WHERE id=?",(receipt_id,)).fetchone()
+            if not receipt:return self.json({"error":"ไม่พบใบเสร็จ"},404)
+            existing=con.execute("SELECT * FROM tax_invoices WHERE receipt_id=?",(receipt_id,)).fetchone()
+            if existing:return self.json({"tax_invoice":dict(existing)})
+            profile=config(con)["business_profile"]
+            if not profile.get("vat_registered") or len(profile.get("tax_id", ""))!=13 or not profile.get("legal_name") or not profile.get("address"):raise ValueError("กรุณาตั้งค่าข้อมูลผู้ขายจด VAT ให้ครบก่อนออกใบกำกับภาษี")
+            buyer_name=str(form.get("buyer_name",receipt["customer_tax_name"])).strip()[:160];buyer_tax_id=re.sub(r"[^0-9]","",str(form.get("buyer_tax_id",receipt["customer_tax_id"])))[:13];buyer_address=str(form.get("buyer_address","")).strip()[:500]
+            if not buyer_name:raise ValueError("กรุณาระบุชื่อผู้ซื้อสำหรับใบกำกับภาษี")
+            total=int(receipt["total"]); vat_rate=int(profile["vat_rate"]); before_vat=round(total*100/(100+vat_rate)); vat_amount=total-before_vat; today=datetime.now().strftime("%Y%m%d"); sequence=con.execute("SELECT COUNT(*) FROM tax_invoices WHERE tax_invoice_number LIKE ?",(f"TIV-{today}-%",)).fetchone()[0]+1
+            invoice={"receipt_id":receipt_id,"tax_invoice_number":f"TIV-{today}-{sequence:04d}","seller_name":profile["legal_name"],"seller_tax_id":profile["tax_id"],"seller_address":profile["address"],"seller_branch":profile["branch"],"buyer_name":buyer_name,"buyer_tax_id":buyer_tax_id,"buyer_address":buyer_address,"amount_before_vat":before_vat,"vat_rate":vat_rate,"vat_amount":vat_amount,"total":total,"issued_at":utcnow()}
+            con.execute("INSERT INTO tax_invoices VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",tuple(invoice.values()));audit(con,role,"issue","tax_invoice",invoice["tax_invoice_number"],{"receipt_id":receipt_id});return self.json({"tax_invoice":invoice},201)
+    def print_receipt(self,con,receipt_id,conf):
+        receipt=con.execute("SELECT * FROM pos_receipts WHERE id=?",(receipt_id,)).fetchone()
+        if not receipt:return self.html("<h1>Receipt not found</h1>",404)
+        invoice=con.execute("SELECT * FROM tax_invoices WHERE receipt_id=?",(receipt_id,)).fetchone(); order=row_order(con,receipt["order_id"])
+        lines="".join(f"<tr><td>{escape_html(item['name'])}</td><td>{item['quantity']}</td><td>{item['unit_price']}</td><td>{item['quantity']*item['unit_price']}</td></tr>" for item in order["items"])
+        tax="" if not invoice else f"<h2>ใบกำกับภาษี / TAX INVOICE</h2><p>เลขที่ {escape_html(invoice['tax_invoice_number'])}<br>ผู้ขาย: {escape_html(invoice['seller_name'])}<br>เลขประจำตัวผู้เสียภาษี: {escape_html(invoice['seller_tax_id'])}<br>ที่อยู่: {escape_html(invoice['seller_address'])}<br>ผู้ซื้อ: {escape_html(invoice['buyer_name'])}</p><p>มูลค่าก่อน VAT {invoice['amount_before_vat']} · VAT {invoice['vat_rate']}% {invoice['vat_amount']} · รวม {invoice['total']} บาท</p>"
+        return self.html(f"<!doctype html><meta charset='utf-8'><title>{escape_html(receipt['receipt_number'])}</title><style>body{{font-family:sans-serif;max-width:720px;margin:32px auto}}table{{width:100%;border-collapse:collapse}}td,th{{padding:7px;border-bottom:1px solid #ddd;text-align:left}}@media print{{button{{display:none}}}}</style><button onclick='print()'>พิมพ์</button><h1>{escape_html(conf['store_name'])}</h1><h2>ใบเสร็จรับเงิน / RECEIPT</h2><p>เลขที่ {escape_html(receipt['receipt_number'])}<br>ออเดอร์ {escape_html(receipt['order_id'])}<br>ออกเมื่อ {escape_html(receipt['issued_at'])}</p><table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา</th><th>รวม</th></tr>{lines}</table><p>สินค้า {receipt['subtotal']} · ส่วนลด {receipt['discount']} · ค่าส่ง {receipt['delivery_fee']}<br><strong>รวมทั้งสิ้น {receipt['total']} บาท</strong></p>{tax}")
     def update_order(self,oid,form,role,area):
         allowed={"admin":set(STATUS),"staff":{"confirmed","ready","completed"},"kitchen":{"ready"}}[area]
         status=str(form.get("status", "")); payment=str(form.get("payment_status", ""))
@@ -619,8 +868,31 @@ class Handler(SimpleHTTPRequestHandler):
                 raise ValueError("ลำดับสถานะไม่ถูกต้อง")
             if status and status!=order["status"]:
                 con.execute("UPDATE orders SET status=? WHERE id=?",(status,oid));con.execute("INSERT INTO order_history(order_id,at,status,actor_role) VALUES (?,?,?,?)",(oid,utcnow(),status,role));audit(con,role,"status_change","order",oid,{"from":order["status"],"to":status})
+                if status=="completed": self.complete_order_effects(con,oid,order,role)
+                if status=="cancelled": self.reverse_order_redemptions(con,oid,order,order["customer"]["phone"],utcnow())
             if payment:con.execute("UPDATE orders SET payment_status=? WHERE id=?",(payment,oid));audit(con,role,"payment_change","order",oid,{"to":payment})
             return self.json({"order":row_order(con,oid)})
+    def complete_order_effects(self,con,oid,order,role):
+        """Award points and consume recipe stock once, only when the order closes."""
+        exists=con.execute("SELECT 1 FROM loyalty_ledger WHERE order_id=? AND reason='order_completed'",(oid,)).fetchone()
+        points=int(order["financial"]["points_earned"])
+        if points and not exists:
+            phone=order["customer"]["phone"]; now=utcnow();con.execute("UPDATE customers SET points_balance=points_balance+?,updated_at=? WHERE phone=?",(points,now,phone));con.execute("INSERT INTO loyalty_ledger VALUES (?,?,?,?,?,?)",(f"LOY-{secrets.token_hex(4).upper()}",phone,points,"order_completed",oid,now))
+        consumed=con.execute("SELECT 1 FROM inventory_movements WHERE order_id=? AND reason='order_completed' LIMIT 1",(oid,)).fetchone()
+        if consumed:return
+        for line in order["items"]:
+            for recipe in con.execute("SELECT inventory_item_id,quantity FROM menu_recipes WHERE menu_item_id=?",(line["id"],)):
+                delta=-float(recipe["quantity"])*int(line["quantity"]); item=con.execute("SELECT on_hand FROM inventory_items WHERE id=?",(recipe["inventory_item_id"],)).fetchone()
+                if item:
+                    con.execute("UPDATE inventory_items SET on_hand=?,updated_at=? WHERE id=?",(float(item["on_hand"])+delta,utcnow(),recipe["inventory_item_id"]));con.execute("INSERT INTO inventory_movements VALUES (?,?,?,?,?,?,?,?)",(f"MOV-{secrets.token_hex(4).upper()}",recipe["inventory_item_id"],delta,"order_completed",oid,"ตัดตามสูตรอาหาร",utcnow(),role))
+    def reverse_order_redemptions(self,con,oid,order,phone,now):
+        """Return reserved points and coupon use exactly once when an order is cancelled."""
+        points=int(order["financial"]["points_redeemed"])
+        restored=con.execute("SELECT 1 FROM loyalty_ledger WHERE order_id=? AND reason='order_cancelled_restore'",(oid,)).fetchone()
+        if points and not restored:
+            con.execute("UPDATE customers SET points_balance=points_balance+?,updated_at=? WHERE phone=?",(points,now,phone));con.execute("INSERT INTO loyalty_ledger VALUES (?,?,?,?,?,?)",(f"LOY-{secrets.token_hex(4).upper()}",phone,points,"order_cancelled_restore",oid,now))
+        redemption=con.execute("SELECT coupon_id FROM coupon_redemptions WHERE order_id=?",(oid,)).fetchone()
+        if redemption:con.execute("UPDATE coupons SET used_count=MAX(0,used_count-1) WHERE id=?",(redemption["coupon_id"],));con.execute("DELETE FROM coupon_redemptions WHERE order_id=?",(oid,))
     def update_menu_item(self,iid,form,role):
         with db() as con:
             item=con.execute("SELECT * FROM menu_items WHERE id=?",(iid,)).fetchone()
