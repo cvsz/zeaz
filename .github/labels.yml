@@ -1,0 +1,13 @@
+# Create these labels in GitHub when repository administration is available.
+- name: "area: docs"
+  color: "0E8A16"
+  description: Documentation and templates
+- name: "area: generator"
+  color: "1D76DB"
+  description: Scripts and generated output
+- name: "area: assets"
+  color: "FBCA04"
+  description: Brand or printable assets
+- name: "good first issue"
+  color: "7057FF"
+  description: Suitable for a first contribution

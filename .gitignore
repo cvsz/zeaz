@@ -1,0 +1,7 @@
+output/*
+!output/.gitkeep
+data/orders.json
+data/settings.json
+__pycache__/
+*.zip
+.DS_Store

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="160" viewBox="0 0 640 160" role="img" aria-label="Business-in-a-Box logo">
+  <rect width="640" height="160" rx="24" fill="#155EEF"/>
+  <rect x="36" y="36" width="88" height="88" rx="16" fill="#F79009"/>
+  <path d="M58 66h44v12H58zm0 22h44v12H58z" fill="white"/>
+  <text x="154" y="96" font-family="Arial, sans-serif" font-size="42" font-weight="700" fill="white">BUSINESS BOX</text>
+</svg>

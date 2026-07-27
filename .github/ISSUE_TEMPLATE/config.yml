@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/cvsz/zeaz/tree/main/docs
+    about: Read the roadmap and templates before filing an issue.

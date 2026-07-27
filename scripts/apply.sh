@@ -1,66 +1,18 @@
-# scripts/apply.sh
 #!/usr/bin/env bash
-
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEMPLATES="$ROOT/templates"
 TARGET="${1:-$ROOT}"
 
-log() {
-    printf "\033[1;32m==>\033[0m %s\n" "$*"
-}
+log() { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
+[[ -d "$TARGET/.git" ]] || { echo "Not a Git repository: $TARGET" >&2; exit 1; }
 
-require() {
-    command -v "$1" >/dev/null 2>&1 || {
-        echo "Missing dependency: $1"
-        exit 1
-    }
-}
+log "Applying non-destructive framework structure to $TARGET"
+mkdir -p "$TARGET"/{docs,assets,scripts,templates,excel,output,examples,.github/workflows,.github/ISSUE_TEMPLATE}
 
-copy_if_missing() {
-    local src="$1"
-    local dst="$2"
-
-    mkdir -p "$(dirname "$dst")"
-
-    if [[ ! -e "$dst" ]]; then
-        cp -R "$src" "$dst"
-        log "Created: ${dst#$ROOT/}"
-    else
-        log "Skip: ${dst#$ROOT/}"
-    fi
-}
-
-require git
-
-[[ -d "$TARGET/.git" ]] || {
-    echo "Not a git repository."
-    exit 1
-}
-
-log "Applying project structure..."
-
-mkdir -p \
-    "$TARGET/docs" \
-    "$TARGET/assets" \
-    "$TARGET/scripts" \
-    "$TARGET/templates" \
-    "$TARGET/excel" \
-    "$TARGET/output"
-
-for file in roadmap.th.md roadmap.en.md README.md; do
-    if [[ -f "$TEMPLATES/$file" ]]; then
-        copy_if_missing "$TEMPLATES/$file" "$TARGET/docs/$file"
-    fi
+for item in docs assets scripts templates excel examples .github; do
+  if [[ "$TARGET" != "$ROOT" && -d "$ROOT/$item" ]]; then
+    cp -Rn "$ROOT/$item/." "$TARGET/$item/"
+  fi
 done
-
-if [[ -f "$TEMPLATES/.gitignore" ]]; then
-    copy_if_missing "$TEMPLATES/.gitignore" "$TARGET/.gitignore"
-fi
-
-if [[ -f "$TEMPLATES/LICENSE" ]]; then
-    copy_if_missing "$TEMPLATES/LICENSE" "$TARGET/LICENSE"
-fi
-
-log "Done."
+log "Done. Existing files were not overwritten."

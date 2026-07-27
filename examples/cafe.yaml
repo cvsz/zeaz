@@ -1,0 +1,5 @@
+# Keep values single-line; colons are not supported in values.
+business_name: Morning Bean
+category: neighbourhood coffee shop
+location: Bangkok, Thailand
+target_customer: commuters and nearby residents

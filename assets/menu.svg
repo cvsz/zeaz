@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1120" viewBox="0 0 800 1120" role="img" aria-label="Editable menu starter">
+ <rect width="800" height="1120" fill="#FFFCF5"/><rect x="50" y="50" width="700" height="1020" fill="none" stroke="#155EEF" stroke-width="8"/>
+ <text x="100" y="180" font-family="Arial" font-size="62" font-weight="bold" fill="#155EEF">YOUR MENU</text>
+ <text x="100" y="280" font-family="Arial" font-size="28" fill="#344054">Signature item</text><text x="630" y="280" font-family="Arial" font-size="28" fill="#344054">0.00</text>
+ <line x1="100" y1="310" x2="700" y2="310" stroke="#D0D5DD"/><text x="100" y="370" font-family="Arial" font-size="28" fill="#344054">Second item</text><text x="630" y="370" font-family="Arial" font-size="28" fill="#344054">0.00</text>
+</svg>

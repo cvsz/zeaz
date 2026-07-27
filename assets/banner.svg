@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="500" viewBox="0 0 1600 500" role="img" aria-label="Business-in-a-Box banner">
+  <rect width="1600" height="500" fill="#0B1F3A"/>
+  <circle cx="1370" cy="130" r="260" fill="#155EEF" opacity=".75"/>
+  <circle cx="1480" cy="410" r="170" fill="#F79009" opacity=".9"/>
+  <text x="110" y="220" font-family="Arial, sans-serif" font-size="76" font-weight="700" fill="white">Business-in-a-Box</text>
+  <text x="116" y="300" font-family="Arial, sans-serif" font-size="34" fill="#D0D5DD">Plan. Launch. Operate. Grow.</text>
+</svg>

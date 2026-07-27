@@ -1,0 +1,20 @@
+name: Validate framework
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  shell-and-generation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell syntax
+        run: bash -n scripts/*.sh
+      - name: Check backend syntax
+        run: python3 -m py_compile app.py
+      - name: Generate example kit
+        run: ./scripts/generate.sh examples/cafe.yaml /tmp/cafe-kit
+      - name: Package example kit
+        run: ./scripts/package.sh /tmp/cafe-kit /tmp/cafe-kit.zip

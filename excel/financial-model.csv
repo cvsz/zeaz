@@ -1,0 +1,7 @@
+metric,value,notes
+startup_cost,0,Equipment deposits licences and opening stock
+monthly_fixed_cost,0,Rent payroll utilities software
+average_sale,0,Average revenue per transaction
+gross_margin_percent,0,Revenue less direct costs divided by revenue
+monthly_sales_target,0,Revenue target before tax
+break_even_sales,0,Fixed cost divided by gross-margin percentage
