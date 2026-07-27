@@ -1,0 +1,1 @@
+{"name":"@moopiew/ui","version":"1.0.0","private":true,"type":"module","exports":{".":"./src/index.ts","./styles":"./src/styles/globals.css"},"peerDependencies":{"react":"^19.0.0","react-dom":"^19.0.0"},"dependencies":{"@moopiew/design-tokens":"file:../design-tokens"},"scripts":{"typecheck":"tsc --noEmit"}}

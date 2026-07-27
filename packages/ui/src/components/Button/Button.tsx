@@ -1,0 +1,1 @@
+import type { ButtonProps } from "./Button.types.js"; export function Button({variant="primary",loading,disabled,children,...props}:ButtonProps){return <button data-variant={variant} disabled={disabled||loading} {...props}>{loading?"Loading…":children}</button>}

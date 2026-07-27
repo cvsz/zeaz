@@ -1,0 +1,1 @@
+import { Icon, type IconProps } from "../Icon.js"; export const CheckIcon=(p:IconProps)=><Icon {...p}><path d="m5 12 4 4L19 6"/></Icon>; export const ErrorIcon=(p:IconProps)=><Icon {...p}><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/></Icon>; export const WarningIcon=(p:IconProps)=><Icon {...p}><path d="M12 3 2 21h20zM12 9v4m0 4h.01"/></Icon>;

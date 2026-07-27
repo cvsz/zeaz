@@ -1,0 +1,1 @@
+import type { Menu } from "@moopiew/types"; import type { MoopiewClient } from "./client.js"; export class MenusService { constructor(private client:MoopiewClient){} get(){return this.client.request<Menu>("/api/menu");} }

@@ -1,0 +1,1 @@
+import type { Delivery } from "@moopiew/types"; import type { MoopiewClient } from "./client.js"; export class DeliveryService { constructor(private client:MoopiewClient){} get(id:string){return this.client.request<Delivery>(`/api/deliveries/${encodeURIComponent(id)}`);} }

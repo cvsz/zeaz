@@ -1,0 +1,1 @@
+export interface TokenStore { get(): string|undefined; set(token:string):void; clear():void; } export class MemoryTokenStore implements TokenStore { private token?:string; get(){return this.token;} set(token:string){this.token=token;} clear(){this.token=undefined;} }

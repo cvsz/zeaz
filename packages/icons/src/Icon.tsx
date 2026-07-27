@@ -1,0 +1,1 @@
+import type { SVGProps } from "react"; export type IconProps=SVGProps<SVGSVGElement>&{size?:number}; export function Icon({size=24,children,...props}:IconProps){return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{children}</svg>;}

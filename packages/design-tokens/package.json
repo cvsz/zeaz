@@ -1,0 +1,1 @@
+{"name":"@moopiew/design-tokens","version":"1.0.0","private":true,"type":"module","exports":{".":"./src/index.ts","./tailwind":"./tailwind.config.ts"},"scripts":{"typecheck":"tsc --noEmit"}}

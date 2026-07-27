@@ -1,0 +1,1 @@
+:root{--moopiew-primary:#FF6B35;--moopiew-ink:#111827;--moopiew-radius:12px} button[data-variant="primary"]{background:var(--moopiew-primary);color:#fff;border:0;border-radius:var(--moopiew-radius);padding:.625rem 1rem}button:disabled{opacity:.55}

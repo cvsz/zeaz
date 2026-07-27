@@ -1,0 +1,1 @@
+import type { User } from "@moopiew/types"; import type { MoopiewClient } from "./client.js"; export class UsersService { constructor(private client:MoopiewClient){} me(){return this.client.request<User>("/api/users/me");} }

@@ -1,0 +1,1 @@
+import type { Restaurant } from "@moopiew/types"; import type { MoopiewClient } from "./client.js"; export class RestaurantsService { constructor(private client:MoopiewClient){} get(id:string){return this.client.request<Restaurant>(`/api/restaurants/${encodeURIComponent(id)}`);} }

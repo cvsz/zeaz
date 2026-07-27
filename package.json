@@ -1,0 +1,14 @@
+{
+  "name": "moopiew",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "npm@9.2.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "validate:packages": "npm run typecheck"
+  },
+  "devDependencies": {"turbo": "^2.3.3", "typescript": "^5.7.2", "@types/node": "^22.10.0", "@types/react": "^19.0.0"}
+}

@@ -1,0 +1,1 @@
+import type { UserRole } from "@moopiew/types"; export const permissions: Record<UserRole, readonly string[]>={customer:["order:create","order:read:self"],owner:["*"],staff:["order:confirm","order:complete"],kitchen:["order:prepare"],driver:["delivery:update"]};
