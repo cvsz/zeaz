@@ -1,0 +1,5 @@
+# Merge before the final catch-all ingress rule of the existing tunnel config.
+ingress:
+  - hostname: moopiew.zeaz.dev
+    service: http://127.0.0.1:8080
+  - service: http_status:404

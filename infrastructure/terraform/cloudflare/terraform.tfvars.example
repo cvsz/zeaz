@@ -1,0 +1,8 @@
+# Secrets are supplied by .env.cloudflare as TF_VAR_cloudflare_api_token.
+cloudflare_account_id = "00000000000000000000000000000000"
+cloudflare_zone_id    = "00000000000000000000000000000000"
+cloudflare_tunnel_id  = "00000000-0000-0000-0000-000000000000"
+
+moopiew_hostname       = "moopiew.zeaz.dev"
+moopiew_origin         = "http://127.0.0.1:8080"
+manage_tunnel_config  = false

@@ -2,6 +2,19 @@ output/*
 !output/.gitkeep
 data/orders.json
 data/settings.json
+data/*.sqlite3
+data/*.sqlite3-shm
+data/*.sqlite3-wal
 __pycache__/
+# Local environment and Cloudflare credentials. Keep only reviewed examples.
+.env
+.env.*
+!.env.example
+!.env.*.example
+infrastructure/terraform/cloudflare/terraform.tfvars
+infrastructure/terraform/cloudflare/.terraform/
+infrastructure/terraform/cloudflare/*.tfstate*
+infrastructure/terraform/cloudflare/tfplan*
+tools/bin/
 *.zip
 .DS_Store

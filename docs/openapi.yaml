@@ -1,0 +1,23 @@
+openapi: 3.1.0
+info:
+  title: Moo Piw Piw API
+  version: 1.0.0
+  description: Preorder and restaurant operations API. Protected endpoints require their role-specific API key header.
+paths:
+  /api/menu:
+    get: {summary: Get purchasable menu and pickup capacity, responses: {'200': {description: Menu and pickup slots}}}
+  /api/orders:
+    post: {summary: Create preorder, responses: {'201': {description: Created}}}
+  /api/order-lookup:
+    post: {summary: Look up an order using ID and phone, responses: {'200': {description: Found}}}
+  /api/admin/dashboard:
+    get: {summary: Owner dashboard, security: [{adminKey: []}], responses: {'200': {description: Dashboard}}}
+  /api/staff/dashboard:
+    get: {summary: Staff pickup queue, security: [{employeeKey: []}], responses: {'200': {description: Queue}}}
+  /api/kitchen/dashboard:
+    get: {summary: Kitchen pickup queue, security: [{kitchenKey: []}], responses: {'200': {description: Queue}}}
+components:
+  securitySchemes:
+    adminKey: {type: apiKey, in: header, name: X-Admin-Key}
+    employeeKey: {type: apiKey, in: header, name: X-Employee-Key}
+    kitchenKey: {type: apiKey, in: header, name: X-Kitchen-Key}

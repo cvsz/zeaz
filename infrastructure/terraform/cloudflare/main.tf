@@ -1,0 +1,38 @@
+locals {
+  tunnel_id_compact = lower(replace(var.cloudflare_tunnel_id, "-", ""))
+  tunnel_uuid = format(
+    "%s-%s-%s-%s-%s",
+    substr(local.tunnel_id_compact, 0, 8),
+    substr(local.tunnel_id_compact, 8, 4),
+    substr(local.tunnel_id_compact, 12, 4),
+    substr(local.tunnel_id_compact, 16, 4),
+    substr(local.tunnel_id_compact, 20, 12),
+  )
+  tunnel_cname = "${local.tunnel_uuid}.cfargotunnel.com"
+}
+
+resource "cloudflare_dns_record" "moopiew" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.moopiew_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "Moopiew preorder via Cloudflare Tunnel"
+}
+
+# This is deliberately opt-in: applying it without first importing a live
+# tunnel configuration could replace unrelated ingress rules.
+resource "cloudflare_zero_trust_tunnel_cloudflared_config" "moopiew" {
+  count      = var.manage_tunnel_config ? 1 : 0
+  account_id = var.cloudflare_account_id
+  tunnel_id  = local.tunnel_uuid
+  source     = "cloudflare"
+
+  config = {
+    ingress = [
+      { hostname = var.moopiew_hostname, service = var.moopiew_origin },
+      { service = "http_status:404" },
+    ]
+  }
+}

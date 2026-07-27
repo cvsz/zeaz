@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${CLOUDFLARE_ENV_FILE:-$ROOT/.env.cloudflare}"
+STACK="$ROOT/infrastructure/terraform/cloudflare"
+
+[[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE; copy .env.cloudflare.example first." >&2; exit 1; }
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+
+for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_ZONE_ID CLOUDFLARE_TUNNEL_ID; do
+  [[ -n "${!key:-}" ]] || { echo "Missing $key in $ENV_FILE" >&2; exit 1; }
+done
+
+TF_BIN="${TERRAFORM_BIN:-$ROOT/tools/bin/terraform}"
+command -v "$TF_BIN" >/dev/null || { echo "Terraform not found. See infrastructure/terraform/cloudflare/README.md" >&2; exit 1; }
+
+export TF_IN_AUTOMATION=1 TF_INPUT=0
+export TF_VAR_cloudflare_api_token="$CLOUDFLARE_API_TOKEN"
+export TF_VAR_cloudflare_account_id="$CLOUDFLARE_ACCOUNT_ID"
+export TF_VAR_cloudflare_zone_id="$CLOUDFLARE_ZONE_ID"
+export TF_VAR_cloudflare_tunnel_id="$CLOUDFLARE_TUNNEL_ID"
+export TF_VAR_moopiew_hostname="${MOOPIEW_HOSTNAME:-moopiew.zeaz.dev}"
+export TF_VAR_moopiew_origin="${MOOPIEW_ORIGIN:-http://127.0.0.1:8000}"
+
+"$TF_BIN" -chdir="$STACK" fmt -check -recursive
+"$TF_BIN" -chdir="$STACK" init
+"$TF_BIN" -chdir="$STACK" validate
+"$TF_BIN" -chdir="$STACK" plan -out=tfplan
+"$TF_BIN" -chdir="$STACK" show -no-color tfplan

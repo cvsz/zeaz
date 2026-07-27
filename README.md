@@ -1,46 +1,56 @@
-# หมูปิ้ววว — Pre-order
+# หมูปิ้ววว — Restaurant operations
 
-เว็บแอปสั่งหมูปิ้งล่วงหน้าแบบ full-stack สำหรับร้านขนาดเล็ก ลูกค้าเลือกเมนูและเวลารับสินค้าได้
-แอดมินดูและอัปเดตสถานะออเดอร์ได้จากหน้าเดียว ข้อมูลถูกเก็บในไฟล์ JSON บนเครื่องโดยไม่ต้องติดตั้ง package เพิ่ม
+เว็บแอปสั่งหมูปิ้งล่วงหน้าและระบบปฏิบัติการร้านสำหรับธุรกิจขนาดเล็ก: ลูกค้าจองสินค้า,
+Staff ยืนยันและส่งมอบ, Kitchen ทำคิว และ Owner จัดการร้านจากคนละ dashboard.
 
 ## Run locally
 
-ต้องใช้ Python 3.10 ขึ้นไป
+ต้องใช้ Python 3.10 ขึ้นไป และต้องใช้ secret แยกกันทุกบทบาท:
 
 ```bash
-ADMIN_KEY='ตั้งรหัสลับที่เดายาก' ./scripts/start.sh
+ADMIN_KEY='owner-secret' EMPLOYEE_KEY='staff-secret' KITCHEN_KEY='kitchen-secret' ./scripts/start.sh
 ```
 
-เปิด [http://127.0.0.1:8000](http://127.0.0.1:8000) เพื่อสั่งล่วงหน้า และ
-`http://127.0.0.1:8000/admin.html` เพื่อจัดการออเดอร์ (ใส่ Admin key เดียวกัน)
-
-สำหรับการพัฒนาเท่านั้น หากไม่กำหนด `ADMIN_KEY` จะใช้ค่าเริ่มต้นที่ไม่ปลอดภัย
-`change-me-before-production` ห้ามนำไปใช้จริงบนอินเทอร์เน็ตโดยไม่มี HTTPS, authentication,
-ฐานข้อมูล และระบบชำระเงินที่เหมาะสม
+เปิด [http://127.0.0.1:8000](http://127.0.0.1:8000) เพื่อลูกค้าสั่งล่วงหน้า,
+`/admin.html` สำหรับ Owner, `/ops.html` สำหรับ Staff และ `/ops.html?role=kitchen` สำหรับ Kitchen.
 
 ## Features
 
-- เมนูและตะกร้าแบบ responsive ภาษาไทย
-- เลือกวันและรอบรับสินค้า พร้อมแสดงจำนวนคิวที่เหลือและจำกัดความจุต่อรอบ
-- API บันทึก order อย่าง atomic ใน `data/orders.json`
-- ลูกค้าตรวจสอบและยกเลิก order ได้โดยใช้เลขออเดอร์กับเบอร์โทรศัพท์
-- Dashboard แอดมินสำหรับดูยอดจอง, อัปเดตสถานะ/order payment, เพิ่มหรือปิดขายเมนู และตั้งค่าความจุ
+- SQLite database (`data/moopiew.sqlite3`) พร้อม WAL, foreign keys และ atomic transactions
+- import ข้อมูล `data/orders.json` และ `data/settings.json` เดิมอัตโนมัติครั้งแรก โดยไม่ลบต้นฉบับ
+- pickup capacity, customer order lookup/cancellation และ payment state
+- Owner dashboard: ยอดจอง เมนู ความจุ การชำระเงิน และ audit log
+- Staff dashboard: ยืนยันและส่งมอบออเดอร์
+- Kitchen dashboard: คิวที่ต้องเตรียมและเปลี่ยนเป็นพร้อมรับ
+- RBAC แยก `ADMIN_KEY`, `EMPLOYEE_KEY`, `KITCHEN_KEY`, rate limiting และ security headers
 
 ## API
 
-| Method | Endpoint | Purpose |
+| Method | Endpoint | Access |
 | --- | --- | --- |
-| `GET` | `/api/menu` | เมนูและรอบรับสินค้า |
-| `POST` | `/api/orders` | สร้างออเดอร์ |
-| `POST` | `/api/order-lookup` | ค้นหาออเดอร์ด้วยเลขออเดอร์และเบอร์โทร |
-| `POST` | `/api/orders/:id/cancel` | ยกเลิกออเดอร์ที่ยังใหม่/ยืนยันแล้ว |
-| `GET` | `/api/admin/dashboard` | สรุปยอดและรายการออเดอร์ (header `X-Admin-Key`) |
-| `PATCH` | `/api/admin/orders/:id` | เปลี่ยนสถานะ (header `X-Admin-Key`) |
+| `GET` | `/api/menu` | Public |
+| `POST` | `/api/orders` | Public |
+| `POST` | `/api/order-lookup` | Public |
+| `POST` | `/api/orders/:id/cancel` | Public with matching phone |
+| `GET` | `/api/admin/dashboard` | `X-Admin-Key` |
+| `PATCH` | `/api/admin/orders/:id` | `X-Admin-Key` |
+| `GET` | `/api/staff/dashboard` | `X-Employee-Key` |
+| `PATCH` | `/api/staff/orders/:id` | `X-Employee-Key` |
+| `GET` | `/api/kitchen/dashboard` | `X-Kitchen-Key` |
+| `PATCH` | `/api/kitchen/orders/:id` | `X-Kitchen-Key` |
 
-การตั้งค่าเมนู/ความจุจะสร้างที่ `data/settings.json` หลังจากเปลี่ยนครั้งแรกในหน้าแอดมิน
-จึงสำรอง `data/orders.json` และ `data/settings.json` พร้อมกันเสมอ
+รายละเอียด request/response อยู่ใน [OpenAPI contract](docs/openapi.yaml).
+
+## Operations and deployment
+
+อ่าน [คู่มือปฏิบัติการ](docs/operations.th.md) สำหรับสิทธิ์ การสำรอง และลำดับงานประจำวัน.
+ใช้ `./scripts/backup-database.sh` เพื่อสร้าง SQLite backup ที่ permission ปลอดภัย.
+
+Production binds the app to loopback and publishes it only through the Cloudflare Tunnel. Terraform,
+cloudflared and the reverse proxy instructions are in [Cloudflare deployment guide](docs/cloudflare-deployment.md).
+อ่าน [security controls](docs/security.th.md) ก่อนเปลี่ยน `HOST`, secrets หรือ systemd.
 
 ## Repository extras
 
-โฟลเดอร์ `docs/`, `templates/`, `excel/`, และ `scripts/generate.sh` เก็บ Business-in-a-Box
-framework ที่นำกลับมาใช้กับธุรกิจอื่นได้ ส่วนแอปที่ใช้งานจริงอยู่ใน `app.py` และ `web/`.
+โฟลเดอร์ `docs/`, `templates/`, `excel/`, และ `scripts/generate.sh` เก็บ Business-in-a-Box framework
+ที่นำกลับมาใช้กับธุรกิจอื่นได้ ส่วนแอปที่ใช้งานจริงอยู่ใน `app.py` และ `web/`.
