@@ -9,7 +9,7 @@ paths:
   /api/ready:
     get: {summary: Readiness probe, responses: {'200': {description: Database is reachable}}}
   /api/menu:
-    get: {summary: Get live storefront data including menu, pickup capacity, brand theme and navigation links, responses: {'200': {description: Live storefront payload}}}
+    get: {summary: Get live storefront data including menu, pickup capacity, brand theme and navigation links (visual preview at /menu-preview.html), responses: {'200': {description: Live storefront payload}}}
   /api/orders:
     post: {summary: Create preorder, responses: {'201': {description: Created}}}
   /api/order-lookup:

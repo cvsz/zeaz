@@ -188,7 +188,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "slots":pickup_slots,
                     "date":day,
                     "advance_days":conf["advance_days"],
-                    "links":{"order":"/","dashboard":"/dashboard.html","platform":"/platform/","health":"/api/health"}
+                    "links":{"order":"/","dashboard":"/dashboard.html","platform":"/platform/","preview":"/menu-preview.html","health":"/api/health"}
                 })
             if path=="/api/admin/dashboard":
                 if not self.require("admin"): return
