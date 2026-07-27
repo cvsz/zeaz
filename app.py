@@ -39,7 +39,7 @@ EMPLOYEE_KEY = os.environ.get("EMPLOYEE_KEY", "change-me-employee-key")
 KITCHEN_KEY = os.environ.get("KITCHEN_KEY", "change-me-kitchen-key")
 STORE_LOCK, RATE_LOCK = Lock(), Lock()
 RATE_BUCKETS: dict[tuple[str, str], list[float]] = {}
-RATE_WINDOW_SECONDS, RATE_LIMITS = 60, {"order": 12, "lookup": 20, "admin": 60, "staff": 90}
+RATE_WINDOW_SECONDS, RATE_LIMITS = 60, {"order": 12, "lookup": 20, "rider": 8, "admin": 60, "staff": 90}
 STATUS = ("new", "confirmed", "ready", "completed", "cancelled")
 PAYMENT_STATUSES, PAYMENT_METHODS = ("pending", "paid", "refunded"), ("cash", "transfer", "scb_qr")
 AUTO_CONFIRM_ORDERS = os.environ.get("AUTO_CONFIRM_ORDERS", "false").lower() == "true"
@@ -101,6 +101,8 @@ def initialise_database() -> None:
         CREATE TABLE IF NOT EXISTS oauth_tokens (subject TEXT PRIMARY KEY, access_cipher TEXT NOT NULL, refresh_cipher TEXT NOT NULL DEFAULT '', owner_cipher TEXT NOT NULL, access_expires_at TEXT NOT NULL, refresh_expires_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS delivery_zones (id TEXT PRIMARY KEY, name TEXT NOT NULL, fee INTEGER NOT NULL CHECK(fee >= 0), minimum_order INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS riders (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS rider_applications (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL, vehicle_type TEXT NOT NULL, vehicle_plate TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')) DEFAULT 'pending', rider_id TEXT REFERENCES riders(id), created_at TEXT NOT NULL, reviewed_at TEXT NOT NULL DEFAULT '', reviewed_by TEXT NOT NULL DEFAULT '');
+        CREATE TABLE IF NOT EXISTS merchant_applications (id TEXT PRIMARY KEY, business_name TEXT NOT NULL, owner_name TEXT NOT NULL, phone TEXT NOT NULL, email TEXT NOT NULL DEFAULT '', address TEXT NOT NULL, category TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')) DEFAULT 'pending', created_at TEXT NOT NULL, reviewed_at TEXT NOT NULL DEFAULT '', reviewed_by TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS deliveries (order_id TEXT PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE, zone_id TEXT NOT NULL REFERENCES delivery_zones(id), recipient_name TEXT NOT NULL, recipient_phone TEXT NOT NULL, address TEXT NOT NULL, landmark TEXT NOT NULL DEFAULT '', rider_id TEXT REFERENCES riders(id), status TEXT NOT NULL CHECK(status IN ('queued','assigned','picked_up','on_the_way','delivered','failed','cancelled')) DEFAULT 'queued', tracking_code TEXT NOT NULL UNIQUE, assigned_at TEXT NOT NULL DEFAULT '', picked_up_at TEXT NOT NULL DEFAULT '', delivered_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS order_financials (order_id TEXT PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE, subtotal INTEGER NOT NULL, delivery_fee INTEGER NOT NULL DEFAULT 0, discount INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL, coupon_code TEXT NOT NULL DEFAULT '', points_earned INTEGER NOT NULL DEFAULT 0, points_redeemed INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS inventory_items (id TEXT PRIMARY KEY, name TEXT NOT NULL, unit TEXT NOT NULL, on_hand REAL NOT NULL DEFAULT 0, reorder_level REAL NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -120,7 +122,7 @@ def initialise_database() -> None:
         CREATE INDEX IF NOT EXISTS idx_deliveries_status ON deliveries(status, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_inventory_movements_item ON inventory_movements(inventory_item_id, created_at DESC);
         """)
-        con.execute("INSERT OR IGNORE INTO menu_display_order(menu_item_id,position) VALUES ('classic',1),('milk-tender',2),('fatty',3),('spicy',4),('sticky-rice',5)")
+        con.execute("INSERT OR IGNORE INTO menu_display_order(menu_item_id,position) SELECT id,CASE id WHEN 'classic' THEN 1 WHEN 'milk-tender' THEN 2 WHEN 'fatty' THEN 3 WHEN 'spicy' THEN 4 WHEN 'sticky-rice' THEN 5 END FROM menu_items WHERE id IN ('classic','milk-tender','fatty','spicy','sticky-rice')")
         if "distance_km" not in {row[1] for row in con.execute("PRAGMA table_info(deliveries)")}:
             con.execute("ALTER TABLE deliveries ADD COLUMN distance_km REAL NOT NULL DEFAULT 0")
         now=utcnow()
@@ -521,12 +523,14 @@ class Handler(SimpleHTTPRequestHandler):
                 if not self.require("admin"): return
                 inventory=[dict(row) for row in con.execute("SELECT * FROM inventory_items ORDER BY name")]
                 riders=[dict(row) for row in con.execute("SELECT * FROM riders ORDER BY active DESC,name")]
+                applications=[dict(row) for row in con.execute("SELECT * FROM rider_applications ORDER BY CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,created_at DESC")]
+                merchant_applications=[dict(row) for row in con.execute("SELECT * FROM merchant_applications ORDER BY CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,created_at DESC")]
                 coupons=[dict(row) for row in con.execute("SELECT * FROM coupons ORDER BY created_at DESC")]
                 deliveries=[dict(row) for row in con.execute("SELECT d.*,o.id AS order_id,o.customer_name,o.total,z.name AS zone_name,r.name AS rider_name FROM deliveries d JOIN orders o ON o.id=d.order_id JOIN delivery_zones z ON z.id=d.zone_id LEFT JOIN riders r ON r.id=d.rider_id ORDER BY d.updated_at DESC")]
                 receipts=[dict(row) for row in con.execute("SELECT * FROM pos_receipts ORDER BY issued_at DESC LIMIT 100")]
                 invoices=[dict(row) for row in con.execute("SELECT * FROM tax_invoices ORDER BY issued_at DESC LIMIT 100")]
                 recipes=[dict(row) for row in con.execute("SELECT r.menu_item_id,r.inventory_item_id,r.quantity,m.name AS menu_name,i.name AS inventory_name,i.unit FROM menu_recipes r JOIN menu_items m ON m.id=r.menu_item_id JOIN inventory_items i ON i.id=r.inventory_item_id ORDER BY m.name,i.name")]
-                return self.json({"delivery_zones":delivery_zones(con),"delivery_pricing":conf["delivery_pricing"],"deliveries":deliveries,"riders":riders,"inventory":inventory,"menu":conf["menu"],"recipes":recipes,"coupons":coupons,"receipts":receipts,"tax_invoices":invoices,"business_profile":conf["business_profile"]})
+                return self.json({"delivery_zones":delivery_zones(con),"delivery_pricing":conf["delivery_pricing"],"deliveries":deliveries,"riders":riders,"rider_applications":applications,"merchant_applications":merchant_applications,"inventory":inventory,"menu":conf["menu"],"recipes":recipes,"coupons":coupons,"receipts":receipts,"tax_invoices":invoices,"business_profile":conf["business_profile"]})
             printable=re.fullmatch(r"/api/admin/receipts/(RCT-[A-Z0-9-]+)/print",path)
             if printable:
                 if not self.require("admin"): return
@@ -551,6 +555,12 @@ class Handler(SimpleHTTPRequestHandler):
             if path=="/api/orders":
                 if not self.rate("order"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.create_order(form)
+            if path=="/api/riders/register":
+                if not self.rate("rider"):return self.json({"error":"คำขอมากเกินไป"},429)
+                return self.register_rider(form)
+            if path=="/api/merchants/register":
+                if not self.rate("rider"):return self.json({"error":"คำขอมากเกินไป"},429)
+                return self.register_merchant(form)
             if path=="/api/delivery/quote":
                 return self.delivery_quote(form)
             qr=re.fullmatch(r"/api/orders/(MPP-[A-Z0-9-]+)/payments/scb/qr",path)
@@ -607,6 +617,21 @@ class Handler(SimpleHTTPRequestHandler):
         if delivery:
             area,order_id=delivery.groups(); role=self.require("admin" if area=="admin" else "employee")
             if role:return self.update_delivery(order_id,form,role,area)
+            return
+        rider=re.fullmatch(r"/api/admin/riders/(RDR-[A-Z0-9-]+)",path)
+        if rider:
+            role=self.require("admin")
+            if role:return self.update_rider(rider.group(1),form,role)
+            return
+        application=re.fullmatch(r"/api/admin/rider-applications/(RAP-[A-Z0-9-]+)",path)
+        if application:
+            role=self.require("admin")
+            if role:return self.review_rider_application(application.group(1),form,role)
+            return
+        merchant_application=re.fullmatch(r"/api/admin/merchant-applications/(MAP-[A-Z0-9-]+)",path)
+        if merchant_application:
+            role=self.require("admin")
+            if role:return self.review_merchant_application(merchant_application.group(1),form,role)
             return
         if not path.startswith("/api/admin/"): return self.json({"error":"ไม่พบ API"},404)
         role=self.require("admin")
@@ -788,6 +813,54 @@ class Handler(SimpleHTTPRequestHandler):
         rider={"id":f"RDR-{secrets.token_hex(3).upper()}","name":name,"phone":phone}; now=utcnow()
         with db() as con: con.execute("INSERT INTO riders VALUES (?,?,?,?,?,?,?)",(rider["id"],name,phone,1,1,now,now)); audit(con,role,"create","rider",rider["id"],rider)
         self.json({"rider":rider},201)
+    def register_rider(self,form):
+        name=str(form.get("name","")).strip()[:80]; phone=re.sub(r"[^0-9+]","",str(form.get("phone", ""))); vehicle_type=str(form.get("vehicle_type","")).strip()[:40]; vehicle_plate=str(form.get("vehicle_plate","")).strip()[:20]; note=str(form.get("note","")).strip()[:300]
+        if len(name)<2 or not re.fullmatch(r"(?:\+66|0)\d{8,9}",phone) or vehicle_type not in {"motorcycle","bicycle","car"}:raise ValueError("กรุณากรอกข้อมูลสมัครไรเดอร์ให้ครบถ้วน")
+        with db() as con:
+            pending=con.execute("SELECT 1 FROM rider_applications WHERE phone=? AND status='pending'",(phone,)).fetchone()
+            if pending:raise ValueError("มีใบสมัครที่รอตรวจสอบสำหรับเบอร์นี้แล้ว")
+            application={"id":f"RAP-{secrets.token_hex(4).upper()}","name":name,"phone":phone,"vehicle_type":vehicle_type,"vehicle_plate":vehicle_plate,"note":note,"status":"pending","created_at":utcnow()}
+            con.execute("INSERT INTO rider_applications(id,name,phone,vehicle_type,vehicle_plate,note,status,created_at) VALUES (?,?,?,?,?,?,?,?)",tuple(application[key] for key in ("id","name","phone","vehicle_type","vehicle_plate","note","status","created_at")));audit(con,"rider","register","rider_application",application["id"],{"vehicle_type":vehicle_type})
+        self.json({"application":{"id":application["id"],"status":"pending"}},201)
+    def update_rider(self,rider_id,form,role):
+        if not any(key in form for key in ("active","available")):raise ValueError("ไม่มีข้อมูลไรเดอร์ที่ต้องอัปเดต")
+        with db() as con:
+            rider=con.execute("SELECT * FROM riders WHERE id=?",(rider_id,)).fetchone()
+            if not rider:return self.json({"error":"ไม่พบไรเดอร์"},404)
+            active=int(bool(form.get("active",bool(rider["active"]))));available=int(bool(form.get("available",bool(rider["available"])))) if active else 0
+            con.execute("UPDATE riders SET active=?,available=?,updated_at=? WHERE id=?",(active,available,utcnow(),rider_id));audit(con,role,"update","rider",rider_id,{"active":bool(active),"available":bool(available)})
+            return self.json({"rider":dict(con.execute("SELECT * FROM riders WHERE id=?",(rider_id,)).fetchone())})
+    def review_rider_application(self,application_id,form,role):
+        decision=str(form.get("status","")).strip()
+        if decision not in {"approved","rejected"}:raise ValueError("สถานะการสมัครไม่ถูกต้อง")
+        with db() as con:
+            application=con.execute("SELECT * FROM rider_applications WHERE id=?",(application_id,)).fetchone()
+            if not application:return self.json({"error":"ไม่พบใบสมัครไรเดอร์"},404)
+            if application["status"]!="pending":raise ValueError("ใบสมัครนี้ได้รับการพิจารณาแล้ว")
+            rider_id=""
+            if decision=="approved":
+                rider_id=f"RDR-{secrets.token_hex(3).upper()}"; now=utcnow();con.execute("INSERT INTO riders VALUES (?,?,?,?,?,?,?)",(rider_id,application["name"],application["phone"],1,1,now,now))
+            con.execute("UPDATE rider_applications SET status=?,rider_id=?,reviewed_at=?,reviewed_by=? WHERE id=?",(decision,rider_id,utcnow(),role,application_id));audit(con,role,decision,"rider_application",application_id,{"rider_id":rider_id})
+            return self.json({"application":dict(con.execute("SELECT * FROM rider_applications WHERE id=?",(application_id,)).fetchone())})
+    def register_merchant(self,form):
+        business_name=str(form.get("business_name","")).strip()[:160];owner_name=str(form.get("owner_name","")).strip()[:80];phone=re.sub(r"[^0-9+]","",str(form.get("phone", "")));email=str(form.get("email","")).strip()[:160];address=str(form.get("address","")).strip()[:500];category=str(form.get("category","")).strip()[:80];note=str(form.get("note","")).strip()[:300]
+        if len(business_name)<2 or len(owner_name)<2 or not re.fullmatch(r"(?:\+66|0)\d{8,9}",phone) or len(address)<5 or len(category)<2:raise ValueError("กรุณากรอกข้อมูลสมัครร้านค้าให้ครบถ้วน")
+        if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",email):raise ValueError("อีเมลไม่ถูกต้อง")
+        with db() as con:
+            pending=con.execute("SELECT 1 FROM merchant_applications WHERE phone=? AND status='pending'",(phone,)).fetchone()
+            if pending:raise ValueError("มีใบสมัครร้านค้าที่รอตรวจสอบสำหรับเบอร์นี้แล้ว")
+            application={"id":f"MAP-{secrets.token_hex(4).upper()}","business_name":business_name,"owner_name":owner_name,"phone":phone,"email":email,"address":address,"category":category,"note":note,"status":"pending","created_at":utcnow()}
+            con.execute("INSERT INTO merchant_applications(id,business_name,owner_name,phone,email,address,category,note,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",tuple(application[key] for key in ("id","business_name","owner_name","phone","email","address","category","note","status","created_at")));audit(con,"merchant","register","merchant_application",application["id"],{"category":category})
+        self.json({"application":{"id":application["id"],"status":"pending"}},201)
+    def review_merchant_application(self,application_id,form,role):
+        decision=str(form.get("status","")).strip()
+        if decision not in {"approved","rejected"}:raise ValueError("สถานะการสมัครไม่ถูกต้อง")
+        with db() as con:
+            application=con.execute("SELECT * FROM merchant_applications WHERE id=?",(application_id,)).fetchone()
+            if not application:return self.json({"error":"ไม่พบใบสมัครร้านค้า"},404)
+            if application["status"]!="pending":raise ValueError("ใบสมัครนี้ได้รับการพิจารณาแล้ว")
+            con.execute("UPDATE merchant_applications SET status=?,reviewed_at=?,reviewed_by=? WHERE id=?",(decision,utcnow(),role,application_id));audit(con,role,decision,"merchant_application",application_id)
+            return self.json({"application":dict(con.execute("SELECT * FROM merchant_applications WHERE id=?",(application_id,)).fetchone())})
     def create_delivery_zone(self,form,role):
         name=str(form.get("name","")).strip()[:80]
         try: fee,minimum=int(form.get("fee",0)),int(form.get("minimum_order",0))
