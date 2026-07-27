@@ -172,6 +172,8 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/ready":
                 con.execute("SELECT 1 FROM settings LIMIT 1").fetchone()
                 return self.json({"status": "ready", "database": "ok"})
+            if path == "/api/status":
+                return self.json({"status":"operational","service":"moopiew","time":utcnow(),"database":"ok","api_version":"1.1","endpoints":{"health":"/api/health","ready":"/api/ready","menu":"/api/menu"}})
             if path=="/api/menu":
                 day=query.get("date",[date.today().isoformat()])[0]
                 if not valid_pickup(day,conf): return self.json({"error":"วันรับสินค้าไม่พร้อมให้บริการ"},400)

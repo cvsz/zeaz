@@ -8,6 +8,8 @@ paths:
     get: {summary: Liveness probe, responses: {'200': {description: Service process is healthy}}}
   /api/ready:
     get: {summary: Readiness probe, responses: {'200': {description: Database is reachable}}}
+  /api/status:
+    get: {summary: Public operational status without secrets, responses: {'200': {description: Service and dependency status}}}
   /api/menu:
     get: {summary: Get live storefront data including menu, pickup capacity, brand theme and navigation links (visual preview at /menu-preview.html), responses: {'200': {description: Live storefront payload}}}
   /api/orders:
