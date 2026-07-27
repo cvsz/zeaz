@@ -24,7 +24,12 @@ page.
   `inventory_item_id`, and `quantity`.
 - When an order is completed, recipe quantities are deducted once and stored
   as immutable inventory movements. Review thresholds are available through
-  `GET /api/admin/operations`.
+`GET /api/admin/operations`.
+
+For onboarding, copy `templates/store-master-data.json`, fill in verified shop
+details, and use it as the source of truth while entering the same records in
+`/ops.html`. Do not commit the completed file because it can contain personal
+phone numbers and tax-registration information.
 
 ## Customers, coupons, POS
 

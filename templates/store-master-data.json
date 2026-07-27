@@ -1,0 +1,37 @@
+{
+  "business_profile": {
+    "legal_name": "",
+    "tax_id": "",
+    "address": "",
+    "branch": "สำนักงานใหญ่",
+    "vat_registered": false
+  },
+  "delivery_zones": [
+    {
+      "name": "",
+      "fee": 0,
+      "minimum_order": 0
+    }
+  ],
+  "riders": [
+    {
+      "name": "",
+      "phone": ""
+    }
+  ],
+  "inventory": [
+    {
+      "name": "",
+      "unit": "kg",
+      "on_hand": 0,
+      "reorder_level": 0
+    }
+  ],
+  "recipes": [
+    {
+      "menu_item_id": "classic",
+      "inventory_name": "",
+      "quantity": 0
+    }
+  ]
+}
