@@ -90,14 +90,35 @@ cancelled_lookup="$(curl --silent --fail --max-time 3 --request POST "$BASE_URL/
   --data "{\"order_id\":\"$order_id\",\"phone\":\"0812345678\"}")"
 printf '%s' "$cancelled_lookup" | "$PYTHON" -c 'import json,sys; assert json.load(sys.stdin)["order"]["status"] == "cancelled"'
 
+paid_order="$(curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/orders" \
+  --header 'Content-Type: application/json' \
+  --data "{\"name\":\"Paid Customer\",\"phone\":\"0812345679\",\"pickup_date\":\"$pickup_date\",\"pickup_slot\":\"09:00–10:00\",\"payment_method\":\"cash\",\"items\":[{\"id\":\"classic\",\"quantity\":1}]}" )"
+paid_order_id="$(printf '%s' "$paid_order" | "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin)["order"]["id"])')"
+"$PYTHON" - "$DATABASE_PATH" "$paid_order_id" <<'PY'
+import sqlite3
+import sys
+
+with sqlite3.connect(sys.argv[1]) as connection:
+    connection.execute("UPDATE orders SET payment_status='paid' WHERE id=?", (sys.argv[2],))
+    connection.commit()
+PY
+paid_cancel_status="$(curl --silent --output "$TMP_DIR/paid-cancel.json" --write-out '%{http_code}' --max-time 3 --request POST "$BASE_URL/api/orders/$paid_order_id/cancel" \
+  --header 'Content-Type: application/json' \
+  --data '{"phone":"0812345679"}')"
+[[ "$paid_cancel_status" == "400" ]]
+printf '%s' "$(cat "$TMP_DIR/paid-cancel.json")" | "$PYTHON" -c 'import json,sys; assert "ชำระเงินแล้ว" in json.load(sys.stdin)["error"]'
+
 curl --silent --fail --max-time 3 "$BASE_URL/api/admin/dashboard" \
   --header "X-Admin-Key-B64: $admin_header" >"$TMP_DIR/dashboard.json"
-"$PYTHON" - "$TMP_DIR/dashboard.json" <<'PY'
+"$PYTHON" - "$TMP_DIR/dashboard.json" "$order_id" "$paid_order_id" <<'PY'
 import json
 import sys
 data=json.load(open(sys.argv[1], encoding="utf-8"))
-assert data["summary"]["orders"] == 1
-assert len(data["orders"]) == 1
+assert data["summary"]["orders"] == 2
+orders={item["id"]: item for item in data["orders"]}
+assert orders[sys.argv[2]]["status"] == "cancelled"
+assert orders[sys.argv[3]]["status"] == "new"
+assert orders[sys.argv[3]]["payment"]["status"] == "paid"
 PY
 
 echo "Isolated API smoke checks passed."

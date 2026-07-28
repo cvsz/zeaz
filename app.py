@@ -1181,6 +1181,7 @@ class Handler(SimpleHTTPRequestHandler):
             order=row_order(con,oid)
             if not order or not secrets.compare_digest(order["customer"]["phone"],phone):return self.json({"error":"ไม่พบออเดอร์ หรือเบอร์โทรศัพท์ไม่ตรงกัน"},404)
             if order["status"] not in {"new","confirmed"}:raise ValueError("ออเดอร์นี้ไม่สามารถยกเลิกทางออนไลน์ได้")
+            if order["payment"]["status"] == "paid":raise ValueError("ออเดอร์นี้ชำระเงินแล้ว กรุณาติดต่อร้านเพื่อดำเนินการคืนเงิน")
             now=utcnow();self.reverse_order_redemptions(con,oid,order,phone,now)
             con.execute("UPDATE orders SET status='cancelled' WHERE id=?",(oid,));con.execute("UPDATE payment_attempts SET status='cancelled',updated_at=? WHERE order_id=? AND status IN ('created','pending')",(now,oid));con.execute("INSERT INTO order_history(order_id,at,status,actor_role) VALUES (?,?,?,?)",(oid,now,"cancelled","customer"));audit(con,"customer","cancel","order",oid)
             return self.json({"order":public_order(row_order(con,oid))})
