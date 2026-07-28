@@ -1431,7 +1431,9 @@ class Handler(SimpleHTTPRequestHandler):
             base_fee=int(form.get("base_fee",0));per_km_fee=float(form.get("per_km_fee",0));maximum_km=float(form.get("maximum_km",0))
         except (ValueError,TypeError):raise ValueError("อัตราค่าส่งไม่ถูกต้อง")
         if base_fee<0 or per_km_fee<0 or not 0<maximum_km<=100:raise ValueError("อัตราค่าส่งไม่ถูกต้อง")
-        profile={"mode":"distance","base_fee":base_fee,"per_km_fee":per_km_fee,"maximum_km":maximum_km,"store_latitude":valid_coordinate(form.get("store_latitude"),-90,90),"store_longitude":valid_coordinate(form.get("store_longitude"),-180,180)}
+        mode=str(form.get("mode","distance")).strip().lower()
+        if mode not in {"distance","zone"}: raise ValueError("โหมดค่าส่งไม่ถูกต้อง")
+        profile={"mode":mode,"base_fee":base_fee,"per_km_fee":per_km_fee,"maximum_km":maximum_km,"store_latitude":valid_coordinate(form.get("store_latitude"),-90,90) if mode=="distance" else None,"store_longitude":valid_coordinate(form.get("store_longitude"),-180,180) if mode=="distance" else None}
         with db() as con:set_setting(con,"delivery_pricing",profile);audit(con,role,"update","delivery_pricing","store",{key:profile[key] for key in ("base_fee","per_km_fee","maximum_km")})
         self.json({"delivery_pricing":profile})
     def issue_tax_invoice(self,receipt_id,form,role):
