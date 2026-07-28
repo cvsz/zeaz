@@ -30,8 +30,10 @@ and that tracking output does not disclose a customer's address or phone.
 
 The repository is an npm workspace for UI, icons, config, design tokens, types
 and SDK packages. Run `npm install` once, then `npm run typecheck`. The premium
-React shell at `apps/web/` uses the existing API and can be published to
-`web/platform/`; it must not add a separate order database.
+React shell at `apps/web/` uses the existing API and must be published with
+`npm run build && npm run publish:platform`. Publishing synchronizes
+`apps/web/dist/` exactly to `web/platform/`, including removal of obsolete
+hashed bundles; it must not add a separate order database.
 
 ## Configuration hygiene
 

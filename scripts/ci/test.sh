@@ -80,6 +80,9 @@ assert assets, "No built platform assets found"
 for asset in assets:
     assert (root / "apps/web/dist/assets" / asset).is_file(), asset
     assert (root / "web/platform/assets" / asset).is_file(), asset
+expected={path.name for path in (root / "apps/web/dist/assets").iterdir() if path.is_file()}
+published={path.name for path in (root / "web/platform/assets").iterdir() if path.is_file()}
+assert published == expected, f"Stale or missing published platform assets: {sorted(published ^ expected)}"
 print("Platform build publication checks passed.")
 PY
 fi
