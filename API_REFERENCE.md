@@ -43,3 +43,9 @@ Optional campaign windows require timezone-aware RFC3339 timestamps and are
 stored in UTC. Coupon availability checks and usage increments run inside the
 serialized order transaction, so a finite `maximum_uses` cannot be exceeded by
 concurrent checkout requests.
+
+Successful mutation responses are emitted only after the enclosing SQLite
+transaction commits. A client that receives `200` or `201` can immediately read
+the committed menu, settings, rider, application, inventory, recipe, payment,
+document-policy or tax-invoice state; commit failures cannot be reported as
+success.

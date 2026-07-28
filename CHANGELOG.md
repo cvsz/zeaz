@@ -53,6 +53,9 @@
 - Serialized menu partial updates, implemented timezone-aware coupon campaign
   windows and concurrent usage-limit coverage, and raised the enforced Python
   coverage floor from 53% to 56%.
+- Moved successful mutation responses after SQLite commit for policy, payment,
+  rider, application, inventory, recipe, menu, settings and tax-invoice paths,
+  eliminating stale read-after-write and false-success timing windows.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,

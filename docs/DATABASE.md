@@ -51,6 +51,11 @@ canonical UTC values. Coupon eligibility, order creation, redemption insertion
 and `used_count` increment share one immediate transaction, preserving campaign
 limits under concurrent checkout.
 
+HTTP mutation handlers build response payloads inside the transaction but write
+the success response only after the database context exits and commits. This
+commit-before-response boundary is required for read-after-write consistency
+and prevents a late commit failure from becoming a false API success.
+
 ## Backup and recovery
 
 ```bash
