@@ -36,10 +36,11 @@ const values = {
   scaleway: first(read(target, "SCALEWAY_API_KEY"), read(target, "SCW_SECRET_KEY"), read(source, "SCALEWAY_API_KEY")),
   together: first(read(target, "TOGETHER_API_KEY"), read(source, "TOGETHER_API_KEY")),
 };
-if (Object.values(values).some((value) => !value)) throw new Error("A required AI provider key is missing.");
 let existing = {};
 try { existing = JSON.parse(read(target, "AI_PROVIDER_KEYS_JSON") || "{}"); } catch { throw new Error("AI_PROVIDER_KEYS_JSON is invalid."); }
-const merged = JSON.stringify({ ...existing, ...values });
+const configured = Object.fromEntries(Object.entries(values).filter(([, value]) => value));
+if (!Object.keys(configured).length && !Object.keys(existing).length) throw new Error("No AI provider key is configured.");
+const merged = JSON.stringify({ ...existing, ...configured });
 const replacement = `AI_PROVIDER_KEYS_JSON='${merged}'`;
 if (/^AI_PROVIDER_KEYS_JSON=.*/m.test(target)) target = target.replace(/^AI_PROVIDER_KEYS_JSON=.*/m, replacement);
 else target += `${target.endsWith("\n") ? "" : "\n"}${replacement}\n`;

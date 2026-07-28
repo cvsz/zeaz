@@ -102,6 +102,15 @@ for marker in ("payment-qr-panel", "payment-qr", "payment-qr-status"):
     assert marker in page, marker
 print("SCB QR checkout UI coverage checks passed.")
 PY
+ROOT="$ROOT" python3 - <<'PY'
+import os
+from pathlib import Path
+
+source = (Path(os.environ["ROOT"]) / "scripts/sync-ai-credentials.sh").read_text(encoding="utf-8")
+assert "Object.fromEntries(Object.entries(values).filter(([, value]) => value))" in source
+assert "A required AI provider key is missing" not in source
+print("Optional AI provider credential sync checks passed.")
+PY
 if [[ -d "$ROOT/node_modules" ]]; then
   (cd "$ROOT" && npm run typecheck && npm run build)
   cmp --silent "$ROOT/apps/web/dist/index.html" "$ROOT/web/platform/index.html" || {
