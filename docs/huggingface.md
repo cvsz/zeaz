@@ -3,7 +3,7 @@
 MooPiew uses an owner-only, feature-gated live AI catalog for operational
 writing and analysis. It is not exposed to customers, riders or merchant
 applicants. The catalog currently supports Hugging Face Inference Providers,
-Gemini, NVIDIA NIM, Z.AI, OpenCode Zen and OpenRouter whenever the associated
+Gemini, NVIDIA NIM, Z.AI, OpenCode Zen, OpenRouter and Groq whenever the associated
 local key is configured. The owner page is named **ZEAZ AI Live Catalog**.
 
 ## What “all free models” means in practice
@@ -38,7 +38,7 @@ workloads need a separate reviewed integration.
 the database, included in browser JavaScript, or committed to Git.
 
 For Gemini, NVIDIA NIM, Z.AI, OpenCode Zen or OpenRouter, add a matching
-`gemini`, `nvidia`, `zai`, `opencode` or `openrouter` entry to
+`gemini`, `nvidia`, `zai`, `opencode`, `openrouter` or `groq` entry to
 `AI_PROVIDER_KEYS_JSON`. The catalog reads only models returned by the
 provider’s live models endpoint, so an unavailable provider/model is omitted.
 Z.AI is prepared at `https://api.z.ai/api/paas/v4`; it appears only after a
@@ -47,7 +47,10 @@ dedicated `zai` API key is configured.
 OpenRouter is filtered to models whose catalog metadata declares zero
 input/output pricing. OpenCode is treated the same only if its catalog supplies
 zero-price metadata; OpenCode Zen itself can require billing and credits.
-Gemini and NVIDIA NIM expose live model catalogs but do not expose universal
+Groq models are listed from the configured project and are labelled free-tier
+because Groq publishes Free Plan model rate limits; the account billing tier is
+not exposed by its models API. Gemini and NVIDIA NIM expose live model catalogs
+but do not expose universal
 per-model free-price metadata through the endpoint, so they are shown as
 available models—not incorrectly labelled as free. A provider’s free tier,
 rate limit and regional availability can still change, so the page reports

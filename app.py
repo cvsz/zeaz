@@ -52,6 +52,7 @@ HF_MODEL_CACHE: dict[str, object] = {"models": [], "expires": 0.0}
 HF_MODEL_LOCK = Lock()
 HF_ROUTER_DEFAULT = "https://router.huggingface.co/v1"
 HF_MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.:-]*")
+PROVIDER_MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/-]*")
 AI_MODEL_CACHE: dict[str, object] = {"catalog": {}, "expires": 0.0}
 AI_MODEL_LOCK = Lock()
 GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -59,6 +60,7 @@ NVIDIA_API_BASE = "https://integrate.api.nvidia.com/v1"
 ZAI_API_BASE = "https://api.z.ai/api/paas/v4"
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 OPENCODE_API_BASE = "https://opencode.ai/zen/v1"
+GROQ_API_BASE = "https://api.groq.com/openai/v1"
 AI_SYSTEM_PROMPT = "You are MooPiew's operator assistant. Do not request or reveal secrets, payment credentials, or customer personal data. Answer concisely in the language used by the operator."
 DEFAULT_SETTINGS = {
     "store_name": "หมูปิ้ววว", "slot_capacity": 80, "advance_days": 14,
@@ -200,11 +202,11 @@ def ai_provider_keys() -> dict[str,str]:
     try: parsed=json.loads(raw)
     except json.JSONDecodeError: return {}
     if not isinstance(parsed,dict): return {}
-    return {name:value for name,value in parsed.items() if name in {"gemini","nvidia","zai","openrouter","opencode"} and isinstance(value,str) and value.strip()}
+    return {name:value for name,value in parsed.items() if name in {"gemini","nvidia","zai","openrouter","opencode","groq"} and isinstance(value,str) and value.strip()}
 
 def ai_public_config() -> dict:
     keys=ai_provider_keys()
-    return {"enabled":bool(keys) or hf_enabled(),"providers":{"gemini":bool(keys.get("gemini")),"nvidia":bool(keys.get("nvidia")),"zai":bool(keys.get("zai")),"opencode":bool(keys.get("opencode")),"openrouter":bool(keys.get("openrouter")),"huggingface":hf_enabled()},"catalog":"live","chat_only":True}
+    return {"enabled":bool(keys) or hf_enabled(),"providers":{"gemini":bool(keys.get("gemini")),"nvidia":bool(keys.get("nvidia")),"zai":bool(keys.get("zai")),"opencode":bool(keys.get("opencode")),"openrouter":bool(keys.get("openrouter")),"groq":bool(keys.get("groq")),"huggingface":hf_enabled()},"catalog":"live","chat_only":True}
 
 def ai_http(endpoint: str, headers: dict[str,str], payload: dict | None = None) -> dict:
     """Call a fixed provider endpoint without exposing credentials or acting as a proxy."""
@@ -240,7 +242,7 @@ def nvidia_models(token: str) -> list[dict]:
     data=ai_http(f"{NVIDIA_API_BASE}/models",{"Authorization":f"Bearer {token}"})
     rows=[]
     for model in data.get("data",[]):
-        if not isinstance(model,dict) or not isinstance(model.get("id"),str) or not HF_MODEL_ID.fullmatch(model["id"]): continue
+        if not isinstance(model,dict) or not isinstance(model.get("id"),str) or not PROVIDER_MODEL_ID.fullmatch(model["id"]): continue
         rows.append({"id":f"nvidia:{model['id']}","provider":"nvidia","model":model["id"],"display_name":model["id"]})
     return rows
 
@@ -281,6 +283,22 @@ def opencode_models(token: str) -> list[dict]:
         rows.append({"id":f"opencode:{identifier}","provider":"opencode","model":identifier,"display_name":model.get("name",identifier),"free":True})
     return rows
 
+def groq_models(token: str) -> list[dict]:
+    """List models available to the configured Groq project.
+
+    Groq publishes Free Plan rate limits per model. The API does not expose the
+    account's billing tier, so this marks availability under the Free Plan—not
+    a permanent, account-independent zero-price guarantee.
+    """
+    data=ai_http(f"{GROQ_API_BASE}/models",{"Authorization":f"Bearer {token}"})
+    rows=[]
+    for model in data.get("data",[]):
+        if not isinstance(model,dict) or not isinstance(model.get("id"),str) or not PROVIDER_MODEL_ID.fullmatch(model["id"]): continue
+        if model.get("active") is False: continue
+        identifier=model["id"]
+        rows.append({"id":f"groq:{identifier}","provider":"groq","model":identifier,"display_name":identifier,"free":True,"free_tier":True})
+    return rows
+
 def ai_catalog() -> dict:
     """Return every live chat model the configured provider keys can enumerate."""
     now=time.monotonic()
@@ -288,7 +306,7 @@ def ai_catalog() -> dict:
         cached=AI_MODEL_CACHE.get("catalog",{})
         if isinstance(cached,dict) and cached and float(AI_MODEL_CACHE.get("expires",0)) > now: return cached
         keys=ai_provider_keys(); providers={}; models=[]
-        for name, loader in (("gemini",gemini_models),("nvidia",nvidia_models),("zai",zai_models),("opencode",opencode_models),("openrouter",openrouter_models)):
+        for name, loader in (("gemini",gemini_models),("nvidia",nvidia_models),("zai",zai_models),("opencode",opencode_models),("openrouter",openrouter_models),("groq",groq_models)):
             if not keys.get(name): providers[name]={"enabled":False,"models":0}; continue
             try:
                 listed=loader(keys[name]); models.extend(listed); providers[name]={"enabled":True,"models":len(listed)}
@@ -343,6 +361,7 @@ def ai_chat(model_id: str, prompt: str, max_tokens=512, temperature=0.2) -> dict
     elif provider=="zai": text=zai_chat(keys["zai"],model,prompt.strip(),tokens,temp)
     elif provider=="opencode": text=openai_compatible_chat(OPENCODE_API_BASE,keys["opencode"],model,prompt.strip(),tokens,temp,"OpenCode")
     elif provider=="openrouter": text=openai_compatible_chat(OPENROUTER_API_BASE,keys["openrouter"],model,prompt.strip(),tokens,temp,"OpenRouter")
+    elif provider=="groq": text=openai_compatible_chat(GROQ_API_BASE,keys["groq"],model,prompt.strip(),tokens,temp,"Groq")
     elif provider=="huggingface": text=hf_chat(model,prompt.strip(),tokens,temp)["content"]
     else: raise ValueError("AI provider ไม่รองรับ")
     return {"id":model_id,"provider":provider,"model":model,"content":text}
