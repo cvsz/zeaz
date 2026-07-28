@@ -18,6 +18,23 @@ model IDs outside it.
 The current console is chat-only. Image, audio, embedding and self-hosted model
 workloads need a separate reviewed integration.
 
+## Optional ZeaZ Provider gateway
+
+When the local ZeaZ Provider gateway is deployed, MooPiew can use its stable
+model aliases and consolidated provider routing without putting upstream keys
+in the MooPiew process. Configure the ignored `.env.ai` with a dedicated client
+key and either an HTTPS endpoint or the private loopback service:
+
+```dotenv
+ZEAZ_AI_GATEWAY_URL=http://127.0.0.1:8081/v1
+AI_GATEWAY_PROVIDER_TOKEN=replace-with-a-dedicated-zeaz-gateway-client-key
+```
+
+The owner-only **ZEAZ AI Live Catalog** then adds models returned by
+`GET /v1/models` as `zeaz_gateway:<alias>` and calls only the gateway's fixed
+`POST /v1/chat/completions` endpoint. The browser never receives the endpoint
+credential. Do not reuse an upstream provider key as a gateway client key.
+
 ## Enable locally
 
 1. Create a Hugging Face user access token with **Inference Providers**

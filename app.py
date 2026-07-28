@@ -67,6 +67,7 @@ OPENAI_API_BASE = "https://api.openai.com/v1"
 KIMI_API_BASE = "https://api.moonshot.ai/v1"
 SCALEWAY_API_BASE = "https://api.scaleway.ai/v1"
 TOGETHER_API_BASE = "https://api.together.xyz/v1"
+ZEAZ_GATEWAY_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 AI_SYSTEM_PROMPT = "You are MooPiew's operator assistant. Do not request or reveal secrets, payment credentials, or customer personal data. Answer concisely in the language used by the operator."
 DEFAULT_SETTINGS = {
     "store_name": "หมูปิ้ววว", "slot_capacity": 80, "advance_days": 14,
@@ -210,9 +211,31 @@ def ai_provider_keys() -> dict[str,str]:
     if not isinstance(parsed,dict): return {}
     return {name:value for name,value in parsed.items() if name in {"gemini","nvidia","zai","openrouter","opencode","groq","byteplus","fireworks","openai","kimi","scaleway","together"} and isinstance(value,str) and value.strip()}
 
+def zeaz_gateway_config() -> tuple[str,str] | None:
+    """Return the explicitly configured, server-only ZeaZ gateway endpoint.
+
+    The gateway is an optional consolidation layer for the operator AI console.
+    It is not a browser proxy: its endpoint and credential come only from the
+    ignored service environment.  Plain HTTP is restricted to loopback so an
+    operator cannot accidentally send the gateway client key over a network.
+    """
+    base,token=env("ZEAZ_AI_GATEWAY_URL").rstrip("/"),env("AI_GATEWAY_PROVIDER_TOKEN")
+    # AI_GATEWAY_PROVIDER_TOKEN existed before this optional integration as a
+    # vault field.  Treat it as inactive until an explicit gateway URL is set.
+    if not base: return None
+    if not token: raise ValueError("ZEAZ gateway ต้องตั้งค่า URL และ client key ให้ครบ")
+    parsed=urlparse(base)
+    if parsed.query or parsed.fragment or parsed.username or parsed.password or not parsed.hostname:
+        raise ValueError("ZEAZ gateway URL ไม่ถูกต้อง")
+    if parsed.scheme == "https" or (parsed.scheme == "http" and parsed.hostname.lower() in ZEAZ_GATEWAY_LOOPBACK_HOSTS):
+        return base,token
+    raise ValueError("ZEAZ gateway ต้องใช้ HTTPS หรือ HTTP บน loopback เท่านั้น")
+
 def ai_public_config() -> dict:
     keys=ai_provider_keys()
-    return {"enabled":bool(keys) or hf_enabled(),"providers":{"gemini":bool(keys.get("gemini")),"nvidia":bool(keys.get("nvidia")),"zai":bool(keys.get("zai")),"opencode":bool(keys.get("opencode")),"openrouter":bool(keys.get("openrouter")),"groq":bool(keys.get("groq")),"byteplus":bool(keys.get("byteplus")),"fireworks":bool(keys.get("fireworks")),"openai":bool(keys.get("openai")),"kimi":bool(keys.get("kimi")),"scaleway":bool(keys.get("scaleway")),"together":bool(keys.get("together")),"huggingface":hf_enabled()},"catalog":"live","chat_only":True}
+    try: gateway=bool(zeaz_gateway_config())
+    except ValueError: gateway=False
+    return {"enabled":bool(keys) or hf_enabled() or gateway,"providers":{"gemini":bool(keys.get("gemini")),"nvidia":bool(keys.get("nvidia")),"zai":bool(keys.get("zai")),"opencode":bool(keys.get("opencode")),"openrouter":bool(keys.get("openrouter")),"groq":bool(keys.get("groq")),"byteplus":bool(keys.get("byteplus")),"fireworks":bool(keys.get("fireworks")),"openai":bool(keys.get("openai")),"kimi":bool(keys.get("kimi")),"scaleway":bool(keys.get("scaleway")),"together":bool(keys.get("together")),"huggingface":hf_enabled(),"zeaz_gateway":gateway},"catalog":"live","chat_only":True}
 
 def ai_http(endpoint: str, headers: dict[str,str], payload: dict | None = None, allow_list=False) -> dict | list:
     """Call a fixed provider endpoint without exposing credentials or acting as a proxy."""
@@ -333,6 +356,15 @@ def kimi_models(token: str) -> list[dict]: return openai_compatible_models(KIMI_
 def scaleway_models(token: str) -> list[dict]: return openai_compatible_models(SCALEWAY_API_BASE,token,"scaleway")
 def together_models(token: str) -> list[dict]: return openai_compatible_models(TOGETHER_API_BASE,token,"together")
 
+def zeaz_gateway_models(base: str, token: str) -> list[dict]:
+    data=ai_http(f"{base}/models",{"Authorization":f"Bearer {token}"})
+    rows=[]
+    for model in data.get("data",[]):
+        if not isinstance(model,dict) or not isinstance(model.get("id"),str) or not PROVIDER_MODEL_ID.fullmatch(model["id"]): continue
+        identifier=model["id"]
+        rows.append({"id":f"zeaz_gateway:{identifier}","provider":"zeaz_gateway","model":identifier,"display_name":model.get("name",identifier)})
+    return rows
+
 def ai_catalog() -> dict:
     """Return every live chat model the configured provider keys can enumerate."""
     now=time.monotonic()
@@ -345,6 +377,11 @@ def ai_catalog() -> dict:
             try:
                 listed=loader(keys[name]); models.extend(listed); providers[name]={"enabled":True,"models":len(listed)}
             except ValueError as error: providers[name]={"enabled":False,"models":0,"error":str(error)}
+        try:
+            gateway=zeaz_gateway_config()
+            if gateway:
+                listed=zeaz_gateway_models(*gateway); models.extend(listed); providers["zeaz_gateway"]={"enabled":True,"models":len(listed)}
+        except ValueError as error: providers["zeaz_gateway"]={"enabled":False,"models":0,"error":str(error)}
         if hf_enabled():
             try:
                 listed=[{"id":f"huggingface:{item['id']}","provider":"huggingface","model":item["id"],"display_name":item["id"]} for item in hf_models()]
@@ -402,6 +439,10 @@ def ai_chat(model_id: str, prompt: str, max_tokens=512, temperature=0.2) -> dict
     elif provider=="kimi": text=openai_compatible_chat(KIMI_API_BASE,keys["kimi"],model,prompt.strip(),tokens,temp,"Kimi")
     elif provider=="scaleway": text=openai_compatible_chat(SCALEWAY_API_BASE,keys["scaleway"],model,prompt.strip(),tokens,temp,"Scaleway")
     elif provider=="together": text=openai_compatible_chat(TOGETHER_API_BASE,keys["together"],model,prompt.strip(),tokens,temp,"Together AI")
+    elif provider=="zeaz_gateway":
+        gateway=zeaz_gateway_config()
+        if not gateway: raise ValueError("ZEAZ gateway ยังไม่ได้ตั้งค่า")
+        text=openai_compatible_chat(*gateway,model,prompt.strip(),tokens,temp,"ZEAZ Gateway")
     elif provider=="huggingface": text=hf_chat(model,prompt.strip(),tokens,temp)["content"]
     else: raise ValueError("AI provider ไม่รองรับ")
     return {"id":model_id,"provider":provider,"model":model,"content":text}
