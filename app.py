@@ -321,6 +321,12 @@ def parse_bool(value, default=False) -> bool:
     if normalized in {"false","0","no","off",""}: return False
     raise ValueError("ค่าบูลีนไม่ถูกต้อง")
 
+def finite_float(value, error_message: str) -> float:
+    try: result=float(value)
+    except (TypeError,ValueError): raise ValueError(error_message)
+    if not math.isfinite(result): raise ValueError(error_message)
+    return result
+
 def hf_enabled() -> bool:
     return env("HF_ENABLED", "false").lower() == "true" and bool(env("HF_TOKEN"))
 
@@ -955,8 +961,7 @@ def delivery_zones(con):
     return [dict(row) for row in con.execute("SELECT id,name,fee,minimum_order FROM delivery_zones WHERE active=1 ORDER BY fee,name")]
 
 def valid_coordinate(value, low, high):
-    try: value=float(value)
-    except (TypeError,ValueError): raise ValueError("พิกัดตำแหน่งไม่ถูกต้อง")
+    value=finite_float(value,"พิกัดตำแหน่งไม่ถูกต้อง")
     if not low<=value<=high: raise ValueError("พิกัดตำแหน่งไม่ถูกต้อง")
     return value
 
@@ -1672,8 +1677,8 @@ class Handler(SimpleHTTPRequestHandler):
         self.json({"zone":zone},201)
     def create_inventory_item(self,form,role):
         name=str(form.get("name","")).strip()[:100]; unit=str(form.get("unit","")).strip()[:20]
-        try: on_hand,reorder=float(form.get("on_hand",0)),float(form.get("reorder_level",0))
-        except (ValueError,TypeError):raise ValueError("จำนวนสต็อกไม่ถูกต้อง")
+        on_hand=finite_float(form.get("on_hand",0),"จำนวนสต็อกไม่ถูกต้อง")
+        reorder=finite_float(form.get("reorder_level",0),"จำนวนสต็อกไม่ถูกต้อง")
         if len(name)<2 or not unit or on_hand<0 or reorder<0:raise ValueError("ข้อมูลวัตถุดิบไม่ถูกต้อง")
         item={"id":f"INV-{secrets.token_hex(3).upper()}","name":name,"unit":unit,"on_hand":on_hand,"reorder_level":reorder};now=utcnow()
         with db() as con:
@@ -1681,10 +1686,9 @@ class Handler(SimpleHTTPRequestHandler):
         self.json({"item":item},201)
     def adjust_inventory(self,form,role):
         iid=str(form.get("inventory_item_id","")).strip()
-        try: delta=float(form.get("delta",0))
-        except (ValueError,TypeError):raise ValueError("จำนวนปรับสต็อกไม่ถูกต้อง")
+        delta=finite_float(form.get("delta",0),"จำนวนปรับสต็อกไม่ถูกต้อง")
         reason=str(form.get("reason","adjustment")).strip()[:80]; note=str(form.get("note","")).strip()[:200]
-        if not iid or not delta:raise ValueError("กรุณาระบุรายการและจำนวนที่ต้องการปรับ")
+        if not iid or not delta or not reason:raise ValueError("กรุณาระบุรายการ จำนวน และเหตุผลที่ต้องการปรับ")
         with db(immediate=True) as con:
             item=con.execute("SELECT * FROM inventory_items WHERE id=?",(iid,)).fetchone()
             if not item:return self.json({"error":"ไม่พบวัตถุดิบ"},404)
@@ -1694,8 +1698,7 @@ class Handler(SimpleHTTPRequestHandler):
             return self.json({"item":dict(con.execute("SELECT * FROM inventory_items WHERE id=?",(iid,)).fetchone())})
     def set_menu_recipe(self,form,role):
         menu_item_id=str(form.get("menu_item_id","")).strip(); inventory_item_id=str(form.get("inventory_item_id","")).strip()
-        try: quantity=float(form.get("quantity",0))
-        except (ValueError,TypeError):raise ValueError("จำนวนในสูตรไม่ถูกต้อง")
+        quantity=finite_float(form.get("quantity",0),"จำนวนในสูตรไม่ถูกต้อง")
         if quantity<=0:raise ValueError("จำนวนในสูตรต้องมากกว่า 0")
         with db() as con:
             if not con.execute("SELECT 1 FROM menu_items WHERE id=?",(menu_item_id,)).fetchone() or not con.execute("SELECT 1 FROM inventory_items WHERE id=?",(inventory_item_id,)).fetchone():raise ValueError("ไม่พบเมนูหรือวัตถุดิบ")
@@ -1756,8 +1759,10 @@ class Handler(SimpleHTTPRequestHandler):
         self.json({"business_profile":profile})
     def update_delivery_pricing(self,form,role):
         try:
-            base_fee=int(form.get("base_fee",0));per_km_fee=float(form.get("per_km_fee",0));maximum_km=float(form.get("maximum_km",0))
+            base_fee=int(form.get("base_fee",0))
         except (ValueError,TypeError):raise ValueError("อัตราค่าส่งไม่ถูกต้อง")
+        per_km_fee=finite_float(form.get("per_km_fee",0),"อัตราค่าส่งไม่ถูกต้อง")
+        maximum_km=finite_float(form.get("maximum_km",0),"อัตราค่าส่งไม่ถูกต้อง")
         if base_fee<0 or per_km_fee<0 or not 0<maximum_km<=100:raise ValueError("อัตราค่าส่งไม่ถูกต้อง")
         mode=str(form.get("mode","distance")).strip().lower()
         if mode not in {"distance","zone"}: raise ValueError("โหมดค่าส่งไม่ถูกต้อง")
@@ -1849,6 +1854,9 @@ class Handler(SimpleHTTPRequestHandler):
             con.execute("UPDATE menu_items SET name=?,description=?,price=?,available=?,updated_at=? WHERE id=?",(name,desc,price,available,utcnow(),iid));audit(con,role,"update","menu_item",iid)
             return self.json({"item":{"id":iid,"name":name,"description":desc,"price":price,"available":bool(available)}})
     def update_settings(self,form,role):
+        supported=("slot_capacity","advance_days")
+        changed=[key for key in supported if key in form]
+        if not changed:raise ValueError("ไม่มีการตั้งค่าที่รองรับให้อัปเดต")
         with db() as con:
             for key, maximum in (("slot_capacity",500),("advance_days",60)):
                 if key in form:
@@ -1856,7 +1864,7 @@ class Handler(SimpleHTTPRequestHandler):
                     except (TypeError,ValueError):raise ValueError("ค่าการตั้งค่าไม่ถูกต้อง")
                     if not 1<=value<=maximum:raise ValueError("ค่าการตั้งค่าไม่ถูกต้อง")
                     set_setting(con,key,value)
-            audit(con,role,"update","settings","store")
+            audit(con,role,"update","settings","store",{"keys":changed})
             return self.json({"settings":config(con)})
 
 class BoundedHTTPServer(ThreadingHTTPServer):

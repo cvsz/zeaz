@@ -39,7 +39,11 @@ variables.
 Critical commerce mutations start with `BEGIN IMMEDIATE`, so slot-capacity,
 order-state, payment, delivery, receipt and inventory decisions serialize
 across independent application processes. The database also enforces one
-`order_completed` inventory movement per order and ingredient.
+`order_completed` inventory movement per order and ingredient. API validation
+rejects non-finite inventory and recipe quantities before persistence because
+SQLite can otherwise store infinity or translate `NaN` into `NULL`. Manual
+stock movements require an operator reason and preserve the balance, movement
+and audit record in one transaction.
 
 ## Backup and recovery
 

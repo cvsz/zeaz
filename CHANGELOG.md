@@ -47,6 +47,9 @@
 - Serialized rider and merchant reviews, blocked rider deactivation with active
   deliveries, added concurrent mutation coverage, and raised the enforced
   Python coverage floor from 50% to 52%.
+- Rejected non-finite inventory, recipe, coordinate and delivery-rate values,
+  required reasons for stock adjustments, made settings audits mutation-aware,
+  and raised the enforced Python coverage floor from 52% to 53%.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,

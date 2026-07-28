@@ -51,7 +51,9 @@ callback alone is never proof of payment.
 
 - Review completed, cancelled and failed orders; reconcile cash/digital totals.
 - Review rider assignments, unavailable riders and delivery failures.
-- Count high-value inventory and record an auditable adjustment when needed.
+- Count high-value inventory and record an auditable adjustment with a specific
+  reason when needed. Quantities and recipe ratios must be finite numbers;
+  rejected adjustments do not change stock or create audit events.
 - Run `./scripts/backup-database.sh` and confirm the backup is stored securely.
 - Review the audit log for unexpected owner changes.
 
