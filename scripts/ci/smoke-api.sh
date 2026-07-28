@@ -124,6 +124,10 @@ admin_paid_pending_status="$(curl --silent --output "$TMP_DIR/admin-paid-pending
   --data '{"payment_status":"pending"}')"
 [[ "$admin_paid_pending_status" == "400" ]]
 printf '%s' "$(cat "$TMP_DIR/admin-paid-pending.json")" | "$PYTHON" -c 'import json,sys; assert "ถอยกลับไม่ได้" in json.load(sys.stdin)["error"]'
+paid_lookup="$(curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/order-lookup" \
+  --header 'Content-Type: application/json' \
+  --data "{\"order_id\":\"$paid_order_id\",\"phone\":\"0812345679\"}")"
+printf '%s' "$paid_lookup" | "$PYTHON" -c 'import json,sys; assert json.load(sys.stdin)["can_cancel"] is False'
 "$PYTHON" - "$DATABASE_PATH" "$paid_order_id" <<'PY'
 import sqlite3
 import sys

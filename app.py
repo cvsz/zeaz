@@ -1188,7 +1188,7 @@ class Handler(SimpleHTTPRequestHandler):
             order=row_order(con,oid)
             if order and secrets.compare_digest(order["customer"]["phone"],phone):
                 customer=con.execute("SELECT points_balance FROM customers WHERE phone=?",(phone,)).fetchone()
-                return self.json({"order":public_order(order),"can_cancel":order["status"] in {"new","confirmed"},"loyalty":{"points_balance":int(customer["points_balance"]) if customer else 0,"point_value_thb":1}})
+                return self.json({"order":public_order(order),"can_cancel":order["status"] in {"new","confirmed"} and order["payment"]["status"]!="paid","loyalty":{"points_balance":int(customer["points_balance"]) if customer else 0,"point_value_thb":1}})
         self.json({"error":"ไม่พบออเดอร์ หรือเบอร์โทรศัพท์ไม่ตรงกัน"},404)
     def cancel_order(self,oid,form):
         phone=re.sub(r"[^0-9+]","",str(form.get("phone","")))
