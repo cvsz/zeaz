@@ -25,6 +25,8 @@ jobs:
         run: bash -n scripts/*.sh
       - name: Run platform checks
         run: ./scripts/ci/test.sh
+      - name: Run isolated API smoke checks
+        run: ./scripts/ci/smoke-api.sh
       - name: Generate example business kit
         run: ./scripts/generate.sh examples/cafe.yaml /tmp/cafe-kit
       - name: Package example business kit
