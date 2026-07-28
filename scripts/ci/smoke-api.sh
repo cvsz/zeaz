@@ -124,6 +124,35 @@ admin_paid_pending_status="$(curl --silent --output "$TMP_DIR/admin-paid-pending
   --data '{"payment_status":"pending"}')"
 [[ "$admin_paid_pending_status" == "400" ]]
 printf '%s' "$(cat "$TMP_DIR/admin-paid-pending.json")" | "$PYTHON" -c 'import json,sys; assert "ถอยกลับไม่ได้" in json.load(sys.stdin)["error"]'
+"$PYTHON" - "$DATABASE_PATH" "$paid_order_id" <<'PY'
+import sqlite3
+import sys
+
+with sqlite3.connect(sys.argv[1]) as connection:
+    connection.execute("UPDATE orders SET payment_method='scb_qr' WHERE id=?", (sys.argv[2],))
+    connection.execute("INSERT INTO payment_attempts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", ("PAY-SCB-CI", sys.argv[2], "scb_maemanee", "CI-REF", "SCB-CI", 10, "pending", "", "T30", "", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00", "", "{}"))
+    connection.commit()
+PY
+curl --silent --fail --max-time 3 --request PATCH "$BASE_URL/api/admin/orders/$paid_order_id" \
+  --header 'Content-Type: application/json' \
+  --header "X-Admin-Key-B64: $admin_header" \
+  --data '{"payment_status":"paid"}' >/dev/null
+"$PYTHON" - "$DATABASE_PATH" <<'PY'
+import sqlite3
+import sys
+with sqlite3.connect(sys.argv[1]) as connection:
+    assert connection.execute("SELECT status FROM payment_attempts WHERE id='PAY-SCB-CI'").fetchone()[0] == "paid"
+PY
+curl --silent --fail --max-time 3 --request PATCH "$BASE_URL/api/admin/orders/$paid_order_id" \
+  --header 'Content-Type: application/json' \
+  --header "X-Admin-Key-B64: $admin_header" \
+  --data '{"payment_status":"refunded"}' >/dev/null
+"$PYTHON" - "$DATABASE_PATH" <<'PY'
+import sqlite3
+import sys
+with sqlite3.connect(sys.argv[1]) as connection:
+    assert connection.execute("SELECT status FROM payment_attempts WHERE id='PAY-SCB-CI'").fetchone()[0] == "refunded"
+PY
 cancelled_complete_status="$(curl --silent --output "$TMP_DIR/cancelled-complete.json" --write-out '%{http_code}' --max-time 3 --request PATCH "$BASE_URL/api/admin/orders/$order_id" \
   --header 'Content-Type: application/json' \
   --header "X-Admin-Key-B64: $admin_header" \
@@ -141,7 +170,7 @@ assert data["summary"]["orders"] == 2
 orders={item["id"]: item for item in data["orders"]}
 assert orders[sys.argv[2]]["status"] == "cancelled"
 assert orders[sys.argv[3]]["status"] == "new"
-assert orders[sys.argv[3]]["payment"]["status"] == "paid"
+assert orders[sys.argv[3]]["payment"]["status"] == "refunded"
 PY
 
 echo "Isolated API smoke checks passed."

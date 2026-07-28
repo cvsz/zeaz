@@ -120,7 +120,7 @@ def initialise_database() -> None:
         CREATE TABLE IF NOT EXISTS order_items (id INTEGER PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, menu_item_id TEXT NOT NULL, name TEXT NOT NULL, quantity INTEGER NOT NULL CHECK(quantity > 0), unit_price INTEGER NOT NULL CHECK(unit_price >= 0));
         CREATE TABLE IF NOT EXISTS order_history (id INTEGER PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, at TEXT NOT NULL, status TEXT NOT NULL, actor_role TEXT NOT NULL, note TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY, at TEXT NOT NULL, actor_role TEXT NOT NULL, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, details TEXT NOT NULL DEFAULT '{}');
-        CREATE TABLE IF NOT EXISTS payment_attempts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, provider TEXT NOT NULL, provider_reference TEXT NOT NULL UNIQUE, provider_order_id TEXT UNIQUE, amount INTEGER NOT NULL CHECK(amount >= 0), status TEXT NOT NULL CHECK(status IN ('created','pending','paid','failed','expired','cancelled')), qr_image TEXT NOT NULL DEFAULT '', qr_type TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, confirmed_at TEXT NOT NULL DEFAULT '', provider_response TEXT NOT NULL DEFAULT '{}');
+        CREATE TABLE IF NOT EXISTS payment_attempts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, provider TEXT NOT NULL, provider_reference TEXT NOT NULL UNIQUE, provider_order_id TEXT UNIQUE, amount INTEGER NOT NULL CHECK(amount >= 0), status TEXT NOT NULL CHECK(status IN ('created','pending','paid','failed','expired','cancelled','refunded')), qr_image TEXT NOT NULL DEFAULT '', qr_type TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, confirmed_at TEXT NOT NULL DEFAULT '', provider_response TEXT NOT NULL DEFAULT '{}');
         CREATE TABLE IF NOT EXISTS oauth_tokens (subject TEXT PRIMARY KEY, access_cipher TEXT NOT NULL, refresh_cipher TEXT NOT NULL DEFAULT '', owner_cipher TEXT NOT NULL, access_expires_at TEXT NOT NULL, refresh_expires_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS delivery_zones (id TEXT PRIMARY KEY, name TEXT NOT NULL, fee INTEGER NOT NULL CHECK(fee >= 0), minimum_order INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS riders (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -145,6 +145,16 @@ def initialise_database() -> None:
         CREATE INDEX IF NOT EXISTS idx_deliveries_status ON deliveries(status, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_inventory_movements_item ON inventory_movements(inventory_item_id, created_at DESC);
         """)
+        payment_schema=con.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='payment_attempts'").fetchone()[0]
+        if "'refunded'" not in payment_schema:
+            con.execute("DROP INDEX IF EXISTS idx_payment_attempts_order")
+            con.execute("DROP INDEX IF EXISTS idx_payment_attempts_provider_order")
+            con.execute("ALTER TABLE payment_attempts RENAME TO payment_attempts_legacy")
+            con.execute("CREATE TABLE payment_attempts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, provider TEXT NOT NULL, provider_reference TEXT NOT NULL UNIQUE, provider_order_id TEXT UNIQUE, amount INTEGER NOT NULL CHECK(amount >= 0), status TEXT NOT NULL CHECK(status IN ('created','pending','paid','failed','expired','cancelled','refunded')), qr_image TEXT NOT NULL DEFAULT '', qr_type TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, confirmed_at TEXT NOT NULL DEFAULT '', provider_response TEXT NOT NULL DEFAULT '{}')")
+            con.execute("INSERT INTO payment_attempts SELECT * FROM payment_attempts_legacy")
+            con.execute("DROP TABLE payment_attempts_legacy")
+            con.execute("CREATE INDEX idx_payment_attempts_order ON payment_attempts(order_id, created_at DESC)")
+            con.execute("CREATE INDEX idx_payment_attempts_provider_order ON payment_attempts(provider, provider_order_id)")
         con.execute("INSERT OR IGNORE INTO menu_display_order(menu_item_id,position) SELECT id,CASE id WHEN 'classic' THEN 1 WHEN 'milk-tender' THEN 2 WHEN 'fatty' THEN 3 WHEN 'spicy' THEN 4 WHEN 'sticky-rice' THEN 5 END FROM menu_items WHERE id IN ('classic','milk-tender','fatty','spicy','sticky-rice')")
         if "distance_km" not in {row[1] for row in con.execute("PRAGMA table_info(deliveries)")}:
             con.execute("ALTER TABLE deliveries ADD COLUMN distance_km REAL NOT NULL DEFAULT 0")
@@ -1321,7 +1331,7 @@ class Handler(SimpleHTTPRequestHandler):
                     if order["payment"]["method"]=="scb_qr" and order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงิน SCB ก่อนปิดงานจัดส่ง")
                 sql+=" WHERE order_id=?";params.append(oid);con.execute(sql,params)
                 if status=="delivered":
-                    con.execute("UPDATE orders SET status='completed' WHERE id=?",(oid,)); self.complete_order_effects(con,oid,order,role)
+                    con.execute("UPDATE orders SET status='completed' WHERE id=?",(oid,)); con.execute("INSERT INTO order_history(order_id,at,status,actor_role,note) VALUES (?,?,?,?,?)",(oid,now,"completed",role,"delivery_delivered")); self.complete_order_effects(con,oid,order,role)
             audit(con,role,"delivery_update","delivery",oid,{"status":status,"rider_id":rider_id});return self.json({"order":row_order(con,oid)})
     def issue_receipt(self,oid,form,role):
         with db() as con:
@@ -1389,7 +1399,11 @@ class Handler(SimpleHTTPRequestHandler):
                 con.execute("UPDATE orders SET status=? WHERE id=?",(status,oid));con.execute("INSERT INTO order_history(order_id,at,status,actor_role) VALUES (?,?,?,?)",(oid,utcnow(),status,role));audit(con,role,"status_change","order",oid,{"from":order["status"],"to":status})
                 if status=="completed": self.complete_order_effects(con,oid,order,role)
                 if status=="cancelled": self.reverse_order_redemptions(con,oid,order,order["customer"]["phone"],utcnow())
-            if payment:con.execute("UPDATE orders SET payment_status=? WHERE id=?",(payment,oid));audit(con,role,"payment_change","order",oid,{"to":payment})
+            if payment:
+                now=utcnow(); con.execute("UPDATE orders SET payment_status=? WHERE id=?",(payment,oid))
+                if order["payment"]["method"]=="scb_qr" and payment in {"paid","refunded"}:
+                    con.execute("UPDATE payment_attempts SET status=?,confirmed_at=CASE WHEN ?='paid' THEN COALESCE(NULLIF(confirmed_at,''),?) ELSE confirmed_at END,updated_at=? WHERE order_id=? AND provider LIKE 'scb_%' AND status NOT IN ('cancelled','expired')",(payment,payment,now,now,oid))
+                audit(con,role,"payment_change","order",oid,{"to":payment})
             return self.json({"order":row_order(con,oid)})
     def complete_order_effects(self,con,oid,order,role):
         """Award points and consume recipe stock once, only when the order closes."""
