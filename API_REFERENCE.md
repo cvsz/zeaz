@@ -35,3 +35,11 @@ SQLite mutation. Inventory adjustments serialize across processes, require a
 non-empty reason and cannot produce negative stock. Settings requests must
 change at least one supported key, roll back fully on invalid values and record
 the exact changed keys in the audit event.
+
+Menu partial updates serialize their read-modify-write transaction so concurrent
+changes to different fields cannot overwrite each other; each audit event names
+the submitted fields. Coupon codes are strict 3-32 character identifiers.
+Optional campaign windows require timezone-aware RFC3339 timestamps and are
+stored in UTC. Coupon availability checks and usage increments run inside the
+serialized order transaction, so a finite `maximum_uses` cannot be exceeded by
+concurrent checkout requests.

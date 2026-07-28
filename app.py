@@ -327,6 +327,14 @@ def finite_float(value, error_message: str) -> float:
     if not math.isfinite(result): raise ValueError(error_message)
     return result
 
+def optional_utc_timestamp(value, error_message: str) -> str:
+    raw=str(value or "").strip()
+    if not raw:return ""
+    try: parsed=datetime.fromisoformat(raw.replace("Z","+00:00"))
+    except ValueError:raise ValueError(error_message)
+    if parsed.tzinfo is None:raise ValueError(error_message)
+    return parsed.astimezone(timezone.utc).isoformat()
+
 def hf_enabled() -> bool:
     return env("HF_ENABLED", "false").lower() == "true" and bool(env("HF_TOKEN"))
 
@@ -1705,13 +1713,17 @@ class Handler(SimpleHTTPRequestHandler):
             con.execute("INSERT INTO menu_recipes VALUES (?,?,?) ON CONFLICT(menu_item_id,inventory_item_id) DO UPDATE SET quantity=excluded.quantity",(menu_item_id,inventory_item_id,quantity));audit(con,role,"set_recipe","menu_item",menu_item_id,{"inventory_item_id":inventory_item_id,"quantity":quantity})
             return self.json({"recipe":{"menu_item_id":menu_item_id,"inventory_item_id":inventory_item_id,"quantity":quantity}})
     def create_coupon(self,form,role):
-        code=re.sub(r"[^A-Z0-9_-]","",str(form.get("code","")).upper())[:32]; kind=str(form.get("kind","fixed"))
+        code=str(form.get("code","")).strip().upper(); kind=str(form.get("kind","fixed"))
         try:value,minimum,maximum=int(form.get("value",0)),int(form.get("minimum_order",0)),int(form.get("maximum_uses",0))
         except (ValueError,TypeError):raise ValueError("ข้อมูลคูปองไม่ถูกต้อง")
-        if not 3<=len(code)<=32 or kind not in {"fixed","percent"} or value<=0 or minimum<0 or maximum<0 or (kind=="percent" and value>100):raise ValueError("ข้อมูลคูปองไม่ถูกต้อง")
-        coupon={"id":f"CPN-{secrets.token_hex(3).upper()}","code":code,"kind":kind,"value":value,"minimum_order":minimum,"maximum_uses":maximum};
+        starts_at=optional_utc_timestamp(form.get("starts_at"),"ช่วงเวลาคูปองไม่ถูกต้อง")
+        ends_at=optional_utc_timestamp(form.get("ends_at"),"ช่วงเวลาคูปองไม่ถูกต้อง")
+        if not re.fullmatch(r"[A-Z0-9_-]{3,32}",code) or kind not in {"fixed","percent"} or value<=0 or minimum<0 or maximum<0 or (kind=="percent" and value>100):raise ValueError("ข้อมูลคูปองไม่ถูกต้อง")
+        if starts_at and ends_at and starts_at>=ends_at:raise ValueError("เวลาสิ้นสุดคูปองต้องอยู่หลังเวลาเริ่มต้น")
+        if ends_at and ends_at<=utcnow():raise ValueError("เวลาสิ้นสุดคูปองต้องอยู่ในอนาคต")
+        coupon={"id":f"CPN-{secrets.token_hex(3).upper()}","code":code,"kind":kind,"value":value,"minimum_order":minimum,"maximum_uses":maximum,"starts_at":starts_at,"ends_at":ends_at};
         try:
-            with db() as con:con.execute("INSERT INTO coupons VALUES (?,?,?,?,?,?,?,?,?,?,?)",(coupon["id"],code,kind,value,minimum,maximum,0,"","",1,utcnow()));audit(con,role,"create","coupon",coupon["id"],coupon)
+            with db(immediate=True) as con:con.execute("INSERT INTO coupons VALUES (?,?,?,?,?,?,?,?,?,?,?)",(coupon["id"],code,kind,value,minimum,maximum,0,starts_at,ends_at,1,utcnow()));audit(con,role,"create","coupon",coupon["id"],coupon)
         except sqlite3.IntegrityError:raise ValueError("รหัสคูปองนี้มีอยู่แล้ว")
         self.json({"coupon":coupon},201)
     def update_delivery(self,oid,form,role,area):
@@ -1843,7 +1855,10 @@ class Handler(SimpleHTTPRequestHandler):
         redemption=con.execute("SELECT coupon_id FROM coupon_redemptions WHERE order_id=?",(oid,)).fetchone()
         if redemption:con.execute("UPDATE coupons SET used_count=MAX(0,used_count-1) WHERE id=?",(redemption["coupon_id"],));con.execute("DELETE FROM coupon_redemptions WHERE order_id=?",(oid,))
     def update_menu_item(self,iid,form,role):
-        with db() as con:
+        supported=("name","description","price","available")
+        changed=[key for key in supported if key in form]
+        if not changed:raise ValueError("ไม่มีข้อมูลเมนูที่รองรับให้อัปเดต")
+        with db(immediate=True) as con:
             item=con.execute("SELECT * FROM menu_items WHERE id=?",(iid,)).fetchone()
             if not item:return self.json({"error":"ไม่พบเมนู"},404)
             name=str(form.get("name",item["name"])).strip()[:80];desc=str(form.get("description",item["description"])).strip()[:160]
@@ -1851,7 +1866,7 @@ class Handler(SimpleHTTPRequestHandler):
             except (TypeError,ValueError):raise ValueError("ราคาไม่ถูกต้อง")
             available=int(parse_bool(form.get("available"),bool(item["available"])))
             if len(name)<2 or not 0<=price<=10000:raise ValueError("ข้อมูลเมนูไม่ถูกต้อง")
-            con.execute("UPDATE menu_items SET name=?,description=?,price=?,available=?,updated_at=? WHERE id=?",(name,desc,price,available,utcnow(),iid));audit(con,role,"update","menu_item",iid)
+            con.execute("UPDATE menu_items SET name=?,description=?,price=?,available=?,updated_at=? WHERE id=?",(name,desc,price,available,utcnow(),iid));audit(con,role,"update","menu_item",iid,{"keys":changed})
             return self.json({"item":{"id":iid,"name":name,"description":desc,"price":price,"available":bool(available)}})
     def update_settings(self,form,role):
         supported=("slot_capacity","advance_days")

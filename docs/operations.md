@@ -13,7 +13,10 @@ an owner secret: do not place it in a public client, URL, screenshot or Git.
    recipes where stock needs automatic deduction.
 4. Review rider and merchant applications. Approve only after verifying the
    submitted contact and operational details; activate riders separately.
-5. Create coupons only with a documented campaign owner, limits and expiry.
+5. Create coupons only with a documented campaign owner, limits and an expiry
+   where the campaign is not intentionally evergreen. Campaign start/end values
+   are converted by the owner console to UTC; the end must be in the future and
+   after the optional start.
 
 Keep populated `templates/store-master-data.json` local. It may contain store
 coordinates, contacts or tax information and must not be committed.
@@ -31,6 +34,8 @@ coordinates, contacts or tax information and must not be committed.
 
 Cancellation is an exception path. Confirm the reason before cancelling because
 the platform restores eligible coupon/loyalty state only once.
+Coupon capacity is reserved in the same transaction as the order, so a failed
+or rejected checkout does not consume a use.
 
 ## Delivery pricing and tracking
 

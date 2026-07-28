@@ -45,6 +45,12 @@ SQLite can otherwise store infinity or translate `NaN` into `NULL`. Manual
 stock movements require an operator reason and preserve the balance, movement
 and audit record in one transaction.
 
+Menu partial updates also use `BEGIN IMMEDIATE` because each request reads the
+current row before writing a complete row. Coupon campaign timestamps are
+canonical UTC values. Coupon eligibility, order creation, redemption insertion
+and `used_count` increment share one immediate transaction, preserving campaign
+limits under concurrent checkout.
+
 ## Backup and recovery
 
 ```bash
