@@ -1382,6 +1382,8 @@ class Handler(SimpleHTTPRequestHandler):
         with STORE_LOCK,db() as con:
             delivery=con.execute("SELECT * FROM deliveries WHERE order_id=?",(oid,)).fetchone()
             if not delivery:return self.json({"error":"ไม่พบงานจัดส่ง"},404)
+            transitions={"queued":{"assigned","cancelled"},"assigned":{"picked_up","cancelled"},"picked_up":{"on_the_way","failed"},"on_the_way":{"delivered","failed"},"failed":{"queued"},"delivered":set(),"cancelled":set()}
+            if status and status != delivery["status"] and status not in transitions.get(delivery["status"],set()): raise ValueError("ลำดับสถานะจัดส่งไม่ถูกต้อง")
             if rider_id:
                 rider=con.execute("SELECT * FROM riders WHERE id=? AND active=1",(rider_id,)).fetchone()
                 if not rider:raise ValueError("ไม่พบไรเดอร์")
@@ -1390,6 +1392,7 @@ class Handler(SimpleHTTPRequestHandler):
                 now=utcnow(); columns={"picked_up":"picked_up_at","delivered":"delivered_at"};sql="UPDATE deliveries SET status=?,updated_at=?";params=[status,now]
                 if status in columns:sql+=f",{columns[status]}=?";params.append(now)
                 if status=="delivered":
+                    if not delivery["rider_id"]: raise ValueError("ต้องมอบหมายไรเดอร์ก่อนปิดงานจัดส่ง")
                     order=row_order(con,oid)
                     if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
                     if order["status"] in {"cancelled","completed"}:raise ValueError("ออเดอร์นี้ปิดแล้ว ไม่สามารถส่งสำเร็จซ้ำได้")
