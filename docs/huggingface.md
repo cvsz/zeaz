@@ -34,6 +34,11 @@ workloads need a separate reviewed integration.
    `/ai.html`, enter the owner key and load the
    catalog.
 
+`./scripts/check-ai-provider-keys.sh` probes the official model-list endpoint
+for every supported key found in the provider vault and writes a
+credential-free health report to `output/ai-provider-health.json`. It does not
+copy a key, print a key, or store provider response bodies.
+
 `HF_TOKEN` stays only on the server. It is never returned by APIs, written to
 the database, included in browser JavaScript, or committed to Git.
 

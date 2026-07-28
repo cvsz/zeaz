@@ -211,7 +211,10 @@ def ai_public_config() -> dict:
 def ai_http(endpoint: str, headers: dict[str,str], payload: dict | None = None) -> dict:
     """Call a fixed provider endpoint without exposing credentials or acting as a proxy."""
     try:
-        request_headers={"Accept":"application/json",**headers}
+        # Several provider gateways reject urllib's default user agent. Keep a
+        # fixed server identity; it is not supplied by, or controllable from,
+        # the browser request.
+        request_headers={"Accept":"application/json","User-Agent":"MooPiew-ZEAZ/1.0",**headers}
         body=None
         if payload is not None:
             request_headers["Content-Type"]="application/json"; body=json.dumps(payload,ensure_ascii=False).encode()
