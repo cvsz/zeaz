@@ -1,1 +1,1 @@
-import type { Payment } from "@moopiew/types"; import type { MoopiewClient } from "./client.js"; export class PaymentsService { constructor(private client:MoopiewClient){} get(id:string){return this.client.request<Payment>(`/api/payments/${encodeURIComponent(id)}`);} }
+import type { ScbPaymentConfig } from "@moopiew/types"; import type { MoopiewClient } from "./client.js"; export class PaymentsService { constructor(private client:MoopiewClient){} scbConfig(){return this.client.request<ScbPaymentConfig>("/api/payments/scb/config");} }

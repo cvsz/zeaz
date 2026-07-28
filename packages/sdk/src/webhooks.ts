@@ -1,1 +1,4 @@
-export function verifyWebhook(secret:string, signature:string, payload:string){return signature===secret+":"+payload.length;}
+function hexBytes(value:string):Uint8Array | undefined { if(!/^[a-f0-9]{64}$/i.test(value)) return undefined; return Uint8Array.from(value.match(/.{2}/g)!,part=>parseInt(part,16)); }
+function buffer(value:Uint8Array):ArrayBuffer { return value.slice().buffer as ArrayBuffer; }
+/** Verify an HMAC-SHA256 webhook signature without exposing a timing oracle. */
+export async function verifyWebhook(secret:string, signature:string, payload:string):Promise<boolean>{ const bytes=hexBytes(signature.replace(/^sha256=/i,"")); if(!bytes || !globalThis.crypto?.subtle) return false; const key=await globalThis.crypto.subtle.importKey("raw",buffer(new TextEncoder().encode(secret)),{name:"HMAC",hash:"SHA-256"},false,["verify"]); return globalThis.crypto.subtle.verify("HMAC",key,buffer(bytes),buffer(new TextEncoder().encode(payload))); }
