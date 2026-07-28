@@ -1,0 +1,432 @@
+# Instincts generated from https://github.com/cvsz/zeaz
+# Generated: 2026-07-28T19:23:07.355Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: zeaz-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/cvsz/zeaz
+---
+
+# Zeaz Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat
+
+## Evidence
+
+- 2 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat: add provider document requirements and uploads, feat: complete document upload UX and rotation tooling
+
+---
+id: zeaz-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/cvsz/zeaz
+---
+
+# Zeaz Commit Length
+
+## Action
+
+Write moderate-length commit messages (~53 characters)
+
+## Evidence
+
+- Average commit message length: 53 chars
+- Based on 2 commits
+
+---
+id: zeaz-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/cvsz/zeaz
+---
+
+# Zeaz Naming Files
+
+## Action
+
+Use kebab-case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: kebab-case
+
+---
+id: zeaz-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/cvsz/zeaz
+---
+
+# Zeaz Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: zeaz-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/cvsz/zeaz
+---
+
+# Zeaz Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: zeaz-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/cvsz/zeaz
+---
+
+# Zeaz Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: zeaz-workflow-document-upload-feature-development
+trigger: "when doing document upload feature development"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/cvsz/zeaz
+---
+
+# Zeaz Workflow Document Upload Feature Development
+
+## Action
+
+Follow the document-upload-feature-development workflow:
+1. Update backend logic (e.g., app.py)
+2. Create or modify database migrations for document requirements
+3. Update or add documentation (docs/ARCHITECTURE.md, docs/DATABASE.md, docs/architecture/*, docs/reference/providers/*, docs/openapi.yaml)
+4. Update changelog and roadmap
+5. Modify or add frontend components (web/components/document-upload/*, web/document-admin.html/js, web/documents.html)
+6. Update or add tests (tests/test_documents.py)
+7. Update scripts or templates as needed
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: app.py, migrations/*.sql, docs/ARCHITECTURE.md
+
+---
+id: zeaz-workflow-document-upload-ux-enhancement-and-rotation-tooling
+trigger: "when doing document upload ux enhancement and rotation tooling"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/cvsz/zeaz
+---
+
+# Zeaz Workflow Document Upload Ux Enhancement And Rotation Tooling
+
+## Action
+
+Follow the document-upload-ux-enhancement-and-rotation-tooling workflow:
+1. Update or add scripts for provider rotation (scripts/rotate-provider-secrets.sh, scripts/provider-rotation.d/README.md)
+2. Modify frontend styles and logic for document upload (web/components/document-upload/document-upload.css/js)
+3. Update admin interface (web/document-admin.js)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: scripts/rotate-provider-secrets.sh, scripts/provider-rotation.d/README.md, web/components/document-upload/document-upload.css
+
+---
+id: zeaz-instinct-file-naming-kebab-case
+trigger: "When creating or renaming a file in the codebase"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: cvsz/zeaz
+---
+
+# Zeaz Instinct File Naming Kebab Case
+
+## Action
+
+Name the file using kebab-case (e.g., document-upload.js)
+
+## Evidence
+
+- Pattern in web/components/document-upload/document-upload.js
+- Pattern in web/document-admin.js
+
+---
+id: zeaz-instinct-function-naming-camelCase
+trigger: "When defining a function in JavaScript code"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: cvsz/zeaz
+---
+
+# Zeaz Instinct Function Naming CamelCase
+
+## Action
+
+Use camelCase for function names (e.g., handleUpload)
+
+## Evidence
+
+- Pattern in web/document-admin.js
+- Pattern in web/components/document-upload/document-upload.js
+
+---
+id: zeaz-instinct-class-naming-PascalCase
+trigger: "When defining a class in JavaScript code"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: cvsz/zeaz
+---
+
+# Zeaz Instinct Class Naming PascalCase
+
+## Action
+
+Use PascalCase for class names (e.g., DocumentUploader)
+
+## Evidence
+
+- Pattern in web/components/document-upload/document-upload.js
+
+---
+id: zeaz-instinct-constant-naming-SCREAMING_SNAKE_CASE
+trigger: "When defining a constant in JavaScript code"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: cvsz/zeaz
+---
+
+# Zeaz Instinct Constant Naming SCREAMING_SNAKE_CASE
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for constant names (e.g., MAX_FILE_SIZE)
+
+## Evidence
+
+- Pattern in web/components/document-upload/document-upload.js
+
+---
+id: zeaz-instinct-import-style-relative
+trigger: "When importing modules in JavaScript files"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: cvsz/zeaz
+---
+
+# Zeaz Instinct Import Style Relative
+
+## Action
+
+Use relative import paths (e.g., './utils.js')
+
+## Evidence
+
+- Pattern in web/components/document-upload/document-upload.js
+
+---
+id: zeaz-instinct-export-style-named
+trigger: "When exporting modules or functions in JavaScript files"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: cvsz/zeaz
+---
+
+# Zeaz Instinct Export Style Named
+
+## Action
+
+Use named exports (e.g., export { myFunction })
+
+## Evidence
+
+- Pattern in web/components/document-upload/document-upload.js
+
+---
+id: zeaz-instinct-testing-location-separate
+trigger: "When adding or updating tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: cvsz/zeaz
+---
+
+# Zeaz Instinct Testing Location Separate
+
+## Action
+
+Place test files in the separate 'tests' directory (e.g., tests/test_documents.py)
+
+## Evidence
+
+- Pattern in tests/test_documents.py
+
+---
+id: zeaz-instinct-testing-file-naming
+trigger: "When naming a test file"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: cvsz/zeaz
+---
+
+# Zeaz Instinct Testing File Naming
+
+## Action
+
+Use the prefix 'test_' followed by the target module or feature (e.g., test_documents.py)
+
+## Evidence
+
+- Pattern in tests/test_documents.py
+
+---
+id: zeaz-instinct-testing-update-on-feature-change
+trigger: "When implementing or modifying a feature related to document upload"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: cvsz/zeaz
+---
+
+# Zeaz Instinct Testing Update On Feature Change
+
+## Action
+
+Update or add corresponding tests in tests/test_documents.py
+
+## Evidence
+
+- Seen in document-upload-feature-development workflow
+- Pattern in commit sequences
+
+---
+id: zeaz-instinct-git-commit-conventional-feat
+trigger: "When committing a new feature"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: cvsz/zeaz
+---
+
+# Zeaz Instinct Git Commit Conventional Feat
+
+## Action
+
+Use the 'feat:' prefix in the commit message (e.g., 'feat: add provider document requirements and uploads')
+
+## Evidence
+
+- Seen in commit 'feat: add provider document requirements and uploads'
+- Pattern in commit examples
+
+---
+id: zeaz-instinct-git-commit-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: cvsz/zeaz
+---
+
+# Zeaz Instinct Git Commit Length
+
+## Action
+
+Keep the commit message concise, around 50 characters on average
+
+## Evidence
+
+- Average commit message length is 53 characters
+
+---
+id: zeaz-instinct-workflow-document-upload-feature-development
+trigger: "When someone wants to add or improve document upload functionality for providers"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: cvsz/zeaz
+---
+
+# Zeaz Instinct Workflow Document Upload Feature Development
+
+## Action
+
+Follow the workflow: update backend logic, create/modify migrations, update/add documentation, update changelog/roadmap, modify/add frontend components, update/add tests, update scripts/templates as needed
+
+## Evidence
+
+- document-upload-feature-development workflow
+- Pattern in commit sequences and files involved
+
+---
+id: zeaz-instinct-workflow-document-upload-ux-enhancement-rotation-tooling
+trigger: "When someone wants to improve document upload UX or manage provider secret rotation"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: cvsz/zeaz
+---
+
+# Zeaz Instinct Workflow Document Upload Ux Enhancement Rotation Tooling
+
+## Action
+
+Follow the workflow: update/add provider rotation scripts, modify frontend styles/logic for document upload, update admin interface
+
+## Evidence
+
+- document-upload-ux-enhancement-and-rotation-tooling workflow
+- Pattern in commit sequences and files involved
+
