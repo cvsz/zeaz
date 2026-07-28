@@ -3,7 +3,7 @@
 MooPiew uses an owner-only, feature-gated live AI catalog for operational
 writing and analysis. It is not exposed to customers, riders or merchant
 applicants. The catalog currently supports Hugging Face Inference Providers,
-Gemini, NVIDIA NIM, Z.AI, OpenCode Zen, OpenRouter, Groq and BytePlus ModelArk whenever the associated
+Gemini, NVIDIA NIM, Z.AI, OpenCode Zen, OpenRouter, Groq, BytePlus ModelArk and Fireworks whenever the associated
 local key is configured. The owner page is named **ZEAZ AI Live Catalog**.
 
 ## What “all free models” means in practice
@@ -56,7 +56,7 @@ service and runs the free-provider smoke checks in that order.
 the database, included in browser JavaScript, or committed to Git.
 
 For Gemini, NVIDIA NIM, Z.AI, OpenCode Zen or OpenRouter, add a matching
-`gemini`, `nvidia`, `zai`, `opencode`, `openrouter`, `groq` or `byteplus` entry to
+`gemini`, `nvidia`, `zai`, `opencode`, `openrouter`, `groq`, `byteplus` or `fireworks` entry to
 `AI_PROVIDER_KEYS_JSON`. The catalog reads only models returned by the
 provider’s live models endpoint, so an unavailable provider/model is omitted.
 Z.AI is prepared at `https://api.z.ai/api/paas/v4`; it appears only after a
