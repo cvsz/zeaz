@@ -1,4 +1,4 @@
-FROM python:3.12-alpine
+FROM python:3.14-alpine
 RUN addgroup -g 10001 -S dashboard && adduser -u 10001 -S -G dashboard dashboard
 WORKDIR /workspace
 ARG VCS_REF=unknown
