@@ -7,6 +7,7 @@ Customer / rider / merchant browser
               │ HTTPS
 Cloudflare Tunnel → Caddy :8080 → Python service :8000 → SQLite
                                       ├─ web/ customer and owner pages
+                                      ├─ dynamic provider document requirements
                                       └─ SSE delivery tracking
 ```
 
@@ -25,6 +26,9 @@ database transaction.
   they consume the same API and never create a second source of truth.
 - `docs/openapi.yaml` describes the supported HTTP surface. `/api/health` and
   `/api/ready` are liveness/readiness probes.
+- Provider policies are normalized in SQLite. Uploads are validated by
+  requirement MIME/size rules, stored outside the public web root with `0600`
+  permissions, and exposed only as metadata to owner APIs.
 
 ## Delivery flow
 

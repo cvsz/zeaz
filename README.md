@@ -49,6 +49,7 @@ only in ignored `.env.production` / `.env.payment` / `.env.ai` files.
 | Owner operations | `/ops.html` |
 | Rider registration | `/rider-register.html` |
 | Merchant registration | `/merchant-register.html` |
+| Provider document intake | `/documents.html` (owner key required for upload) |
 | Owner AI console | `/ai.html` |
 | Delivery tracking | `/api/tracking/{trackingCode}` |
 | OpenAPI reference | `docs/openapi.yaml` |
@@ -69,6 +70,11 @@ Read [development](docs/DEVELOPMENT.md), [architecture](docs/ARCHITECTURE.md),
 [database operations](docs/DATABASE.md), [owner operations](docs/operations.md),
 [security controls](docs/security.th.md), and the bilingual roadmap
 ([English](docs/roadmap.en.md) / [ไทย](docs/roadmap.th.md)) before deploying.
+
+Provider rider and merchant checklists are documented under
+[`docs/reference/providers/`](docs/reference/providers/) and rendered from the
+database. Provider policies can change; review the official reference before
+activating an applicant.
 
 The reusable `templates/`, `excel/`, and generation scripts remain available
 for business-kit work, but they are not a replacement for MooPiew's live

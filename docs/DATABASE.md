@@ -13,6 +13,8 @@ explicitly during maintenance.
 | Commerce | menu, orders, order items, status history, coupons, payments |
 | Delivery | rider applications, riders, assignment and tracking state |
 | Partner onboarding | merchant applications and review outcome |
+| Provider policy | providers, services, merchant/vehicle types and effective document requirements |
+| Document workflow | uploaded documents, verification state and append-only history |
 | Operations | inventory, recipes, stock movements, receipts, tax invoices |
 | Customer | customer contact linkage and loyalty ledger |
 | Control plane | audit log and encrypted SCB OAuth tokens when enabled |
@@ -20,6 +22,11 @@ explicitly during maintenance.
 Customer contact data, payment references, coordinates and tokens are private.
 Do not place a populated database, export, `.env*`, certificate or master-data
 file in Git.
+
+The additive provider-document schema is in
+`migrations/001_provider_document_requirements.sql`. Requirements are seeded
+from reviewed Thailand provider references and are queried at runtime; they are
+never encoded as upload buttons or environment variables.
 
 ## Backup and recovery
 
