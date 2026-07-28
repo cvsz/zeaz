@@ -1730,7 +1730,7 @@ class Handler(SimpleHTTPRequestHandler):
                     order=row_order(con,oid)
                     if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
                     if order["status"] in {"cancelled","completed"}:raise ValueError("ออเดอร์นี้ปิดแล้ว ไม่สามารถส่งสำเร็จซ้ำได้")
-                    if order["payment"]["method"]=="scb_qr" and order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงิน SCB ก่อนปิดงานจัดส่ง")
+                    if order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงินก่อนปิดงานจัดส่ง")
                 sql+=" WHERE order_id=?";params.append(oid);con.execute(sql,params)
                 if status=="delivered":
                     con.execute("UPDATE orders SET status='completed' WHERE id=?",(oid,)); con.execute("INSERT INTO order_history(order_id,at,status,actor_role,note) VALUES (?,?,?,?,?)",(oid,now,"completed",role,"delivery_delivered")); self.complete_order_effects(con,oid,order,role)
@@ -1743,6 +1743,7 @@ class Handler(SimpleHTTPRequestHandler):
             existing=con.execute("SELECT * FROM pos_receipts WHERE order_id=?",(oid,)).fetchone()
             if existing:return self.json({"receipt":dict(existing)})
             if order["status"]=="cancelled":raise ValueError("ออเดอร์ถูกยกเลิกแล้ว ไม่สามารถออกใบเสร็จได้")
+            if order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงินก่อนออกใบเสร็จ")
             finance=order["financial"]; now=utcnow(); receipt={"id":f"RCT-{secrets.token_hex(4).upper()}","receipt_number":f"MP-{datetime.now():%Y%m%d}-{secrets.token_hex(3).upper()}","order_id":oid,"customer_tax_name":str(form.get("customer_tax_name","")).strip()[:160],"customer_tax_id":re.sub(r"[^0-9]","",str(form.get("customer_tax_id", "")))[:13],"subtotal":finance["subtotal"],"discount":finance["discount"],"delivery_fee":finance["delivery_fee"],"total":finance["total"],"issued_at":now,"issued_by":role}
             con.execute("INSERT INTO pos_receipts VALUES (?,?,?,?,?,?,?,?,?,?,?)",tuple(receipt[key] for key in ("id","order_id","receipt_number","customer_tax_name","customer_tax_id","subtotal","discount","delivery_fee","total","issued_at","issued_by")));audit(con,role,"issue","pos_receipt",receipt["id"],{"order_id":oid})
         return self.json({"receipt":receipt},201)
@@ -1794,11 +1795,11 @@ class Handler(SimpleHTTPRequestHandler):
             if status=="cancelled" and order["payment"]["status"]=="paid":raise ValueError("ออเดอร์นี้ชำระเงินแล้ว กรุณาดำเนินการคืนเงินก่อนยกเลิก")
             if status=="cancelled" and order["status"]=="completed":raise ValueError("ออเดอร์ที่เสร็จแล้วไม่สามารถยกเลิกได้")
             if status=="completed" and order["status"] in {"cancelled","completed"}:raise ValueError("ออเดอร์นี้ปิดแล้ว ไม่สามารถปิดซ้ำได้")
-            if status=="completed" and order["payment"]["method"]=="scb_qr" and order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงิน SCB ก่อนปิดออเดอร์")
             current_payment=order["payment"]["status"]
             if payment and current_payment=="refunded" and payment!="refunded":raise ValueError("การชำระเงินที่คืนเงินแล้วไม่สามารถเปลี่ยนกลับได้")
             if payment=="refunded" and current_payment!="paid":raise ValueError("ต้องยืนยันยอดชำระเงินก่อนบันทึกการคืนเงิน")
             if payment=="pending" and current_payment in {"paid","refunded"}:raise ValueError("สถานะชำระเงินถอยกลับไม่ได้")
+            if status=="completed" and (payment or current_payment)!="paid":raise ValueError("ต้องยืนยันการชำระเงินก่อนปิดออเดอร์")
             transitions={"staff": {("new","confirmed"), ("ready","completed")}, "kitchen": {("confirmed","ready")}}
             if status and area in transitions and (order["status"], status) not in transitions[area]:
                 raise ValueError("ลำดับสถานะไม่ถูกต้อง")

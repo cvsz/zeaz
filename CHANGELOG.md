@@ -41,6 +41,9 @@
 - Added order identity, cancellation redemption, payment monotonicity,
   financial role isolation and inventory rollback integration coverage, and
   raised the enforced Python coverage floor from 45% to 48%.
+- Required confirmed payment before order or delivery settlement and receipt
+  issuance, added immutable receipt/tax snapshot coverage, and raised the
+  enforced Python coverage floor from 48% to 50%.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,

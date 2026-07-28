@@ -77,6 +77,10 @@ order="$(curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/orders"
 order_id="$(printf '%s' "$order" | "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin)["order"]["id"])')"
 admin_header="$(printf '%s' "$ADMIN_KEY" | base64 | tr -d '\n')"
 
+curl --silent --fail --max-time 3 --request PATCH "$BASE_URL/api/admin/orders/$order_id" \
+  --header 'Content-Type: application/json' \
+  --header "X-Admin-Key-B64: $admin_header" \
+  --data '{"payment_status":"paid"}' >/dev/null
 receipt="$(curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/admin/orders/$order_id/receipt" \
   --header 'Content-Type: application/json' \
   --header "X-Admin-Key-B64: $admin_header" \
@@ -100,6 +104,10 @@ assert "onclick=" not in body
 assert "addEventListener('click',()=>window.print())" in body
 PY
 
+curl --silent --fail --max-time 3 --request PATCH "$BASE_URL/api/admin/orders/$order_id" \
+  --header 'Content-Type: application/json' \
+  --header "X-Admin-Key-B64: $admin_header" \
+  --data '{"payment_status":"refunded"}' >/dev/null
 curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/order-lookup" \
   --header 'Content-Type: application/json' \
   --data "{\"order_id\":\"$order_id\",\"phone\":\"0812345678\"}" >"$TMP_DIR/lookup.json"

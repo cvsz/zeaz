@@ -98,9 +98,9 @@ paths:
   /api/admin/delivery-pricing:
     post: {summary: Update delivery fee policy and store coordinates, security: [{adminKey: []}], responses: {'200': {description: Updated}}}
   /api/admin/deliveries/{orderId}:
-    patch: {summary: Assign rider or update delivery status, security: [{adminKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}}}
+    patch: {summary: Assign rider or update delivery status; delivered settlement requires confirmed payment, security: [{adminKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}, '400': {description: Invalid transition or payment is not confirmed}}}
   /api/staff/deliveries/{orderId}:
-    patch: {summary: Update delivery status as staff, security: [{employeeKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}}}
+    patch: {summary: Update delivery status as staff; delivered settlement requires confirmed payment, security: [{employeeKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}, '400': {description: Invalid transition or payment is not confirmed}}}
   /api/admin/inventory:
     post: {summary: Create inventory item, security: [{adminKey: []}], responses: {'201': {description: Created}}}
   /api/admin/inventory/adjust:
@@ -112,17 +112,17 @@ paths:
   /api/admin/business-profile:
     post: {summary: Update business profile for receipts and tax invoices, security: [{adminKey: []}], responses: {'200': {description: Updated}}}
   /api/admin/orders/{orderId}:
-    patch: {summary: Update order as owner, security: [{adminKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}}}
+    patch: {summary: Update order as owner; completion requires an existing or atomic paid transition, security: [{adminKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}, '400': {description: Invalid status or payment transition}}}
   /api/staff/orders/{orderId}:
     patch: {summary: Update order as staff, security: [{employeeKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}}}
   /api/kitchen/orders/{orderId}:
     patch: {summary: Update order as kitchen, security: [{kitchenKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}}}
   /api/admin/orders/{orderId}/receipt:
-    post: {summary: Issue or retrieve receipt for an order, security: [{adminKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'201': {description: Receipt}}}
+    post: {summary: Issue or retrieve an immutable receipt snapshot after confirmed payment, security: [{adminKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Existing receipt}, '201': {description: Receipt issued}, '400': {description: Order is cancelled or payment is not confirmed}}}
   /api/admin/receipts/{receiptId}/print:
     get: {summary: Render printable receipt HTML, security: [{adminKey: []}], parameters: [{name: receiptId, in: path, required: true, schema: {$ref: '#/components/schemas/ReceiptId'}}], responses: {'200': {description: Printable receipt}}}
   /api/admin/receipts/{receiptId}/tax-invoice:
-    post: {summary: Issue or retrieve tax invoice for a receipt, security: [{adminKey: []}], parameters: [{name: receiptId, in: path, required: true, schema: {$ref: '#/components/schemas/ReceiptId'}}], responses: {'201': {description: Tax invoice}}}
+    post: {summary: Issue or retrieve an idempotent tax invoice from the receipt snapshot, security: [{adminKey: []}], parameters: [{name: receiptId, in: path, required: true, schema: {$ref: '#/components/schemas/ReceiptId'}}], responses: {'200': {description: Existing tax invoice}, '201': {description: Tax invoice issued}, '400': {description: Seller VAT profile or buyer data is incomplete}}}
   /api/admin/payments/scb/{paymentId}/inquire:
     post: {summary: Verify pending SCB payment with provider inquiry, security: [{adminKey: []}], parameters: [{name: paymentId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Inquiry result}}}
   /api/staff/dashboard:

@@ -4,8 +4,8 @@ The canonical machine-readable results are `dashboard/data/*.json`, regenerated
 by `scripts/ci/evidence.py` and uploaded by `.github/workflows/validate.yml`.
 At this revision:
 
-- `python3 scripts/ci/evidence.py coverage` — 83 tests passed; 48.97% measured
-  Python line coverage with a 48% minimum gate; `app.py` measured 45.60%.
+- `python3 scripts/ci/evidence.py coverage` — 87 tests passed; 51.35% measured
+  Python line coverage with a 50% minimum gate; `app.py` measured 48.33%.
 - `npm run validate` — lint, TypeScript type checking, workspace build and
   Python tests passed.
 - `python3 scripts/ci/evidence.py security` — Python and npm dependency audits
@@ -19,4 +19,4 @@ At this revision:
 
 The coverage gate is a regression floor, not a production-readiness claim.
 Risk-based integration coverage must continue to prioritize authorization,
-payment, document lifecycle and destructive administrative mutations.
+financial lifecycle and destructive administrative mutations.

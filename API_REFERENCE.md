@@ -16,3 +16,9 @@ Provider document-policy versions use end-exclusive UTC effective windows.
 `PATCH /api/admin/document-requirements/{requirementId}` closes the current
 version and creates one successor atomically; historical versions are
 read-only and cannot authorize new uploads.
+
+Order completion and delivery settlement require confirmed payment. An owner
+may atomically send `status=completed` with `payment_status=paid`; staff cannot
+change financial state. Receipts are immutable financial snapshots issued only
+after payment is confirmed, and repeated receipt or tax-invoice requests
+return the existing record rather than creating another document.
