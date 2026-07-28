@@ -5,6 +5,24 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 python3 -m py_compile "$ROOT/app.py"
 ROOT="$ROOT" python3 - <<'PY'
 import os
+from pathlib import Path
+
+document = (Path(os.environ["ROOT"]) / "docs/openapi.yaml").read_text(encoding="utf-8")
+assert document.startswith("openapi: 3.1.0\n")
+for path in (
+    "/api/orders/{orderId}/cancel:",
+    "/api/admin/dashboard:",
+    "/api/admin/scb/auth/start:",
+    "/api/admin/inventory/adjust:",
+    "/api/admin/receipts/{receiptId}/print:",
+    "/api/staff/orders/{orderId}:",
+    "/api/kitchen/orders/{orderId}:",
+):
+    assert path in document, path
+print("OpenAPI published-route coverage checks passed.")
+PY
+ROOT="$ROOT" python3 - <<'PY'
+import os
 import sys
 from http.server import BaseHTTPRequestHandler
 from email.message import Message
