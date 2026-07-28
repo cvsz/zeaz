@@ -26,13 +26,16 @@ check_secret_file() {
 }
 check_secret_file "$APP_ENV"
 check_secret_file "$CF_ENV"
-for optional in "$ROOT/.env.payment" "$ROOT/.env.ai"; do
+for optional in "$ROOT/.env.payment" "$ROOT/.env.ai" "$ROOT/.env.dashboard"; do
   [[ ! -e "$optional" ]] || check_secret_file "$optional"
 done
 set -a
 # shellcheck disable=SC1090
 source "$APP_ENV"
+# shellcheck disable=SC1091
 [[ -f "$ROOT/.env.payment" ]] && source "$ROOT/.env.payment"
+# shellcheck disable=SC1091
+[[ -f "$ROOT/.env.dashboard" ]] && source "$ROOT/.env.dashboard"
 # shellcheck disable=SC1090
 source "$CF_ENV"
 set +a
@@ -77,7 +80,40 @@ check_url "http://127.0.0.1:8082/api/health" || {
 check_url "https://${MOOPIEW_HOSTNAME:-moopiew.zeaz.dev}/api/menu" || {
   echo "Public tunnel health check failed" >&2; exit 1;
 }
-check_url "https://${PIEWDASH_HOSTNAME:-piewdash.zeaz.dev}/api/health" || {
-  echo "Public engineering dashboard failed" >&2; exit 1;
+[[ -n "${PIEWDASH_BASIC_AUTH_USER:-}" && -n "${PIEWDASH_BASIC_AUTH_PASSWORD:-}" ]] || {
+  echo "Dashboard Basic Auth credentials are required" >&2; exit 1;
+}
+check_dashboard_url() {
+  local url="$1" attempts=0
+  while (( attempts < 10 )); do
+    curl --fail --silent --show-error --max-time 10 \
+      --user "$PIEWDASH_BASIC_AUTH_USER:$PIEWDASH_BASIC_AUTH_PASSWORD" \
+      --header "Host: ${PIEWDASH_HOSTNAME:-piewdash.zeaz.dev}" \
+      "$url" >/dev/null && return 0
+    attempts=$((attempts + 1)); sleep 1
+  done
+  return 1
+}
+check_dashboard_url "http://127.0.0.1/api/health" || {
+  echo "Dashboard origin Basic Auth check failed" >&2; exit 1;
+}
+check_access_challenge() {
+  local url="$1" attempts=0 headers status location
+  while (( attempts < 10 )); do
+    headers="$(curl --silent --show-error --dump-header - --output /dev/null \
+      --max-time 10 "$url")" || true
+    status="$(awk 'NR == 1 { print $2 }' <<<"$headers")"
+    location="$(awk 'BEGIN { IGNORECASE=1 } /^location:/ { print $2 }' \
+      <<<"$headers" | tr -d '\r' | head -1)"
+    if [[ "$status" == "302" &&
+      "$location" == https://*.cloudflareaccess.com/cdn-cgi/access/login/* ]]; then
+      return 0
+    fi
+    attempts=$((attempts + 1)); sleep 1
+  done
+  return 1
+}
+check_access_challenge "https://${PIEWDASH_HOSTNAME:-piewdash.zeaz.dev}/api/health" || {
+  echo "Public dashboard is not protected by Cloudflare Access" >&2; exit 1;
 }
 echo "Production checks passed."

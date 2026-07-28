@@ -31,6 +31,27 @@ resource "cloudflare_dns_record" "piewdash" {
   comment = "MooPiew engineering dashboard via Cloudflare Tunnel"
 }
 
+resource "cloudflare_zero_trust_access_application" "piewdash" {
+  account_id                 = var.cloudflare_account_id
+  name                       = "MooPiew Engineering Dashboard"
+  domain                     = var.piewdash_hostname
+  type                       = "self_hosted"
+  session_duration           = "8h"
+  app_launcher_visible       = false
+  enable_binding_cookie      = true
+  http_only_cookie_attribute = true
+
+  policies = [{
+    name       = "Approved dashboard operators"
+    precedence = 1
+    decision   = "allow"
+    include = [
+      for email in sort(tolist(var.piewdash_access_allowed_emails)) :
+      { email = { email = lower(email) } }
+    ]
+  }]
+}
+
 # This is deliberately opt-in: applying it without first importing a live
 # tunnel configuration could replace unrelated ingress rules.
 resource "cloudflare_zero_trust_tunnel_cloudflared_config" "moopiew" {

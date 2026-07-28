@@ -8,6 +8,11 @@ output "piewdash_url" {
   description = "Public engineering dashboard URL."
 }
 
+output "piewdash_access_audience" {
+  value       = cloudflare_zero_trust_access_application.piewdash.aud
+  description = "Audience claim expected on Cloudflare Access JWTs for the dashboard."
+}
+
 output "cloudflared_ingress" {
   value = [
     { hostname = var.moopiew_hostname, service = var.moopiew_origin },

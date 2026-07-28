@@ -14,6 +14,10 @@ set +a
 for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_ZONE_ID CLOUDFLARE_TUNNEL_ID; do
   [[ -n "${!key:-}" ]] || { echo "Missing $key in $ENV_FILE" >&2; exit 1; }
 done
+[[ -n "${PIEWDASH_ACCESS_ALLOWED_EMAILS:-}" ]] || {
+  echo "Missing PIEWDASH_ACCESS_ALLOWED_EMAILS JSON array in $ENV_FILE" >&2
+  exit 1
+}
 
 TF_BIN="${TERRAFORM_BIN:-$ROOT/tools/bin/terraform}"
 command -v "$TF_BIN" >/dev/null || { echo "Terraform not found. See infrastructure/terraform/cloudflare/README.md" >&2; exit 1; }
@@ -27,6 +31,7 @@ export TF_VAR_moopiew_hostname="${MOOPIEW_HOSTNAME:-moopiew.zeaz.dev}"
 export TF_VAR_moopiew_origin="${MOOPIEW_ORIGIN:-http://127.0.0.1:8080}"
 export TF_VAR_piewdash_hostname="${PIEWDASH_HOSTNAME:-piewdash.zeaz.dev}"
 export TF_VAR_piewdash_origin="${PIEWDASH_ORIGIN:-http://127.0.0.1:8082}"
+export TF_VAR_piewdash_access_allowed_emails="$PIEWDASH_ACCESS_ALLOWED_EMAILS"
 
 "$TF_BIN" -chdir="$STACK" fmt -check -recursive
 "$TF_BIN" -chdir="$STACK" init

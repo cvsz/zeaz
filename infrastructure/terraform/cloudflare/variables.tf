@@ -82,6 +82,19 @@ variable "piewdash_origin" {
   }
 }
 
+variable "piewdash_access_allowed_emails" {
+  type        = set(string)
+  description = "Exact operator emails allowed through Cloudflare Access."
+
+  validation {
+    condition = length(var.piewdash_access_allowed_emails) > 0 && alltrue([
+      for email in var.piewdash_access_allowed_emails :
+      can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$", lower(email)))
+    ])
+    error_message = "piewdash_access_allowed_emails must contain at least one valid operator email."
+  }
+}
+
 variable "manage_tunnel_config" {
   type        = bool
   default     = false

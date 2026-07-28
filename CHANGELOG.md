@@ -4,6 +4,8 @@
 
 - Added the live engineering dashboard, CI evidence reports, Docker deployment,
   Kubernetes manifests, and the `piewdash.zeaz.dev` Cloudflare route.
+- Restricted the engineering dashboard with exact-email Cloudflare Access and
+  environment-backed Caddy Basic Auth defense in depth.
 - Consolidated SQLite schema ownership into checksummed migrations with
   concurrency and legacy-upgrade regression coverage.
 - Added strict OpenAPI route validation, rendered Kubernetes schema validation,

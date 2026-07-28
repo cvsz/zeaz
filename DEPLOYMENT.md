@@ -19,7 +19,10 @@ The supported single-host dashboard service is
 loopback origin through Caddy. Because the shared tunnel wildcard uses port 80,
 install `deploy/systemd/moopiew-proxy-system@.service` as the system-level
 reverse proxy; it runs as the selected user with only
-`CAP_NET_BIND_SERVICE`. Public access must be protected with Cloudflare Access.
+`CAP_NET_BIND_SERVICE`. Public access is protected by a Terraform-managed
+Cloudflare Access application restricted to exact operator emails and by
+environment-backed Caddy Basic Auth at the origin. Keep `.env.dashboard` mode
+`0600`; anonymous requests must never return dashboard data.
 
 The application requires a dedicated `DOCUMENT_ENCRYPTION_KEY` before document
 onboarding is enabled. Run the hash-verified legacy migration and enable

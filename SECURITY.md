@@ -18,6 +18,13 @@ CodeQL and vulnerability status must be read from CI evidence; this document
 does not assert zero findings. Rotate any credential that has appeared in logs,
 shell history, or shared files.
 
+The engineering dashboard is operational telemetry, not a public endpoint.
+Terraform restricts Cloudflare Access to an explicit, nonempty set of exact
+operator emails; `everyone` and domain-wide rules are prohibited. Caddy Basic
+Auth provides independent origin enforcement using credentials stored only in
+the mode-`0600` ignored `.env.dashboard` file. The Caddy systemd unit must not
+use `--environ`, which would write those credentials to the service journal.
+
 Forwarded client IP headers are ignored by default. Enable
 `TRUST_CF_CONNECTING_IP` only when direct application access is prevented and
 the loopback proxy chain is the sole caller; otherwise local header spoofing can

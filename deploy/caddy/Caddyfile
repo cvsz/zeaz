@@ -6,6 +6,10 @@
 http://piewdash.zeaz.dev:80 {
 	bind 127.0.0.1
 
+	basicauth {
+		{$PIEWDASH_BASIC_AUTH_USER} {$PIEWDASH_BASIC_AUTH_HASH}
+	}
+
 	header {
 		-Server
 		X-Content-Type-Options "nosniff"

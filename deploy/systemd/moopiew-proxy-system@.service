@@ -9,7 +9,8 @@ User=%i
 Group=%i
 WorkingDirectory=/home/%i/zeaz
 Environment=HOME=/home/%i
-ExecStart=/usr/bin/caddy run --environ --config /home/%i/zeaz/deploy/caddy/Caddyfile --adapter caddyfile
+EnvironmentFile=/home/%i/zeaz/.env.dashboard
+ExecStart=/usr/bin/caddy run --config /home/%i/zeaz/deploy/caddy/Caddyfile --adapter caddyfile
 ExecReload=/usr/bin/caddy reload --config /home/%i/zeaz/deploy/caddy/Caddyfile --adapter caddyfile
 Restart=always
 RestartSec=5
