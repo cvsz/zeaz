@@ -758,13 +758,21 @@ class Handler(SimpleHTTPRequestHandler):
     def log_message(self, format, *args): print(f"[{self.log_date_time_string()}] {format % args}")
     def end_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("X-Frame-Options", "DENY"); self.send_header("Referrer-Policy", "strict-origin-when-cross-origin"); self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)")
-        self.send_header("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+        nonce=getattr(self,"_script_nonce","")
+        script_source="script-src 'self'" + (f" 'nonce-{nonce}'" if nonce else "")
+        self.send_header("Content-Security-Policy", f"default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; {script_source}; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
         if urlparse(self.path).path in {"/admin.html", "/admin.js", "/ops.html", "/ops.js", "/api-monitor.html", "/api-monitor.js", "/api-monitor.css"}: self.send_header("Cache-Control", "no-store, max-age=0")
         super().end_headers()
     def json(self, payload, status=200):
         encoded=json.dumps(payload, ensure_ascii=False).encode(); self.send_response(status); self.send_header("Content-Type", "application/json; charset=utf-8"); self.send_header("Content-Length", str(len(encoded))); self.send_header("Cache-Control", "no-store"); self.end_headers(); self.wfile.write(encoded)
-    def html(self, content, status=200):
-        encoded=content.encode(); self.send_response(status); self.send_header("Content-Type", "text/html; charset=utf-8"); self.send_header("Content-Length",str(len(encoded))); self.send_header("Cache-Control","no-store"); self.end_headers(); self.wfile.write(encoded)
+    def html(self, content, status=200, script_nonce=""):
+        # Only trusted server-rendered pages may opt into one nonce-bound
+        # inline script.  Static pages keep the strict no-inline-script CSP.
+        self._script_nonce=script_nonce
+        try:
+            encoded=content.encode(); self.send_response(status); self.send_header("Content-Type", "text/html; charset=utf-8"); self.send_header("Content-Length",str(len(encoded))); self.send_header("Cache-Control","no-store"); self.end_headers(); self.wfile.write(encoded)
+        finally:
+            self._script_nonce=""
     def body(self):
         try: length=int(self.headers.get("Content-Length", "0"))
         except ValueError: raise ValueError("ขนาดข้อมูลไม่ถูกต้อง")
@@ -1325,7 +1333,8 @@ class Handler(SimpleHTTPRequestHandler):
         invoice=con.execute("SELECT * FROM tax_invoices WHERE receipt_id=?",(receipt_id,)).fetchone(); order=row_order(con,receipt["order_id"])
         lines="".join(f"<tr><td>{escape_html(item['name'])}</td><td>{item['quantity']}</td><td>{item['unit_price']}</td><td>{item['quantity']*item['unit_price']}</td></tr>" for item in order["items"])
         tax="" if not invoice else f"<h2>ใบกำกับภาษี / TAX INVOICE</h2><p>เลขที่ {escape_html(invoice['tax_invoice_number'])}<br>ผู้ขาย: {escape_html(invoice['seller_name'])}<br>เลขประจำตัวผู้เสียภาษี: {escape_html(invoice['seller_tax_id'])}<br>ที่อยู่: {escape_html(invoice['seller_address'])}<br>ผู้ซื้อ: {escape_html(invoice['buyer_name'])}</p><p>มูลค่าก่อน VAT {invoice['amount_before_vat']} · VAT {invoice['vat_rate']}% {invoice['vat_amount']} · รวม {invoice['total']} บาท</p>"
-        return self.html(f"<!doctype html><meta charset='utf-8'><title>{escape_html(receipt['receipt_number'])}</title><style>body{{font-family:sans-serif;max-width:720px;margin:32px auto}}table{{width:100%;border-collapse:collapse}}td,th{{padding:7px;border-bottom:1px solid #ddd;text-align:left}}@media print{{button{{display:none}}}}</style><button onclick='print()'>พิมพ์</button><h1>{escape_html(conf['store_name'])}</h1><h2>ใบเสร็จรับเงิน / RECEIPT</h2><p>เลขที่ {escape_html(receipt['receipt_number'])}<br>ออเดอร์ {escape_html(receipt['order_id'])}<br>ออกเมื่อ {escape_html(receipt['issued_at'])}</p><table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา</th><th>รวม</th></tr>{lines}</table><p>สินค้า {receipt['subtotal']} · ส่วนลด {receipt['discount']} · ค่าส่ง {receipt['delivery_fee']}<br><strong>รวมทั้งสิ้น {receipt['total']} บาท</strong></p>{tax}")
+        nonce=secrets.token_urlsafe(18)
+        return self.html(f"<!doctype html><meta charset='utf-8'><title>{escape_html(receipt['receipt_number'])}</title><style>body{{font-family:sans-serif;max-width:720px;margin:32px auto}}table{{width:100%;border-collapse:collapse}}td,th{{padding:7px;border-bottom:1px solid #ddd;text-align:left}}@media print{{button{{display:none}}}}</style><button id='print-receipt' type='button'>พิมพ์</button><h1>{escape_html(conf['store_name'])}</h1><h2>ใบเสร็จรับเงิน / RECEIPT</h2><p>เลขที่ {escape_html(receipt['receipt_number'])}<br>ออเดอร์ {escape_html(receipt['order_id'])}<br>ออกเมื่อ {escape_html(receipt['issued_at'])}</p><table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา</th><th>รวม</th></tr>{lines}</table><p>สินค้า {receipt['subtotal']} · ส่วนลด {receipt['discount']} · ค่าส่ง {receipt['delivery_fee']}<br><strong>รวมทั้งสิ้น {receipt['total']} บาท</strong></p>{tax}<script nonce='{nonce}'>document.getElementById('print-receipt').addEventListener('click',()=>window.print());</script>",script_nonce=nonce)
     def update_order(self,oid,form,role,area):
         allowed={"admin":set(STATUS),"staff":{"confirmed","ready","completed"},"kitchen":{"ready"}}[area]
         status=str(form.get("status", "")); payment=str(form.get("payment_status", ""))
