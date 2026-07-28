@@ -3,7 +3,10 @@ const publicEndpoints=[
   ['Platform status','/api/status'],['Live storefront menu','/api/menu'],
   ['SCB public configuration','/api/payments/scb/config'],
 ];
-const protectedEndpoints=[['AI catalog configuration','/api/admin/ai/config'],['Live AI model catalog','/api/admin/ai/models']];
+const protectedEndpoints=[
+  ['Admin menu configuration','/api/admin/menu'],['SCB authorization status','/api/admin/scb/auth/status'],
+  ['AI catalog configuration','/api/admin/ai/config'],['Live AI model catalog','/api/admin/ai/models'],
+];
 const $=(selector)=>document.querySelector(selector);
 
 async function check(name,url,adminKey=''){
@@ -12,7 +15,8 @@ async function check(name,url,adminKey=''){
     const response=await fetch(url,{cache:'no-store',headers:adminKey?{'X-Admin-Key':adminKey}:{}});
     let data={};try{data=await response.json();}catch{}
     const protectedRoute=response.status===401&&Boolean(adminKey)===false;
-    const detail=data.status||data.service||data.store_name||data.error||(protectedRoute?'ต้องใช้ Admin key':'ok');
+    const aiCount=Array.isArray(data.models)?`${data.models.length} โมเดล` : '';
+    const detail=data.status||data.service||data.store_name||data.error||aiCount||(protectedRoute?'ต้องใช้ Admin key':'ok');
     return{name,url,ok:response.ok,protected:protectedRoute,status:response.status,ms:Math.round(performance.now()-started),detail};
   }catch(error){return{name,url,ok:false,protected:false,status:0,ms:Math.round(performance.now()-started),detail:'เชื่อมต่อไม่ได้'};}
 }
@@ -35,4 +39,4 @@ async function render(includeAdmin=false){
   else {renderRows('#protected-checks',protectedEndpoints.map(([name,url])=>({name,url,ok:false,protected:true,status:401,ms:0,detail:'กรอก Admin key เพื่อทดสอบ'})));$('#admin-note').textContent='เว้นว่างไว้ได้ — ระบบจะตรวจเฉพาะ public API';}
   $('#updated').textContent=`อัปเดต ${new Date().toLocaleString('th-TH')} · รีเฟรชอัตโนมัติทุก 30 วินาที`;
 }
-$('#refresh').onclick=()=>render(Boolean($('#admin-key').value.trim()));$('#check-admin').onclick=()=>render(true);render();setInterval(()=>render(Boolean($('#admin-key').value.trim())),30000);
+$('#refresh').onclick=()=>render();$('#check-admin').onclick=()=>render(true);render();setInterval(()=>render(),30000);
