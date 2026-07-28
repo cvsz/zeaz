@@ -13,6 +13,8 @@
   and feature-gated S256 PKCE using encrypted one-time verifiers.
 - Added cross-process SQLite serialization for critical commerce mutations,
   unique order inventory consumption, and isolated backup restore drills.
+- Added tagged GHCR publication for application and dashboard images with OCI
+  SBOMs, maximum BuildKit provenance, and GitHub digest attestations.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,

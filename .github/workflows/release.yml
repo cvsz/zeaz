@@ -94,3 +94,78 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${{ github.ref_name }}" moopiew-* --generate-notes --verify-tag
+
+  images:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Define immutable image coordinates
+        id: images
+        shell: bash
+        run: |
+          repository="${GITHUB_REPOSITORY,,}"
+          release_tag="${GITHUB_REF_NAME//\//-}"
+          echo "app=ghcr.io/$repository/moopiew" >> "$GITHUB_OUTPUT"
+          echo "dashboard=ghcr.io/$repository/dashboard" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Build and publish application image
+        id: app
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          push: true
+          sbom: true
+          provenance: mode=max
+          build-args: VCS_REF=${{ github.sha }}
+          tags: |
+            ${{ steps.images.outputs.app }}:${{ steps.images.outputs.release_tag }}
+            ${{ steps.images.outputs.app }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+      - name: Attest application image
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v4.1.1
+        with:
+          subject-name: ${{ steps.images.outputs.app }}
+          subject-digest: ${{ steps.app.outputs.digest }}
+          push-to-registry: true
+      - name: Build and publish dashboard image
+        id: dashboard
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: dashboard/Dockerfile
+          push: true
+          sbom: true
+          provenance: mode=max
+          build-args: VCS_REF=${{ github.sha }}
+          tags: |
+            ${{ steps.images.outputs.dashboard }}:${{ steps.images.outputs.release_tag }}
+            ${{ steps.images.outputs.dashboard }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+      - name: Attest dashboard image
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v4.1.1
+        with:
+          subject-name: ${{ steps.images.outputs.dashboard }}
+          subject-digest: ${{ steps.dashboard.outputs.digest }}
+          push-to-registry: true

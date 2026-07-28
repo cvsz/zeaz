@@ -21,17 +21,25 @@ install `deploy/systemd/moopiew-proxy-system@.service` as the system-level
 reverse proxy; it runs as the selected user with only
 `CAP_NET_BIND_SERVICE`. Public access must be protected with Cloudflare Access.
 
-Release archives are produced only after validation and container builds by
-`.github/workflows/release.yml`. Each release bundle includes npm and Python
-CycloneDX SBOMs plus a SHA-256 manifest, and GitHub signs a Sigstore-backed SLSA
-build-provenance attestation for every listed artifact. Verify a downloaded
-bundle before deployment:
+Release archives and GHCR images are produced only after validation and
+container builds by `.github/workflows/release.yml`. Each release bundle
+includes npm and Python CycloneDX SBOMs plus a SHA-256 manifest. The application
+and dashboard OCI images include BuildKit SBOM/provenance attestations and
+GitHub signs a separate Sigstore-backed build-provenance attestation over each
+published digest. No mutable `latest` tag is published. Verify artifacts before
+deployment:
 
 ```bash
 sha256sum --check moopiew-<version>.sha256
 gh attestation verify moopiew-<version>.zip --repo cvsz/zeaz
+gh attestation verify \
+  oci://ghcr.io/cvsz/zeaz/moopiew:<version> --repo cvsz/zeaz
+gh attestation verify \
+  oci://ghcr.io/cvsz/zeaz/dashboard:<version> --repo cvsz/zeaz
 ```
 
-Rollback by redeploying the previously verified source archive and restoring a
-compatible verified database backup when a migration was applied. Automated
-container image publication remains a production-readiness gap.
+Resolve the verified tag to its digest and deploy
+`ghcr.io/cvsz/zeaz/<image>@sha256:<digest>`; Kubernetes manifests must never
+consume a mutable release tag. Roll back by redeploying the previous verified
+digest and restoring a compatible verified database backup when a migration
+was applied.

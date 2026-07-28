@@ -19,4 +19,6 @@ recognize. It is deliberately excluded from the application container.
 CI runs `pip check`, a strict `pip-audit` scan of runtime requirements, and
 `npm audit --audit-level=moderate` across runtime and development dependencies.
 Releases include deterministic npm-lock and Python CycloneDX SBOMs, SHA-256
-checksums, and a signed GitHub/Sigstore build-provenance attestation.
+checksums, and signed GitHub/Sigstore build-provenance attestations. Published
+GHCR images additionally carry BuildKit-generated OCI SBOM and provenance
+attestations bound to immutable image digests.
