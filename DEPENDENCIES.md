@@ -3,10 +3,16 @@
 Dependency declarations are authoritative in:
 
 - Python runtime: `requirements.txt`
+- Python validation and test tooling: `requirements-dev.txt`
 - Node workspace: `package.json`, workspace `package.json` files, and
   `package-lock.json`
 - Terraform: `infrastructure/terraform/cloudflare/.terraform.lock.hcl`
 - Container runtime: `dashboard/Dockerfile`
+
+PyYAML is validation-only: it parses the OpenAPI contract so CI can reject
+invalid YAML, broken local references, incomplete protected-route security
+metadata, and published operations that the isolated application does not
+recognize. It is deliberately excluded from the application container.
 
 CI currently runs `npm audit --omit=dev --audit-level=high` and `pip check`.
 These do not constitute a complete vulnerability assessment: Python

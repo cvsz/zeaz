@@ -29,7 +29,7 @@ jobs:
           cache: npm
       - name: Install validation dependencies
         run: |
-          python3 -m pip install --requirement requirements.txt
+          python3 -m pip install --requirement requirements-dev.txt
           npm ci
       - name: Check shell syntax
         run: find scripts assets/asset-generator -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n

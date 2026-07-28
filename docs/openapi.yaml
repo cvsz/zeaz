@@ -44,8 +44,8 @@ paths:
   /api/documents/upload:
     post: {summary: Upload a validated document for an onboarding requirement, security: [{adminKey: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DocumentUploadRequest'}}}}, responses: {'201': {description: Uploaded}, '400': {description: Validation failure}}}
   /api/documents/{documentId}:
-    patch: {summary: Verify or reject an uploaded document, security: [{adminKey: []}], parameters: [{name: documentId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Updated}}
-    delete: {summary: Soft-delete and remove an uploaded document, security: [{adminKey: []}], parameters: [{name: documentId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Deleted}}
+    patch: {summary: Verify or reject an uploaded document, security: [{adminKey: []}], parameters: [{name: documentId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Updated}}}
+    delete: {summary: Soft-delete and remove an uploaded document, security: [{adminKey: []}], parameters: [{name: documentId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Deleted}}}
   /api/documents/status:
     get: {summary: List document status for owner review, security: [{adminKey: []}], responses: {'200': {description: Document status}}}
   /api/documents/history:

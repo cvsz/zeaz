@@ -1162,7 +1162,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.register_merchant(form)
             if path in {"/api/documents/upload","/documents/upload"}:
                 role=self.require("admin")
-                if role:return self.upload_document(form,role)
+                if not role:return
+                return self.upload_document(form,role)
             if path=="/api/delivery/quote":
                 if not self.rate("quote"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.delivery_quote(form)
@@ -1178,10 +1179,12 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.lookup_order(form)
             if path=="/api/admin/ai/chat":
                 role=self.require("admin")
-                if role: return self.ai_chat(form,role)
+                if not role:return
+                return self.ai_chat(form,role)
             if path=="/api/admin/menu":
                 role=self.require("admin")
-                if role: return self.create_menu_item(form,role)
+                if not role:return
+                return self.create_menu_item(form,role)
             admin_actions={
                 "/api/admin/riders":self.create_rider,
                 "/api/admin/delivery-zones":self.create_delivery_zone,
@@ -1194,19 +1197,23 @@ class Handler(SimpleHTTPRequestHandler):
             }
             if path in admin_actions:
                 role=self.require("admin")
-                if role:return admin_actions[path](form,role)
+                if not role:return
+                return admin_actions[path](form,role)
             receipt=re.fullmatch(r"/api/admin/orders/(MPP-[A-Z0-9-]+)/receipt",path)
             if receipt:
                 role=self.require("admin")
-                if role:return self.issue_receipt(receipt.group(1),form,role)
+                if not role:return
+                return self.issue_receipt(receipt.group(1),form,role)
             invoice=re.fullmatch(r"/api/admin/receipts/(RCT-[A-Z0-9-]+)/tax-invoice",path)
             if invoice:
                 role=self.require("admin")
-                if role:return self.issue_tax_invoice(invoice.group(1),form,role)
+                if not role:return
+                return self.issue_tax_invoice(invoice.group(1),form,role)
             inquiry=re.fullmatch(r"/api/admin/payments/scb/(PAY-SCB-[A-Z0-9-]+)/inquire",path)
             if inquiry:
                 role=self.require("admin")
-                if role: return self.inquire_scb_payment(inquiry.group(1),role)
+                if not role:return
+                return self.inquire_scb_payment(inquiry.group(1),role)
             if path.endswith("/cancel") and re.fullmatch(r"/api/orders/MPP-[A-Z0-9-]+/cancel",path):
                 if not self.rate("lookup"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.cancel_order(path.split("/")[3],form)

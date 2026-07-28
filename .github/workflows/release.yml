@@ -25,7 +25,7 @@ jobs:
           cache: npm
       - name: Install validation dependencies
         run: |
-          python3 -m pip install --requirement requirements.txt
+          python3 -m pip install --requirement requirements-dev.txt
           npm ci
       - name: Validate release source
         run: |
