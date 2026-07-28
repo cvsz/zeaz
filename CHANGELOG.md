@@ -38,6 +38,9 @@
 - Added HTTP-level authorization, secure document deletion, malformed upload
   and SCB callback failure coverage, and raised the enforced Python coverage
   floor from 40% to 45%.
+- Added order identity, cancellation redemption, payment monotonicity,
+  financial role isolation and inventory rollback integration coverage, and
+  raised the enforced Python coverage floor from 45% to 48%.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,
