@@ -45,6 +45,8 @@ BytePlus ModelArk keys are scoped to their region and project. The checker uses
 the official Southeast Asia data-plane endpoint and deliberately leaves a
 failing BytePlus key out of the runtime catalog until that endpoint authorizes
 it; this prevents a mismatched regional key from being presented as usable.
+Use `ARK_API_KEY` for a ModelArk inference key. `BYTEPLUS_API_KEY` remains a
+temporary vault alias only, so existing installations can migrate safely.
 
 For an operator refresh, run `./scripts/refresh-ai-catalog.sh`. It performs the
 credential sync, writes the credential-free health report, restarts the local

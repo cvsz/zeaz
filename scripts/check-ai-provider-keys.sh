@@ -21,7 +21,7 @@ const read = (key) => {
 };
 const probes = [
   ["anthropic", "ANTHROPIC_API_KEY", "https://api.anthropic.com/v1/models", (key) => ({"x-api-key": key, "anthropic-version": "2023-06-01"})],
-  ["byteplus", "BYTEPLUS_API_KEY", "https://ark.ap-southeast.bytepluses.com/api/v3/models", (key) => ({authorization: `Bearer ${key}`})],
+  ["byteplus", ["ARK_API_KEY", "BYTEPLUS_API_KEY"], "https://ark.ap-southeast.bytepluses.com/api/v3/models", (key) => ({authorization: `Bearer ${key}`})],
   ["cerebras", "CEREBRAS_API_KEY", "https://api.cerebras.ai/v1/models", (key) => ({authorization: `Bearer ${key}`})],
   ["deepseek", "DEEPSEEK_API_KEY", "https://api.deepseek.com/models", (key) => ({authorization: `Bearer ${key}`})],
   ["fireworks", "FIREWORKS_API_KEY", "https://api.fireworks.ai/inference/v1/models", (key) => ({authorization: `Bearer ${key}`})],
@@ -57,10 +57,12 @@ const request = (url, headers) => new Promise((resolve) => {
 (async () => {
   const results = [];
   for (const [provider, variable, url, makeHeaders] of probes) {
-    const key = read(variable);
-    if (!key) { results.push({provider, variable, configured: false, live: false, status: null, models: null}); continue; }
+    const variables = Array.isArray(variable) ? variable : [variable];
+    const selected = variables.find((name) => read(name));
+    const key = selected ? read(selected) : "";
+    if (!key) { results.push({provider, variable: variables.join("|"), configured: false, live: false, status: null, models: null}); continue; }
     const response = await request(url, makeHeaders(key));
-    results.push({provider, variable, configured: true, live: response.status >= 200 && response.status < 300, status: response.status || null, models: response.models});
+    results.push({provider, variable: selected, configured: true, live: response.status >= 200 && response.status < 300, status: response.status || null, models: response.models});
   }
   const report = {generatedAt: new Date().toISOString(), results};
   fs.writeFileSync(process.env.REPORT, JSON.stringify(report, null, 2) + "\n", {mode: 0o600});
