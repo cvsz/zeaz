@@ -35,6 +35,8 @@ const values = {
   kimi: first(read(target, "KIMI_API_KEY"), read(target, "MOONSHOT_API_KEY"), read(source, "KIMI_API_KEY")),
   scaleway: first(read(target, "SCALEWAY_API_KEY"), read(target, "SCW_SECRET_KEY"), read(source, "SCALEWAY_API_KEY")),
   together: first(read(target, "TOGETHER_API_KEY"), read(source, "TOGETHER_API_KEY")),
+  github: first(read(target, "GITHUB_MODELS_TOKEN"), read(source, "GITHUB_MODELS_TOKEN"), read(source, "GH_MODELS_TOKEN")),
+  cerebras: first(read(target, "CEREBRAS_API_KEY"), read(source, "CEREBRAS_API_KEY")),
 };
 let existing = {};
 try { existing = JSON.parse(read(target, "AI_PROVIDER_KEYS_JSON") || "{}"); } catch { throw new Error("AI_PROVIDER_KEYS_JSON is invalid."); }

@@ -13,7 +13,11 @@ let refreshing=false;
 async function check(name,url,adminKey=''){
   const started=performance.now();
   try{
-    const response=await fetch(url,{cache:'no-store',headers:adminKey?{'X-Admin-Key':adminKey}:{}});
+    // HTTP headers are ISO-8859-1 on the wire; use the same UTF-8-safe
+    // base64 credential transport as the admin console to avoid browser
+    // "String contains non ISO-8859-1 code point" failures.
+    const encoded=adminKey?btoa(Array.from(new TextEncoder().encode(adminKey),byte=>String.fromCharCode(byte)).join('')):'';
+    const response=await fetch(url,{cache:'no-store',headers:encoded?{'X-Admin-Key-B64':encoded}:{}});
     let data={};try{data=await response.json();}catch{}
     const protectedRoute=response.status===401&&Boolean(adminKey)===false;
     const aiCount=Array.isArray(data.models)?`${data.models.length} โมเดล` : '';

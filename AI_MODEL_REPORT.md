@@ -1,0 +1,3 @@
+# AI Model Report
+
+Priority is local → Z.AI → Kimi → Scaleway → Together → GitHub Models → OpenRouter/OpenCode free → Hugging Face → Groq → Cerebras, followed by explicitly configured paid providers. Catalog entries are fetched live; unavailable providers are reported without exposing credentials. Chat retries only the requested model plus entries marked free/free-tier or known local/free providers, and reports the selected fallback model.

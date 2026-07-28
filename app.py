@@ -67,7 +67,11 @@ OPENAI_API_BASE = "https://api.openai.com/v1"
 KIMI_API_BASE = "https://api.moonshot.ai/v1"
 SCALEWAY_API_BASE = "https://api.scaleway.ai/v1"
 TOGETHER_API_BASE = "https://api.together.xyz/v1"
+GITHUB_MODELS_API_BASE = "https://models.github.ai"
+CEREBRAS_API_BASE = "https://api.cerebras.ai/v1"
 ZEAZ_GATEWAY_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+AI_PROVIDER_NAMES = {"local","zai","kimi","scaleway","together","github","openrouter","opencode","huggingface","groq","cerebras","gemini","nvidia","byteplus","fireworks","openai","zeaz_gateway"}
+AI_PROVIDER_PRIORITY = ("local","zai","kimi","scaleway","together","github","openrouter","opencode","huggingface","groq","cerebras","gemini","nvidia","byteplus","fireworks","openai","zeaz_gateway")
 AI_SYSTEM_PROMPT = "You are MooPiew's operator assistant. Do not request or reveal secrets, payment credentials, or customer personal data. Answer concisely in the language used by the operator."
 DEFAULT_SETTINGS = {
     "store_name": "หมูปิ้ววว", "slot_capacity": 80, "advance_days": 14,
@@ -219,7 +223,16 @@ def ai_provider_keys() -> dict[str,str]:
     try: parsed=json.loads(raw)
     except json.JSONDecodeError: return {}
     if not isinstance(parsed,dict): return {}
-    return {name:value for name,value in parsed.items() if name in {"gemini","nvidia","zai","openrouter","opencode","groq","byteplus","fireworks","openai","kimi","scaleway","together"} and isinstance(value,str) and value.strip()}
+    return {name:value for name,value in parsed.items() if name in AI_PROVIDER_NAMES and isinstance(value,str) and value.strip() and not value.startswith("replace-with-")}
+
+def local_ai_base() -> str:
+    base=env("LOCAL_AI_BASE_URL").rstrip("/")
+    if not base: return ""
+    parsed=urlparse(base)
+    if parsed.query or parsed.fragment or parsed.username or parsed.password or not parsed.hostname:
+        raise ValueError("LOCAL_AI_BASE_URL ไม่ถูกต้อง")
+    if parsed.scheme == "https" or (parsed.scheme == "http" and parsed.hostname.lower() in ZEAZ_GATEWAY_LOOPBACK_HOSTS): return base
+    raise ValueError("LOCAL_AI_BASE_URL ต้องเป็น HTTPS หรือ HTTP บน loopback เท่านั้น")
 
 def zeaz_gateway_config() -> tuple[str,str] | None:
     """Return the explicitly configured, server-only ZeaZ gateway endpoint.
@@ -245,7 +258,9 @@ def ai_public_config() -> dict:
     keys=ai_provider_keys()
     try: gateway=bool(zeaz_gateway_config())
     except ValueError: gateway=False
-    return {"enabled":bool(keys) or hf_enabled() or gateway,"providers":{"gemini":bool(keys.get("gemini")),"nvidia":bool(keys.get("nvidia")),"zai":bool(keys.get("zai")),"opencode":bool(keys.get("opencode")),"openrouter":bool(keys.get("openrouter")),"groq":bool(keys.get("groq")),"byteplus":bool(keys.get("byteplus")),"fireworks":bool(keys.get("fireworks")),"openai":bool(keys.get("openai")),"kimi":bool(keys.get("kimi")),"scaleway":bool(keys.get("scaleway")),"together":bool(keys.get("together")),"huggingface":hf_enabled(),"zeaz_gateway":gateway},"catalog":"live","chat_only":True}
+    try: local=bool(local_ai_base())
+    except ValueError: local=False
+    return {"enabled":bool(keys) or hf_enabled() or gateway or local,"providers":{name:bool(keys.get(name)) for name in ("gemini","nvidia","zai","opencode","openrouter","groq","byteplus","fireworks","openai","kimi","scaleway","together","github","cerebras")}|{"local":local,"huggingface":hf_enabled(),"zeaz_gateway":gateway},"catalog":"live","chat_only":True,"fallback":True}
 
 def ai_http(endpoint: str, headers: dict[str,str], payload: dict | None = None, allow_list=False) -> dict | list:
     """Call a fixed provider endpoint without exposing credentials or acting as a proxy."""
@@ -352,7 +367,8 @@ def byteplus_models(token: str) -> list[dict]:
 
 def openai_compatible_models(base: str, token: str, provider: str) -> list[dict]:
     """List models from a fixed OpenAI-compatible provider endpoint."""
-    data=ai_http(f"{base}/models",{"Authorization":f"Bearer {token}"},allow_list=True)
+    headers={"Authorization":f"Bearer {token}"} if token else {}
+    data=ai_http(f"{base}/models",headers,allow_list=True)
     source=data if isinstance(data,list) else data.get("data",[])
     rows=[]
     for model in source:
@@ -365,6 +381,19 @@ def openai_models(token: str) -> list[dict]: return openai_compatible_models(OPE
 def kimi_models(token: str) -> list[dict]: return openai_compatible_models(KIMI_API_BASE,token,"kimi")
 def scaleway_models(token: str) -> list[dict]: return openai_compatible_models(SCALEWAY_API_BASE,token,"scaleway")
 def together_models(token: str) -> list[dict]: return openai_compatible_models(TOGETHER_API_BASE,token,"together")
+def github_models(token: str) -> list[dict]:
+    data=ai_http(f"{GITHUB_MODELS_API_BASE}/catalog/models",{"Authorization":f"Bearer {token}","Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"},allow_list=True)
+    source=data if isinstance(data,list) else data.get("data",[]); rows=[]
+    for model in source:
+        if isinstance(model,dict) and isinstance(model.get("id"),str) and PROVIDER_MODEL_ID.fullmatch(model["id"]): rows.append({"id":f"github:{model['id']}","provider":"github","model":model["id"],"display_name":model.get("name",model["id"]),"free_tier":True})
+    return rows
+def cerebras_models(token: str) -> list[dict]: return [{**item,"free_tier":True} for item in openai_compatible_models(CEREBRAS_API_BASE,token,"cerebras")]
+def local_models(base: str) -> list[dict]:
+    listed=openai_compatible_models(base,env("LOCAL_AI_API_KEY"),"local")
+    configured=env("LOCAL_AI_MODEL")
+    if configured and PROVIDER_MODEL_ID.fullmatch(configured) and not any(row["model"] == configured for row in listed):
+        listed.insert(0,{"id":f"local:{configured}","provider":"local","model":configured,"display_name":configured,"free":True})
+    return listed
 
 def zeaz_gateway_models(base: str, token: str) -> list[dict]:
     data=ai_http(f"{base}/models",{"Authorization":f"Bearer {token}"})
@@ -382,7 +411,12 @@ def ai_catalog() -> dict:
         cached=AI_MODEL_CACHE.get("catalog",{})
         if isinstance(cached,dict) and cached and float(AI_MODEL_CACHE.get("expires",0)) > now: return cached
         keys=ai_provider_keys(); providers={}; models=[]
-        for name, loader in (("gemini",gemini_models),("nvidia",nvidia_models),("zai",zai_models),("opencode",opencode_models),("openrouter",openrouter_models),("groq",groq_models),("byteplus",byteplus_models),("fireworks",fireworks_models),("openai",openai_models),("kimi",kimi_models),("scaleway",scaleway_models),("together",together_models)):
+        try:
+            base=local_ai_base()
+            if base:
+                listed=local_models(base); models.extend(listed); providers["local"]={"enabled":True,"models":len(listed)}
+        except ValueError as error: providers["local"]={"enabled":False,"models":0,"error":str(error)}
+        for name, loader in (("zai",zai_models),("kimi",kimi_models),("scaleway",scaleway_models),("together",together_models),("github",github_models),("openrouter",openrouter_models),("opencode",opencode_models),("groq",groq_models),("cerebras",cerebras_models),("gemini",gemini_models),("nvidia",nvidia_models),("byteplus",byteplus_models),("fireworks",fireworks_models),("openai",openai_models)):
             if not keys.get(name): providers[name]={"enabled":False,"models":0}; continue
             try:
                 listed=loader(keys[name]); models.extend(listed); providers[name]={"enabled":True,"models":len(listed)}
@@ -397,7 +431,7 @@ def ai_catalog() -> dict:
                 listed=[{"id":f"huggingface:{item['id']}","provider":"huggingface","model":item["id"],"display_name":item["id"]} for item in hf_models()]
                 models.extend(listed); providers["huggingface"]={"enabled":True,"models":len(listed)}
             except ValueError as error: providers["huggingface"]={"enabled":False,"models":0,"error":str(error)}
-        models.sort(key=lambda item:(item["provider"],item["model"].casefold()))
+        models.sort(key=lambda item:(AI_PROVIDER_PRIORITY.index(item["provider"]) if item["provider"] in AI_PROVIDER_PRIORITY else 999,item["model"].casefold()))
         catalog={"models":models,"providers":providers}
         if not models: raise ValueError("ไม่พบ AI model ที่ใช้งานได้จาก provider keys ที่ตั้งค่าไว้")
         AI_MODEL_CACHE.update(catalog=catalog,expires=now+max(30,min(3600,int(env("AI_MODEL_CATALOG_TTL",env("HF_MODEL_CATALOG_TTL","300")) or 300))))
@@ -424,7 +458,8 @@ def zai_chat(token: str, model: str, prompt: str, max_tokens: int, temperature: 
     return text
 
 def openai_compatible_chat(base: str, token: str, model: str, prompt: str, max_tokens: int, temperature: float, provider: str) -> str:
-    data=ai_http(f"{base}/chat/completions",{"Authorization":f"Bearer {token}"},{"model":model,"messages":[{"role":"system","content":AI_SYSTEM_PROMPT},{"role":"user","content":prompt}],"max_tokens":max_tokens,"temperature":temperature,"stream":False})
+    headers={"Authorization":f"Bearer {token}"} if token else {}
+    data=ai_http(f"{base}/chat/completions",headers,{"model":model,"messages":[{"role":"system","content":AI_SYSTEM_PROMPT},{"role":"user","content":prompt}],"max_tokens":max_tokens,"temperature":temperature,"stream":False})
     choices=data.get("choices",[]); message=choices[0].get("message",{}) if isinstance(choices,list) and choices and isinstance(choices[0],dict) else {}; text=message.get("content") if isinstance(message,dict) else ""
     if not isinstance(text,str) or not text: raise ValueError(f"{provider} model ไม่ได้ส่งข้อความตอบกลับ")
     return text
@@ -436,26 +471,36 @@ def ai_chat(model_id: str, prompt: str, max_tokens=512, temperature=0.2) -> dict
     except (TypeError,ValueError) as error: raise ValueError("พารามิเตอร์ AI ไม่ถูกต้อง") from error
     catalog=ai_catalog(); selected=next((item for item in catalog["models"] if item["id"] == model_id),None)
     if not selected: raise ValueError("โมเดลนี้ไม่อยู่ใน live AI catalog")
-    keys=ai_provider_keys(); provider,model=selected["provider"],selected["model"]
-    if provider=="gemini": text=gemini_chat(keys["gemini"],model,prompt.strip(),tokens,temp)
-    elif provider=="nvidia": text=nvidia_chat(keys["nvidia"],model,prompt.strip(),tokens,temp)
-    elif provider=="zai": text=zai_chat(keys["zai"],model,prompt.strip(),tokens,temp)
-    elif provider=="opencode": text=openai_compatible_chat(OPENCODE_API_BASE,keys["opencode"],model,prompt.strip(),tokens,temp,"OpenCode")
-    elif provider=="openrouter": text=openai_compatible_chat(OPENROUTER_API_BASE,keys["openrouter"],model,prompt.strip(),tokens,temp,"OpenRouter")
-    elif provider=="groq": text=openai_compatible_chat(GROQ_API_BASE,keys["groq"],model,prompt.strip(),tokens,temp,"Groq")
-    elif provider=="byteplus": text=openai_compatible_chat(BYTEPLUS_API_BASE,keys["byteplus"],model,prompt.strip(),tokens,temp,"BytePlus")
-    elif provider=="fireworks": text=openai_compatible_chat(FIREWORKS_API_BASE,keys["fireworks"],model,prompt.strip(),tokens,temp,"Fireworks")
-    elif provider=="openai": text=openai_compatible_chat(OPENAI_API_BASE,keys["openai"],model,prompt.strip(),tokens,temp,"OpenAI")
-    elif provider=="kimi": text=openai_compatible_chat(KIMI_API_BASE,keys["kimi"],model,prompt.strip(),tokens,temp,"Kimi")
-    elif provider=="scaleway": text=openai_compatible_chat(SCALEWAY_API_BASE,keys["scaleway"],model,prompt.strip(),tokens,temp,"Scaleway")
-    elif provider=="together": text=openai_compatible_chat(TOGETHER_API_BASE,keys["together"],model,prompt.strip(),tokens,temp,"Together AI")
-    elif provider=="zeaz_gateway":
-        gateway=zeaz_gateway_config()
-        if not gateway: raise ValueError("ZEAZ gateway ยังไม่ได้ตั้งค่า")
-        text=openai_compatible_chat(*gateway,model,prompt.strip(),tokens,temp,"ZEAZ Gateway")
-    elif provider=="huggingface": text=hf_chat(model,prompt.strip(),tokens,temp)["content"]
-    else: raise ValueError("AI provider ไม่รองรับ")
-    return {"id":model_id,"provider":provider,"model":model,"content":text}
+    keys=ai_provider_keys()
+    def invoke(item):
+        provider,model=item["provider"],item["model"]
+        if provider=="local": return openai_compatible_chat(local_ai_base(),env("LOCAL_AI_API_KEY"),model,prompt.strip(),tokens,temp,"Local AI")
+        if provider=="gemini": return gemini_chat(keys["gemini"],model,prompt.strip(),tokens,temp)
+        if provider=="nvidia": return nvidia_chat(keys["nvidia"],model,prompt.strip(),tokens,temp)
+        if provider=="zai": return zai_chat(keys["zai"],model,prompt.strip(),tokens,temp)
+        bases={"opencode":(OPENCODE_API_BASE,"OpenCode"),"openrouter":(OPENROUTER_API_BASE,"OpenRouter"),"groq":(GROQ_API_BASE,"Groq"),"byteplus":(BYTEPLUS_API_BASE,"BytePlus"),"fireworks":(FIREWORKS_API_BASE,"Fireworks"),"openai":(OPENAI_API_BASE,"OpenAI"),"kimi":(KIMI_API_BASE,"Kimi"),"scaleway":(SCALEWAY_API_BASE,"Scaleway"),"together":(TOGETHER_API_BASE,"Together AI"),"github":(GITHUB_MODELS_API_BASE,"GitHub Models"),"cerebras":(CEREBRAS_API_BASE,"Cerebras")}
+        if provider=="github":
+            data=ai_http(f"{GITHUB_MODELS_API_BASE}/inference/chat/completions",{"Authorization":f"Bearer {keys[provider]}","Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"},{"model":model,"messages":[{"role":"system","content":AI_SYSTEM_PROMPT},{"role":"user","content":prompt.strip()}],"max_tokens":tokens,"temperature":temp,"stream":False})
+            choices=data.get("choices",[]); content=choices[0].get("message",{}).get("content","") if choices else ""
+            if not isinstance(content,str) or not content: raise ValueError("GitHub Models ไม่ได้ส่งข้อความตอบกลับ")
+            return content
+        if provider in bases: return openai_compatible_chat(bases[provider][0],keys[provider],model,prompt.strip(),tokens,temp,bases[provider][1])
+        if provider=="zeaz_gateway":
+            gateway=zeaz_gateway_config()
+            if not gateway: raise ValueError("ZEAZ gateway ยังไม่ได้ตั้งค่า")
+            return openai_compatible_chat(*gateway,model,prompt.strip(),tokens,temp,"ZEAZ Gateway")
+        if provider=="huggingface": return hf_chat(model,prompt.strip(),tokens,temp)["content"]
+        raise ValueError("AI provider ไม่รองรับ")
+    free_providers={"local","github","cerebras","groq","huggingface"}
+    candidates=[selected]+[item for item in catalog["models"] if item["id"] != model_id and (item.get("free") is True or item.get("free_tier") is True or item["provider"] in free_providers)]
+    failures=[]
+    for item in candidates:
+        try:
+            text=invoke(item)
+            return {"id":item["id"],"requested_id":model_id,"provider":item["provider"],"model":item["model"],"content":text,"fallback":item["id"] != model_id}
+        except (ValueError, HTTPError, URLError, OSError):
+            failures.append(item["provider"])
+    raise ValueError("AI ไม่มี provider ที่ตอบกลับได้: " + ", ".join(dict.fromkeys(failures)))
 
 def hf_request(path: str, payload: dict | None = None) -> dict:
     """Call the official HF Router with a server-only token and bounded body."""
@@ -1151,10 +1196,10 @@ class Handler(SimpleHTTPRequestHandler):
             self.json({"payment":payment_public(payment)},201)
     def scb_payment_callback(self,form,raw):
         secret=env("SCB_WEBHOOK_SECRET"); signature=self.headers.get(env("SCB_WEBHOOK_SIGNATURE_HEADER","X-SCB-Signature"),"")
-        if secret:
-            if not signature: return self.json({"error":"SCB callback ไม่มีลายเซ็น"},401)
-            expected=hmac.new(secret.encode(),raw,hashlib.sha256).hexdigest(); supplied=signature.removeprefix("sha256=")
-            if not secrets.compare_digest(expected,supplied): return self.json({"error":"ลายเซ็น SCB ไม่ถูกต้อง"},401)
+        if SCB_ENABLED and not secret: return self.json({"error":"SCB webhook secret ยังไม่ได้ตั้งค่า"},503)
+        if not secret or not signature: return self.json({"error":"SCB callback ไม่มีลายเซ็น"},401)
+        expected=hmac.new(secret.encode(),raw,hashlib.sha256).hexdigest(); supplied=signature.removeprefix("sha256=")
+        if not secrets.compare_digest(expected,supplied): return self.json({"error":"ลายเซ็น SCB ไม่ถูกต้อง"},401)
         data=form.get("data",form) if isinstance(form.get("data",form),dict) else form
         provider_order=str(data.get("orderId") or data.get("transactionId") or "")
         if not provider_order: return self.json({"error":"SCB callback ไม่มี order identifier"},400)
@@ -1166,8 +1211,10 @@ class Handler(SimpleHTTPRequestHandler):
         except ValueError as error: return self.json({"error":str(error)},503)
         with STORE_LOCK,db() as con:
             current=row_payment(con,payment["id"])
-            if paid and current["status"]!="paid":
-                now=utcnow(); con.execute("UPDATE payment_attempts SET status='paid',confirmed_at=?,updated_at=?,provider_response=? WHERE id=?",(now,now,json.dumps(response,ensure_ascii=False),current["id"])); con.execute("UPDATE orders SET payment_status='paid' WHERE id=?",(current["order_id"],)); audit(con,"scb_webhook","payment_confirmed","payment_attempt",current["id"],{"order_id":current["order_id"],"provider_order_id":provider_order,"signature_verified":bool(secret)})
+            if paid and current["status"] in {"created","pending"}:
+                order=con.execute("SELECT status FROM orders WHERE id=?",(current["order_id"],)).fetchone()
+                if order and order["status"]!="cancelled":
+                    now=utcnow(); con.execute("UPDATE payment_attempts SET status='paid',confirmed_at=?,updated_at=?,provider_response=? WHERE id=? AND status IN ('created','pending')",(now,now,json.dumps(response,ensure_ascii=False),current["id"])); con.execute("UPDATE orders SET payment_status='paid' WHERE id=? AND status!='cancelled'",(current["order_id"],)); audit(con,"scb_webhook","payment_confirmed","payment_attempt",current["id"],{"order_id":current["order_id"],"provider_order_id":provider_order,"signature_verified":True})
             elif not paid: con.execute("UPDATE payment_attempts SET updated_at=?,provider_response=? WHERE id=?",(utcnow(),json.dumps(response,ensure_ascii=False),current["id"]));audit(con,"scb_webhook","payment_callback_pending","payment_attempt",current["id"],{"provider_order_id":provider_order})
         self.json({"status":"paid" if paid else "pending"})
     def inquire_scb_payment(self,payment_id,role):
@@ -1178,8 +1225,10 @@ class Handler(SimpleHTTPRequestHandler):
         response,paid=scb_inquire_payment(payment)
         with STORE_LOCK,db() as con:
             current=row_payment(con,payment_id)
-            if paid and current["status"]!="paid":
-                now=utcnow(); con.execute("UPDATE payment_attempts SET status='paid',confirmed_at=?,updated_at=?,provider_response=? WHERE id=?",(now,now,json.dumps(response,ensure_ascii=False),payment_id)); con.execute("UPDATE orders SET payment_status='paid' WHERE id=?",(current["order_id"],)); audit(con,role,"payment_inquiry_paid","payment_attempt",payment_id,{"order_id":current["order_id"]})
+            if paid and current["status"] in {"created","pending"}:
+                order=con.execute("SELECT status FROM orders WHERE id=?",(current["order_id"],)).fetchone()
+                if order and order["status"]!="cancelled":
+                    now=utcnow(); con.execute("UPDATE payment_attempts SET status='paid',confirmed_at=?,updated_at=?,provider_response=? WHERE id=? AND status IN ('created','pending')",(now,now,json.dumps(response,ensure_ascii=False),payment_id)); con.execute("UPDATE orders SET payment_status='paid' WHERE id=? AND status!='cancelled'",(current["order_id"],)); audit(con,role,"payment_inquiry_paid","payment_attempt",payment_id,{"order_id":current["order_id"]})
             elif not paid: con.execute("UPDATE payment_attempts SET updated_at=?,provider_response=? WHERE id=?",(utcnow(),json.dumps(response,ensure_ascii=False),payment_id));audit(con,role,"payment_inquiry_pending","payment_attempt",payment_id)
             return self.json({"payment":payment_public(row_payment(con,payment_id)),"inquiry":"paid" if paid else "pending"})
     def lookup_order(self,form):
