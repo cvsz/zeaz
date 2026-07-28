@@ -46,6 +46,10 @@ the official Southeast Asia data-plane endpoint and deliberately leaves a
 failing BytePlus key out of the runtime catalog until that endpoint authorizes
 it; this prevents a mismatched regional key from being presented as usable.
 
+For an operator refresh, run `./scripts/refresh-ai-catalog.sh`. It performs the
+credential sync, writes the credential-free health report, restarts the local
+service and runs the free-provider smoke checks in that order.
+
 `HF_TOKEN` stays only on the server. It is never returned by APIs, written to
 the database, included in browser JavaScript, or committed to Git.
 
