@@ -21,8 +21,9 @@ Live service: [moopiew.zeaz.dev](https://moopiew.zeaz.dev/) · API menu:
   applications, riders, orders, receipts and tax invoices.
 - Private SQLite data with audit history, backups, Cloudflare Tunnel deployment
   and operational health checks.
-- Optional owner-only Hugging Face AI console that discovers the live Router
-  catalog without exposing `HF_TOKEN`; see [the AI guide](docs/huggingface.md).
+- Optional owner-only **ZEAZ AI Live Catalog** that discovers configured
+  Gemini, NVIDIA, Z.AI, OpenCode, OpenRouter and Hugging Face models without
+  exposing provider keys; see [the AI guide](docs/huggingface.md).
 
 SCB payment support is intentionally disabled until approved credentials,
 certificate material and successful Sandbox verification are configured. See

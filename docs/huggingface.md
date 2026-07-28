@@ -1,8 +1,10 @@
-# Hugging Face AI integration
+# Live AI catalog integration
 
-MooPiew integrates Hugging Face **Inference Providers** through the official
-Router. It is an owner-only, feature-gated assistant for operational writing
-and analysis; it is not exposed to customers, riders or merchant applicants.
+MooPiew uses an owner-only, feature-gated live AI catalog for operational
+writing and analysis. It is not exposed to customers, riders or merchant
+applicants. The catalog currently supports Hugging Face Inference Providers,
+Gemini, NVIDIA NIM, Z.AI, OpenCode Zen and OpenRouter whenever the associated
+local key is configured. The owner page is named **ZEAZ AI Live Catalog**.
 
 ## What “all free models” means in practice
 
@@ -13,21 +15,34 @@ configured token and shows every chat model currently available to it. The
 owner selects a model from that live catalog; the server rejects arbitrary
 model IDs outside it.
 
-The router’s OpenAI-compatible chat endpoint is chat-only. Image, audio,
-embedding and self-hosted model workloads need a separate reviewed integration.
+The current console is chat-only. Image, audio, embedding and self-hosted model
+workloads need a separate reviewed integration.
 
 ## Enable locally
 
 1. Create a Hugging Face user access token with **Inference Providers**
    permission.
-2. Copy `.env.ai.example` to an ignored local file such as `.env.ai`, set
-   `HF_ENABLED=true`, and load it into the service environment.
-3. Run `./scripts/huggingface-preflight.sh`, restart the service, open
+2. Copy `.env.ai.example` to an ignored local file such as `.env.ai`, add only
+   the provider keys approved for use, and load it into the service environment.
+3. Run `./scripts/ai-preflight.sh`; use `./scripts/huggingface-preflight.sh`
+   only when enabling Hugging Face chat inference. Restart the service, open
    `/ai.html`, enter the owner key and load the
    catalog.
 
 `HF_TOKEN` stays only on the server. It is never returned by APIs, written to
 the database, included in browser JavaScript, or committed to Git.
+
+For Gemini, NVIDIA NIM, Z.AI, OpenCode Zen or OpenRouter, add a matching
+`gemini`, `nvidia`, `zai`, `opencode` or `openrouter` entry to
+`AI_PROVIDER_KEYS_JSON`. The catalog reads only models returned by the
+provider’s live models endpoint, so an unavailable provider/model is omitted.
+Z.AI is prepared at `https://api.z.ai/api/paas/v4`; it appears only after a
+dedicated `zai` API key is configured.
+
+OpenCode Zen and OpenRouter are filtered to models whose catalog metadata
+declares zero input/output pricing. A provider’s free tier, rate limit and
+regional availability can still change, so the page reports live provider
+availability rather than promising permanent free inference.
 
 ## Privacy and control
 

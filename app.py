@@ -52,6 +52,14 @@ HF_MODEL_CACHE: dict[str, object] = {"models": [], "expires": 0.0}
 HF_MODEL_LOCK = Lock()
 HF_ROUTER_DEFAULT = "https://router.huggingface.co/v1"
 HF_MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.:-]*")
+AI_MODEL_CACHE: dict[str, object] = {"catalog": {}, "expires": 0.0}
+AI_MODEL_LOCK = Lock()
+GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+NVIDIA_API_BASE = "https://integrate.api.nvidia.com/v1"
+ZAI_API_BASE = "https://api.z.ai/api/paas/v4"
+OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
+OPENCODE_API_BASE = "https://opencode.ai/zen/v1"
+AI_SYSTEM_PROMPT = "You are MooPiew's operator assistant. Do not request or reveal secrets, payment credentials, or customer personal data. Answer concisely in the language used by the operator."
 DEFAULT_SETTINGS = {
     "store_name": "หมูปิ้ววว", "slot_capacity": 80, "advance_days": 14,
     "pickup_slots": ["09:00–10:00", "10:00–11:00", "11:00–12:00", "12:00–13:00"],
@@ -184,6 +192,160 @@ def hf_router_base() -> str:
 
 def hf_public_config() -> dict:
     return {"enabled":hf_enabled(),"provider":"huggingface","catalog":"router","chat_only":True,"token_configured":bool(env("HF_TOKEN"))}
+
+def ai_provider_keys() -> dict[str,str]:
+    """Read only named AI provider credentials from the local ignored environment."""
+    raw=env("AI_PROVIDER_KEYS_JSON")
+    if not raw: return {}
+    try: parsed=json.loads(raw)
+    except json.JSONDecodeError: return {}
+    if not isinstance(parsed,dict): return {}
+    return {name:value for name,value in parsed.items() if name in {"gemini","nvidia","zai","openrouter","opencode"} and isinstance(value,str) and value.strip()}
+
+def ai_public_config() -> dict:
+    keys=ai_provider_keys()
+    return {"enabled":bool(keys) or hf_enabled(),"providers":{"gemini":bool(keys.get("gemini")),"nvidia":bool(keys.get("nvidia")),"zai":bool(keys.get("zai")),"opencode":bool(keys.get("opencode")),"openrouter":bool(keys.get("openrouter")),"huggingface":hf_enabled()},"catalog":"live","chat_only":True}
+
+def ai_http(endpoint: str, headers: dict[str,str], payload: dict | None = None) -> dict:
+    """Call a fixed provider endpoint without exposing credentials or acting as a proxy."""
+    try:
+        request_headers={"Accept":"application/json",**headers}
+        body=None
+        if payload is not None:
+            request_headers["Content-Type"]="application/json"; body=json.dumps(payload,ensure_ascii=False).encode()
+        with urlopen(Request(endpoint,data=body,headers=request_headers,method="POST" if payload is not None else "GET"),timeout=30) as response:
+            raw=response.read(2_000_000)
+    except HTTPError as error: raise ValueError(f"AI provider ปฏิเสธคำขอ ({error.code})") from error
+    except (URLError,OSError) as error: raise ValueError("ไม่สามารถเชื่อมต่อ AI provider ได้") from error
+    try: data=json.loads(raw.decode())
+    except (UnicodeDecodeError,json.JSONDecodeError) as error: raise ValueError("AI provider ตอบกลับไม่ใช่ JSON") from error
+    if not isinstance(data,dict): raise ValueError("AI provider ตอบกลับไม่ถูกต้อง")
+    return data
+
+def gemini_models(token: str) -> list[dict]:
+    rows=[]; page_token=""
+    while True:
+        suffix="?pageSize=1000" + (f"&pageToken={quote(page_token)}" if page_token else "")
+        data=ai_http(f"{GEMINI_MODELS_URL}{suffix}",{"x-goog-api-key":token})
+        for model in data.get("models",[]):
+            if not isinstance(model,dict) or not isinstance(model.get("name"),str): continue
+            identifier=model["name"].removeprefix("models/")
+            if "generateContent" in model.get("supportedGenerationMethods",[]) and HF_MODEL_ID.fullmatch(f"google/{identifier}"):
+                rows.append({"id":f"gemini:{identifier}","provider":"gemini","model":identifier,"display_name":model.get("displayName",identifier)})
+        page_token=data.get("nextPageToken","")
+        if not isinstance(page_token,str) or not page_token: break
+    return rows
+
+def nvidia_models(token: str) -> list[dict]:
+    data=ai_http(f"{NVIDIA_API_BASE}/models",{"Authorization":f"Bearer {token}"})
+    rows=[]
+    for model in data.get("data",[]):
+        if not isinstance(model,dict) or not isinstance(model.get("id"),str) or not HF_MODEL_ID.fullmatch(model["id"]): continue
+        rows.append({"id":f"nvidia:{model['id']}","provider":"nvidia","model":model["id"],"display_name":model["id"]})
+    return rows
+
+def zai_models(token: str) -> list[dict]:
+    data=ai_http(f"{ZAI_API_BASE}/models",{"Authorization":f"Bearer {token}"})
+    rows=[]
+    for model in data.get("data",[]):
+        if not isinstance(model,dict) or not isinstance(model.get("id"),str): continue
+        identifier=model["id"]
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]*",identifier): rows.append({"id":f"zai:{identifier}","provider":"zai","model":identifier,"display_name":identifier})
+    return rows
+
+def zero_pricing(value) -> bool:
+    """Accept only a provider model whose declared input/output pricing is zero."""
+    if not isinstance(value,dict): return False
+    prices=[value[key] for key in ("prompt","completion","input","output") if key in value]
+    if not prices: return False
+    try: return all(float(price) == 0 for price in prices)
+    except (TypeError,ValueError): return False
+
+def openrouter_models(token: str) -> list[dict]:
+    data=ai_http(f"{OPENROUTER_API_BASE}/models",{"Authorization":f"Bearer {token}"})
+    rows=[]
+    for model in data.get("data",[]):
+        if not isinstance(model,dict) or not isinstance(model.get("id"),str) or not HF_MODEL_ID.fullmatch(model["id"]): continue
+        if not zero_pricing(model.get("pricing")): continue
+        rows.append({"id":f"openrouter:{model['id']}","provider":"openrouter","model":model["id"],"display_name":model.get("name",model["id"]),"free":True})
+    return rows
+
+def opencode_models(token: str) -> list[dict]:
+    data=ai_http(f"{OPENCODE_API_BASE}/models",{"Authorization":f"Bearer {token}"})
+    source=data.get("data",data.get("models",[])); rows=[]
+    for model in source if isinstance(source,list) else []:
+        if not isinstance(model,dict) or not isinstance(model.get("id"),str): continue
+        identifier=model["id"].removeprefix("opencode/")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]*",identifier): continue
+        if not (identifier.endswith("-free") or zero_pricing(model.get("pricing"))): continue
+        rows.append({"id":f"opencode:{identifier}","provider":"opencode","model":identifier,"display_name":model.get("name",identifier),"free":True})
+    return rows
+
+def ai_catalog() -> dict:
+    """Return every live chat model the configured provider keys can enumerate."""
+    now=time.monotonic()
+    with AI_MODEL_LOCK:
+        cached=AI_MODEL_CACHE.get("catalog",{})
+        if isinstance(cached,dict) and cached and float(AI_MODEL_CACHE.get("expires",0)) > now: return cached
+        keys=ai_provider_keys(); providers={}; models=[]
+        for name, loader in (("gemini",gemini_models),("nvidia",nvidia_models),("zai",zai_models),("opencode",opencode_models),("openrouter",openrouter_models)):
+            if not keys.get(name): providers[name]={"enabled":False,"models":0}; continue
+            try:
+                listed=loader(keys[name]); models.extend(listed); providers[name]={"enabled":True,"models":len(listed)}
+            except ValueError as error: providers[name]={"enabled":False,"models":0,"error":str(error)}
+        if hf_enabled():
+            try:
+                listed=[{"id":f"huggingface:{item['id']}","provider":"huggingface","model":item["id"],"display_name":item["id"]} for item in hf_models()]
+                models.extend(listed); providers["huggingface"]={"enabled":True,"models":len(listed)}
+            except ValueError as error: providers["huggingface"]={"enabled":False,"models":0,"error":str(error)}
+        models.sort(key=lambda item:(item["provider"],item["model"].casefold()))
+        catalog={"models":models,"providers":providers}
+        if not models: raise ValueError("ไม่พบ AI model ที่ใช้งานได้จาก provider keys ที่ตั้งค่าไว้")
+        AI_MODEL_CACHE.update(catalog=catalog,expires=now+max(30,min(3600,int(env("AI_MODEL_CATALOG_TTL",env("HF_MODEL_CATALOG_TTL","300")) or 300))))
+        return catalog
+
+def gemini_chat(token: str, model: str, prompt: str, max_tokens: int, temperature: float) -> str:
+    data=ai_http(f"{GEMINI_MODELS_URL}/{quote(model,safe='-._')}:generateContent",{"x-goog-api-key":token},{"systemInstruction":{"parts":[{"text":AI_SYSTEM_PROMPT}]},"contents":[{"role":"user","parts":[{"text":prompt}]}],"generationConfig":{"maxOutputTokens":max_tokens,"temperature":temperature}})
+    candidates=data.get("candidates",[]); content=candidates[0].get("content",{}) if isinstance(candidates,list) and candidates and isinstance(candidates[0],dict) else {}
+    parts=content.get("parts",[]) if isinstance(content,dict) else []
+    text="".join(part.get("text","") for part in parts if isinstance(part,dict) and isinstance(part.get("text"),str))
+    if not text: raise ValueError("Gemini model ไม่ได้ส่งข้อความตอบกลับ")
+    return text
+
+def nvidia_chat(token: str, model: str, prompt: str, max_tokens: int, temperature: float) -> str:
+    data=ai_http(f"{NVIDIA_API_BASE}/chat/completions",{"Authorization":f"Bearer {token}"},{"model":model,"messages":[{"role":"system","content":AI_SYSTEM_PROMPT},{"role":"user","content":prompt}],"max_tokens":max_tokens,"temperature":temperature,"stream":False})
+    choices=data.get("choices",[]); message=choices[0].get("message",{}) if isinstance(choices,list) and choices and isinstance(choices[0],dict) else {}; text=message.get("content") if isinstance(message,dict) else ""
+    if not isinstance(text,str) or not text: raise ValueError("NVIDIA model ไม่ได้ส่งข้อความตอบกลับ")
+    return text
+
+def zai_chat(token: str, model: str, prompt: str, max_tokens: int, temperature: float) -> str:
+    data=ai_http(f"{ZAI_API_BASE}/chat/completions",{"Authorization":f"Bearer {token}"},{"model":model,"messages":[{"role":"system","content":AI_SYSTEM_PROMPT},{"role":"user","content":prompt}],"max_tokens":max_tokens,"temperature":temperature,"stream":False})
+    choices=data.get("choices",[]); message=choices[0].get("message",{}) if isinstance(choices,list) and choices and isinstance(choices[0],dict) else {}; text=message.get("content") if isinstance(message,dict) else ""
+    if not isinstance(text,str) or not text: raise ValueError("Z.AI model ไม่ได้ส่งข้อความตอบกลับ")
+    return text
+
+def openai_compatible_chat(base: str, token: str, model: str, prompt: str, max_tokens: int, temperature: float, provider: str) -> str:
+    data=ai_http(f"{base}/chat/completions",{"Authorization":f"Bearer {token}"},{"model":model,"messages":[{"role":"system","content":AI_SYSTEM_PROMPT},{"role":"user","content":prompt}],"max_tokens":max_tokens,"temperature":temperature,"stream":False})
+    choices=data.get("choices",[]); message=choices[0].get("message",{}) if isinstance(choices,list) and choices and isinstance(choices[0],dict) else {}; text=message.get("content") if isinstance(message,dict) else ""
+    if not isinstance(text,str) or not text: raise ValueError(f"{provider} model ไม่ได้ส่งข้อความตอบกลับ")
+    return text
+
+def ai_chat(model_id: str, prompt: str, max_tokens=512, temperature=0.2) -> dict:
+    if not isinstance(model_id,str) or ":" not in model_id: raise ValueError("ชื่อ AI model ไม่ถูกต้อง")
+    if not isinstance(prompt,str) or not prompt.strip() or len(prompt)>12_000: raise ValueError("ข้อความ AI ต้องมี 1–12,000 ตัวอักษร")
+    try: tokens=max(1,min(2048,int(max_tokens))); temp=max(0,min(2,float(temperature)))
+    except (TypeError,ValueError) as error: raise ValueError("พารามิเตอร์ AI ไม่ถูกต้อง") from error
+    catalog=ai_catalog(); selected=next((item for item in catalog["models"] if item["id"] == model_id),None)
+    if not selected: raise ValueError("โมเดลนี้ไม่อยู่ใน live AI catalog")
+    keys=ai_provider_keys(); provider,model=selected["provider"],selected["model"]
+    if provider=="gemini": text=gemini_chat(keys["gemini"],model,prompt.strip(),tokens,temp)
+    elif provider=="nvidia": text=nvidia_chat(keys["nvidia"],model,prompt.strip(),tokens,temp)
+    elif provider=="zai": text=zai_chat(keys["zai"],model,prompt.strip(),tokens,temp)
+    elif provider=="opencode": text=openai_compatible_chat(OPENCODE_API_BASE,keys["opencode"],model,prompt.strip(),tokens,temp,"OpenCode")
+    elif provider=="openrouter": text=openai_compatible_chat(OPENROUTER_API_BASE,keys["openrouter"],model,prompt.strip(),tokens,temp,"OpenRouter")
+    elif provider=="huggingface": text=hf_chat(model,prompt.strip(),tokens,temp)["content"]
+    else: raise ValueError("AI provider ไม่รองรับ")
+    return {"id":model_id,"provider":provider,"model":model,"content":text}
 
 def hf_request(path: str, payload: dict | None = None) -> dict:
     """Call the official HF Router with a server-only token and bounded body."""
@@ -545,10 +707,12 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/payments/scb/config": return self.json(scb_config_public())
         if path == "/api/admin/ai/config":
             if not self.require("admin"): return
-            return self.json(hf_public_config())
+            return self.json(ai_public_config())
         if path == "/api/admin/ai/models":
             if not self.require("admin"): return
-            try: return self.json({"models":hf_models(),"catalog":"huggingface-router","cached_seconds":max(0,int(float(HF_MODEL_CACHE.get("expires",0))-time.monotonic()))})
+            try:
+                catalog=ai_catalog()
+                return self.json({**catalog,"catalog":"live-provider","cached_seconds":max(0,int(float(AI_MODEL_CACHE.get("expires",0))-time.monotonic()))})
             except ValueError as error: return self.json({"error":str(error)},503)
         tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]+)/events",path)
         if tracking:return self.stream_tracking(tracking.group(1))
@@ -653,7 +817,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.lookup_order(form)
             if path=="/api/admin/ai/chat":
                 role=self.require("admin")
-                if role: return self.huggingface_chat(form,role)
+                if role: return self.ai_chat(form,role)
             if path=="/api/admin/menu":
                 role=self.require("admin")
                 if role: return self.create_menu_item(form,role)
@@ -725,15 +889,15 @@ class Handler(SimpleHTTPRequestHandler):
             if path=="/api/admin/settings":return self.update_settings(form,role)
         except ValueError as error:return self.json({"error":str(error)},400)
         self.json({"error":"ไม่พบ API"},404)
-    def huggingface_chat(self,form,role):
+    def ai_chat(self,form,role):
         try:
-            result=hf_chat(form.get("model",""),form.get("prompt",""),form.get("max_tokens",512),form.get("temperature",0.2))
+            result=ai_chat(form.get("model",""),form.get("prompt",""),form.get("max_tokens",512),form.get("temperature",0.2))
         except ValueError as error:
             return self.json({"error":str(error)},400)
         # Never persist a prompt or model output: both can contain operational or
         # customer data. Audit only the model and response size.
         with db() as con:
-            audit(con,role,"huggingface_chat","ai",result["model"],{"response_characters":len(result["content"])})
+            audit(con,role,"ai_chat","ai",result["id"],{"provider":result["provider"],"response_characters":len(result["content"])})
         return self.json(result)
     def admin_dashboard(self,con,conf):
         orders=all_orders(con); recent=[dict(row) for row in con.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 10")]
