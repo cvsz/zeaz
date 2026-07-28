@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import re
 import sqlite3
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +15,25 @@ MIGRATION_NAME = re.compile(r"^(\d{3})_([a-z0-9_]+)\.(sql|py)$")
 
 class MigrationError(RuntimeError):
     """Raised when migration history or execution is unsafe."""
+
+
+def _enable_wal(connection: sqlite3.Connection, timeout_seconds: float = 10) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    delay = 0.01
+    while True:
+        try:
+            mode = connection.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+            if str(mode).lower() != "wal":
+                raise MigrationError(f"SQLite refused WAL journal mode: {mode}")
+            return
+        except sqlite3.OperationalError as error:
+            if (
+                not any(term in str(error).lower() for term in ("locked", "busy"))
+                or time.monotonic() >= deadline
+            ):
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 0.25)
 
 
 def _discover(directory: Path) -> list[tuple[int, str, Path, str]]:
@@ -63,7 +83,7 @@ def apply_migrations(
 ) -> list[int]:
     connection.execute("PRAGMA foreign_keys=ON")
     connection.execute("PRAGMA busy_timeout=10000")
-    connection.execute("PRAGMA journal_mode=WAL")
+    _enable_wal(connection)
     connection.execute(
         """CREATE TABLE IF NOT EXISTS schema_migrations (
         version INTEGER PRIMARY KEY,

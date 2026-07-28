@@ -19,15 +19,19 @@ class MigrationTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_fresh_database_and_idempotence(self):
-        self.assertEqual(apply_migrations(self.connection), [0, 1, 2])
+        self.assertEqual(apply_migrations(self.connection), [0, 1, 2, 3])
         versions = self.connection.execute(
             "SELECT version FROM schema_migrations ORDER BY version"
         ).fetchall()
-        self.assertEqual(versions, [(0,), (1,), (2,)])
+        self.assertEqual(versions, [(0,), (1,), (2,), (3,)])
         columns = {
             row[1] for row in self.connection.execute("PRAGMA table_info(deliveries)")
         }
         self.assertIn("distance_km", columns)
+        oauth_columns = {
+            row[1] for row in self.connection.execute("PRAGMA table_info(oauth_states)")
+        }
+        self.assertIn("verifier_cipher", oauth_columns)
         payment_sql = self.connection.execute(
             "SELECT sql FROM sqlite_master WHERE name='payment_attempts'"
         ).fetchone()[0]
@@ -111,6 +115,33 @@ class MigrationTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(row, ("TRACK-1", 0.0))
 
+    def test_pkce_migration_invalidates_legacy_oauth_states(self):
+        directory = Path(self.temporary.name) / "pre_pkce"
+        directory.mkdir()
+        for name in (
+            "000_core_schema.sql",
+            "001_provider_document_requirements.sql",
+            "002_legacy_schema.py",
+        ):
+            shutil.copy(MIGRATIONS / name, directory / name)
+        apply_migrations(self.connection, directory)
+        self.connection.execute(
+            "INSERT INTO oauth_states(state,expires_at) VALUES ('legacy','2099-01-01')"
+        )
+        self.connection.commit()
+        shutil.copy(
+            MIGRATIONS / "003_oauth_pkce.py", directory / "003_oauth_pkce.py"
+        )
+        self.assertEqual(apply_migrations(self.connection, directory), [3])
+        columns = {
+            row[1] for row in self.connection.execute("PRAGMA table_info(oauth_states)")
+        }
+        self.assertIn("verifier_cipher", columns)
+        self.assertEqual(
+            self.connection.execute("SELECT COUNT(*) FROM oauth_states").fetchone()[0],
+            0,
+        )
+
     def test_changed_applied_migration_fails_closed(self):
         directory = Path(self.temporary.name) / "migrations"
         shutil.copytree(MIGRATIONS, directory)
@@ -144,12 +175,15 @@ class MigrationTests(unittest.TestCase):
         errors = []
 
         def migrate():
+            connection = None
             try:
                 connection = sqlite3.connect(self.database, timeout=10)
                 apply_migrations(connection)
-                connection.close()
             except Exception as error:
                 errors.append(error)
+            finally:
+                if connection is not None:
+                    connection.close()
 
         threads = [threading.Thread(target=migrate) for _ in range(2)]
         for thread in threads:
@@ -161,7 +195,7 @@ class MigrationTests(unittest.TestCase):
         rows = self.connection.execute(
             "SELECT version,COUNT(*) FROM schema_migrations GROUP BY version"
         ).fetchall()
-        self.assertEqual(rows, [(0, 1), (1, 1), (2, 1)])
+        self.assertEqual(rows, [(0, 1), (1, 1), (2, 1), (3, 1)])
 
 
 if __name__ == "__main__":

@@ -662,10 +662,15 @@ def scb_token_response(data: dict, headers: dict) -> tuple[str, str, str, int, i
     if not isinstance(token,str) or not token: raise ValueError("SCB OAuth ไม่ได้ส่ง access token")
     return token, str(refresh), str(owner), int(body.get("expiresIn",data.get("expiresIn",1800)) or 1800), int(body.get("refreshExpiresIn",data.get("refreshExpiresIn",3600)) or 3600)
 
-def scb_exchange_auth_code(code: str) -> None:
+def scb_exchange_auth_code(code: str, verifier: str = "") -> None:
     key,secret,endpoint=env("SCB_API_KEY"),env("SCB_API_SECRET"),env("SCB_OAUTH_TOKEN_ENDPOINT")
     if not key or not secret or not endpoint: raise ValueError("ยังไม่ได้ตั้งค่า SCB OAuth credentials")
-    data,headers=scb_http(endpoint,{"applicationKey":key,"applicationSecret":secret,"authCode":code},{"resourceOwnerId":key,"accept-language":"EN"})
+    payload={"applicationKey":key,"applicationSecret":secret,"authCode":code}
+    if verifier:
+        field=env("SCB_OAUTH_PKCE_TOKEN_FIELD","codeVerifier")
+        if field not in {"codeVerifier","code_verifier"}: raise ValueError("SCB OAuth PKCE token field ไม่ถูกต้อง")
+        payload[field]=verifier
+    data,headers=scb_http(endpoint,payload,{"resourceOwnerId":key,"accept-language":"EN"})
     scb_store_token(*scb_token_response(data,headers))
 
 def scb_refresh_saved_token() -> tuple[str,str] | None:
@@ -745,13 +750,38 @@ def scb_authorize() -> str:
     except (UnicodeDecodeError,json.JSONDecodeError) as error: raise ValueError("SCB authorization ตอบกลับไม่ถูกต้อง") from error
     callback=data.get("callbackUrl") if isinstance(data,dict) else ""
     if not isinstance(callback,str) or not callback: raise ValueError("SCB authorization ไม่ได้ส่ง callback URL")
+    parsed=urlparse(callback)
+    if parsed.scheme!="https" or not parsed.netloc: raise ValueError("SCB authorization callback URL ต้องเป็น HTTPS")
     state=secrets.token_urlsafe(32)
+    verifier=""
+    query_values={"state":state}
+    if env("SCB_OAUTH_PKCE_ENABLED","false").lower()=="true":
+        verifier=secrets.token_urlsafe(64)
+        challenge=base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+        query_values.update(code_challenge=challenge,code_challenge_method="S256")
+    verifier_cipher=scb_cipher().encrypt(verifier.encode()).decode() if verifier else ""
     with db() as con:
         con.execute("DELETE FROM oauth_states WHERE expires_at < ? OR used_at != ''",(utcnow(),))
-        con.execute("INSERT INTO oauth_states(state,expires_at) VALUES (?,?)",(state,(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat()))
-    parsed=urlparse(callback); query=parse_qs(parsed.query,keep_blank_values=True); query["state"]=[state]
+        con.execute("INSERT INTO oauth_states(state,expires_at,verifier_cipher) VALUES (?,?,?)",(state,(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat(),verifier_cipher))
+    query=parse_qs(parsed.query,keep_blank_values=True)
+    for name,value in query_values.items(): query[name]=[value]
     encoded="&".join(f"{quote(key)}={quote(value)}" for key,values in query.items() for value in values)
     return parsed._replace(query=encoded).geturl()
+
+def scb_consume_oauth_state(state: str) -> str | None:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{32,128}",state):return None
+    now=utcnow()
+    with db() as con:
+        row=con.execute(
+            """UPDATE oauth_states SET used_at=?
+            WHERE state=? AND used_at='' AND expires_at>=?
+            RETURNING verifier_cipher""",
+            (now,state,now),
+        ).fetchone()
+    if not row:return None
+    if not row["verifier_cipher"]:return ""
+    try:return scb_cipher().decrypt(row["verifier_cipher"].encode()).decode()
+    except (InvalidToken,UnicodeDecodeError) as error:raise ValueError("ไม่สามารถอ่าน SCB OAuth PKCE verifier ได้") from error
 
 def scb_create_qr(order: dict) -> dict:
     if not scb_active(): raise ValueError("SCB QR ยังไม่เปิดให้บริการ")
@@ -1008,12 +1038,11 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/auth/scb/callback":
             code=(query.get("code") or query.get("authCode") or [""])[0]
             state=(query.get("state") or [""])[0]
-            if not code or not state: return self.html("<h1>SCB connection failed</h1><p>Authorization code or state is missing.</p>",400)
-            with db() as con:
-                valid=con.execute("SELECT state FROM oauth_states WHERE state=? AND used_at='' AND expires_at>=?",(state,utcnow())).fetchone()
-                if not valid: return self.html("<h1>SCB connection failed</h1><p>Authorization state is invalid or expired.</p>",400)
-                con.execute("UPDATE oauth_states SET used_at=? WHERE state=? AND used_at=''",(utcnow(),state))
-            try: scb_exchange_auth_code(code)
+            if not code or not state or len(code)>4096 or len(state)>128:return self.html("<h1>SCB connection failed</h1><p>Authorization code or state is missing or invalid.</p>",400)
+            try: verifier=scb_consume_oauth_state(state)
+            except ValueError as error:return self.html(f"<h1>SCB connection failed</h1><p>{escape_html(str(error))}</p>",400)
+            if verifier is None:return self.html("<h1>SCB connection failed</h1><p>Authorization state is invalid or expired.</p>",400)
+            try: scb_exchange_auth_code(code,verifier)
             except ValueError as error: return self.html(f"<h1>SCB connection failed</h1><p>{escape_html(str(error))}</p>",400)
             return self.html("<h1>SCB connected</h1><p>Return to MooPiew Owner dashboard to enable and test QR payment.</p>")
         if path == "/api/health":

@@ -57,7 +57,7 @@ paths:
   /api/scb/payment/confirm:
     post: {summary: SCB callback trigger; server verifies provider inquiry before settlement, responses: {'200': {description: Verified state}, '401': {description: Invalid signature}}}
   /auth/scb/callback:
-    get: {summary: SCB EASY OAuth callback for the owner flow, parameters: [{name: code, in: query, schema: {type: string}}, {name: authCode, in: query, schema: {type: string}}], responses: {'200': {description: Connection completed}, '400': {description: Missing or rejected authorization code}}}
+    get: {summary: SCB EASY OAuth callback for the owner flow, parameters: [{name: code, in: query, schema: {type: string, maxLength: 4096}}, {name: authCode, in: query, schema: {type: string, maxLength: 4096}}, {name: state, in: query, required: true, schema: {type: string, minLength: 32, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$'}}], responses: {'200': {description: Connection completed}, '400': {description: Missing, expired, replayed or rejected authorization state/code}}}
   /api/admin/dashboard:
     get: {summary: Owner dashboard with orders, payments and audit summary, security: [{adminKey: []}], responses: {'200': {description: Dashboard}}}
   /api/admin/audit:

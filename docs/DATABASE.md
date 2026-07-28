@@ -19,7 +19,7 @@ changing a name or checksum causes startup to fail closed.
 | Document workflow | uploaded documents, verification state and append-only history |
 | Operations | inventory, recipes, stock movements, receipts, tax invoices |
 | Customer | customer contact linkage and loyalty ledger |
-| Control plane | audit log and encrypted SCB OAuth tokens when enabled |
+| Control plane | audit log, encrypted SCB OAuth tokens, and expiring one-time OAuth state/PKCE verifier records |
 
 Customer contact data, payment references, coordinates and tokens are private.
 Do not place a populated database, export, `.env*`, certificate or master-data
