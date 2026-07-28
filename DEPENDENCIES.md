@@ -16,7 +16,6 @@ invalid YAML, broken local references, incomplete protected-route security
 metadata, and published operations that the isolated application does not
 recognize. It is deliberately excluded from the application container.
 
-CI currently runs `npm audit --omit=dev --audit-level=high` and `pip check`.
-These do not constitute a complete vulnerability assessment: Python
-vulnerability scanning, development-dependency scanning, SBOM generation, and
-artifact signing remain open production-readiness controls.
+CI runs `pip check`, a strict `pip-audit` scan of runtime requirements, and
+`npm audit --audit-level=moderate` across runtime and development dependencies.
+SBOM generation and artifact signing remain open production-readiness controls.

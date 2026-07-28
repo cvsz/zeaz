@@ -65,28 +65,74 @@ def _output(stdout: str, stderr: str) -> str:
     return (stdout + stderr)[-8000:]
 
 
+def _npm_audit_vulnerabilities(output: str) -> dict[str, Any]:
+    result = json.loads(output)
+    if not isinstance(result, dict):
+        raise ValueError("npm audit output must be an object")
+    vulnerabilities = result["metadata"]["vulnerabilities"]
+    if not isinstance(vulnerabilities, dict):
+        raise ValueError("npm audit vulnerabilities must be an object")
+    return vulnerabilities
+
+
+def _python_audit_count(output: str) -> int:
+    result = json.loads(output)
+    if not isinstance(result, dict) or not isinstance(
+        result.get("dependencies"), list
+    ):
+        raise ValueError("pip-audit output must contain a dependencies list")
+    return sum(
+        len(item.get("vulns", []))
+        for item in result["dependencies"]
+        if isinstance(item, dict) and isinstance(item.get("vulns", []), list)
+    )
+
+
 def security() -> int:
     pip_python = sys.executable
     if importlib.util.find_spec("pip") is None and (ROOT / ".venv/bin/python").is_file():
         pip_python = str(ROOT / ".venv/bin/python")
     pip_code, pip_stdout, pip_stderr, pip_seconds = run([pip_python, "-m", "pip", "check"])
+    audit_code, audit_stdout, audit_stderr, audit_seconds = run(
+        [
+            pip_python,
+            "-m",
+            "pip_audit",
+            "--requirement",
+            str(ROOT / "requirements.txt"),
+            "--format",
+            "json",
+            "--progress-spinner",
+            "off",
+            "--strict",
+        ]
+    )
     npm_code, npm_stdout, npm_stderr, npm_seconds = run(
-        ["npm", "audit", "--omit=dev", "--audit-level=high", "--json"]
+        ["npm", "audit", "--audit-level=moderate", "--json"]
     )
     vulnerabilities: dict[str, Any] = {}
     try:
-        vulnerabilities = json.loads(npm_stdout).get("metadata", {}).get("vulnerabilities", {})
-    except (AttributeError, json.JSONDecodeError):
-        pass
-    status = "pass" if pip_code == npm_code == 0 else "fail"
+        vulnerabilities = _npm_audit_vulnerabilities(npm_stdout)
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        npm_code = npm_code or 1
+    try:
+        python_vulnerabilities = _python_audit_count(audit_stdout)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        python_vulnerabilities = 0
+        audit_code = audit_code or 1
+    status = "pass" if pip_code == audit_code == npm_code == 0 else "fail"
     write_report(
         "security",
         status,
-        "Production dependency checks passed." if status == "pass" else "Dependency checks found errors or vulnerabilities.",
-        {"npmVulnerabilities": vulnerabilities},
+        "Dependency security checks passed." if status == "pass" else "Dependency checks found errors or vulnerabilities.",
+        {
+            "pythonVulnerabilities": python_vulnerabilities,
+            "npmVulnerabilities": vulnerabilities,
+        },
         [
             {"check": "pip check", "exitCode": pip_code, "durationSeconds": pip_seconds, "output": _output(pip_stdout, pip_stderr)},
-            {"check": "npm audit production", "exitCode": npm_code, "durationSeconds": npm_seconds, "output": _output(npm_stdout, npm_stderr)},
+            {"check": "pip-audit runtime requirements", "exitCode": audit_code, "durationSeconds": audit_seconds, "output": _output(audit_stdout, audit_stderr)},
+            {"check": "npm audit all dependencies", "exitCode": npm_code, "durationSeconds": npm_seconds, "output": _output(npm_stdout, npm_stderr)},
         ],
     )
     return 0 if status == "pass" else 1
@@ -129,7 +175,7 @@ def coverage() -> int:
             }
         )
     percent = round(covered * 100 / executable, 2) if executable else 0
-    threshold = float(os.environ.get("PYTHON_COVERAGE_MIN", "20"))
+    threshold = float(os.environ.get("PYTHON_COVERAGE_MIN", "30"))
     passed = result.wasSuccessful() and percent >= threshold
     test_metrics = {
         "testsRun": result.testsRun,
