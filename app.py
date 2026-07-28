@@ -1169,6 +1169,7 @@ class Handler(SimpleHTTPRequestHandler):
     def delivery_quote(self,form):
         try: subtotal=int(form.get("subtotal",0))
         except (ValueError,TypeError): raise ValueError("ยอดสั่งไม่ถูกต้อง")
+        if subtotal < 0: raise ValueError("ยอดสั่งต้องไม่ติดลบ")
         zone_id=str(form.get("zone_id","")).strip()
         with db() as con:
             zone=con.execute("SELECT id,name,fee,minimum_order FROM delivery_zones WHERE id=? AND active=1",(zone_id,)).fetchone()
@@ -1435,6 +1436,7 @@ class Handler(SimpleHTTPRequestHandler):
             order=row_order(con,oid)
             if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
             if status=="cancelled" and order["payment"]["status"]=="paid":raise ValueError("ออเดอร์นี้ชำระเงินแล้ว กรุณาดำเนินการคืนเงินก่อนยกเลิก")
+            if status=="cancelled" and order["status"]=="completed":raise ValueError("ออเดอร์ที่เสร็จแล้วไม่สามารถยกเลิกได้")
             if status=="completed" and order["status"] in {"cancelled","completed"}:raise ValueError("ออเดอร์นี้ปิดแล้ว ไม่สามารถปิดซ้ำได้")
             if status=="completed" and order["payment"]["method"]=="scb_qr" and order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงิน SCB ก่อนปิดออเดอร์")
             current_payment=order["payment"]["status"]
