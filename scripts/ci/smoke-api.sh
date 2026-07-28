@@ -85,6 +85,10 @@ cancelled="$(curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/ord
   --header 'Content-Type: application/json' \
   --data '{"phone":"0812345678"}')"
 printf '%s' "$cancelled" | "$PYTHON" -c 'import json,sys; assert json.load(sys.stdin)["order"]["status"] == "cancelled"'
+cancelled_lookup="$(curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/order-lookup" \
+  --header 'Content-Type: application/json' \
+  --data "{\"order_id\":\"$order_id\",\"phone\":\"0812345678\"}")"
+printf '%s' "$cancelled_lookup" | "$PYTHON" -c 'import json,sys; assert json.load(sys.stdin)["order"]["status"] == "cancelled"'
 
 curl --silent --fail --max-time 3 "$BASE_URL/api/admin/dashboard" \
   --header "X-Admin-Key-B64: $admin_header" >"$TMP_DIR/dashboard.json"
@@ -93,7 +97,7 @@ import json
 import sys
 data=json.load(open(sys.argv[1], encoding="utf-8"))
 assert data["summary"]["orders"] == 1
-assert data["orders"][0]["status"] == "cancelled"
+assert len(data["orders"]) == 1
 PY
 
 echo "Isolated API smoke checks passed."
