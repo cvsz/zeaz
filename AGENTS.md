@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Language and Coding Standards
+- **Communication**: Always talk in Thai when interacting with users.
+- **Code & Technical Assets**: All code, comments, documentation, and technical definitions must be in English.
+
 ## Purpose
 
 This file defines repository-wide operating rules for coding agents and human
