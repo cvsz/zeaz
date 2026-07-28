@@ -1,0 +1,2 @@
+# Runtime dependency used for encrypted SCB OAuth token storage.
+cryptography==46.0.5

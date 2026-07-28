@@ -10,10 +10,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install validation dependencies
+        run: |
+          python3 -m pip install --requirement requirements.txt
+          npm ci
       - name: Check shell syntax
         run: bash -n scripts/*.sh
-      - name: Check backend syntax
-        run: python3 -m py_compile app.py
+      - name: Run platform checks
+        run: ./scripts/ci/test.sh
       - name: Generate example business kit
         run: ./scripts/generate.sh examples/cafe.yaml /tmp/cafe-kit
       - name: Package example business kit
