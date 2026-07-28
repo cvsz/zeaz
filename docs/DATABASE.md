@@ -29,9 +29,17 @@ The current base schema is `migrations/000_core_schema.sql`; the historical
 additive provider-document migration remains
 `migrations/001_provider_document_requirements.sql`, and
 `migrations/002_legacy_schema.py` upgrades schemas created before the ledger.
+`migrations/003_oauth_pkce.py` adds encrypted verifier storage, while
+`migrations/004_inventory_invariants.sql` enforces idempotent inventory
+consumption.
 Requirements are seeded separately from reviewed Thailand provider references
 and queried at runtime; they are never encoded as upload buttons or environment
 variables.
+
+Critical commerce mutations start with `BEGIN IMMEDIATE`, so slot-capacity,
+order-state, payment, delivery, receipt and inventory decisions serialize
+across independent application processes. The database also enforces one
+`order_completed` inventory movement per order and ingredient.
 
 ## Backup and recovery
 
@@ -39,6 +47,7 @@ variables.
 ./scripts/health-check.sh
 ./scripts/backup-database.sh
 ./scripts/verify-backup.sh output/backups/<backup>.sqlite3
+./scripts/restore-drill.sh output/backups/<backup>.sqlite3
 ```
 
 Backups are SQLite-consistent, integrity-checked snapshots with SHA-256
@@ -50,3 +59,6 @@ set `BACKUP_AGE_IDENTITY` to the private age identity when verifying an
 encrypted candidate, replace only the confirmed database file, restart, then
 check `/api/ready` and a test order lookup. Plaintext used during backup or
 verification exists only in mode-`0600` temporary files removed by traps.
+`restore-drill.sh` never replaces the active database: it verifies the artifact,
+copies or decrypts it into an isolated temporary directory, applies all current
+migrations, and checks SQLite integrity, foreign keys, and core tables.

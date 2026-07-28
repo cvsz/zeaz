@@ -108,11 +108,13 @@ def load_legacy(path: Path, fallback):
     except (OSError, json.JSONDecodeError): return fallback
 
 @contextmanager
-def db():
+def db(*, immediate: bool = False):
     DATA.mkdir(mode=0o700, parents=True, exist_ok=True); DATA.chmod(0o700)
     connection = sqlite3.connect(DB_PATH, timeout=10)
     connection.row_factory = sqlite3.Row
     try:
+        if immediate:
+            connection.execute("BEGIN IMMEDIATE")
         yield connection; connection.commit()
     except Exception:
         connection.rollback(); raise
@@ -1329,7 +1331,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not 2<=len(name)<=80:raise ValueError("กรุณาระบุชื่ออย่างน้อย 2 ตัวอักษร")
         if not re.fullmatch(r"(?:\+66|0)\d{8,9}",phone):raise ValueError("กรุณาระบุเบอร์โทรศัพท์ที่ถูกต้อง")
         if fulfillment not in {"pickup","delivery"}: raise ValueError("รูปแบบการรับสินค้าไม่ถูกต้อง")
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             conf=config(con)
             if fulfillment=="pickup":
                 if not valid_pickup(pickup_date,conf):raise ValueError("เลือกรับสินค้าได้เฉพาะวันที่เปิดให้สั่งล่วงหน้า")
@@ -1444,7 +1446,7 @@ class Handler(SimpleHTTPRequestHandler):
             payment=dict(payment)
         try: response,paid=scb_inquire_payment(payment)
         except ValueError as error: return self.json({"error":str(error)},503)
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             current=row_payment(con,payment["id"])
             if paid and current["status"] in {"created","pending"}:
                 order=con.execute("SELECT status FROM orders WHERE id=?",(current["order_id"],)).fetchone()
@@ -1458,7 +1460,7 @@ class Handler(SimpleHTTPRequestHandler):
             if not payment or not payment["provider"].startswith("scb_"): return self.json({"error":"ไม่พบ SCB payment attempt"},404)
             if payment["status"]=="paid": return self.json({"payment":payment_public(payment),"inquiry":"already_paid"})
         response,paid=scb_inquire_payment(payment)
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             current=row_payment(con,payment_id)
             if paid and current["status"] in {"created","pending"}:
                 order=con.execute("SELECT status FROM orders WHERE id=?",(current["order_id"],)).fetchone()
@@ -1476,7 +1478,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.json({"error":"ไม่พบออเดอร์ หรือเบอร์โทรศัพท์ไม่ตรงกัน"},404)
     def cancel_order(self,oid,form):
         phone=re.sub(r"[^0-9+]","",str(form.get("phone","")))
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             order=row_order(con,oid)
             if not order or not secrets.compare_digest(order["customer"]["phone"],phone):return self.json({"error":"ไม่พบออเดอร์ หรือเบอร์โทรศัพท์ไม่ตรงกัน"},404)
             if order["status"] not in {"new","confirmed"}:raise ValueError("ออเดอร์นี้ไม่สามารถยกเลิกทางออนไลน์ได้")
@@ -1501,7 +1503,7 @@ class Handler(SimpleHTTPRequestHandler):
     def register_rider(self,form):
         name=str(form.get("name","")).strip()[:80]; phone=re.sub(r"[^0-9+]","",str(form.get("phone", ""))); vehicle_type=str(form.get("vehicle_type","")).strip()[:40]; vehicle_plate=str(form.get("vehicle_plate","")).strip()[:20]; note=str(form.get("note","")).strip()[:300]
         if len(name)<2 or not re.fullmatch(r"(?:\+66|0)\d{8,9}",phone) or vehicle_type not in {"motorcycle","bicycle","car"}:raise ValueError("กรุณากรอกข้อมูลสมัครไรเดอร์ให้ครบถ้วน")
-        with db() as con:
+        with db(immediate=True) as con:
             pending=con.execute("SELECT 1 FROM rider_applications WHERE phone=? AND status='pending'",(phone,)).fetchone()
             if pending:raise ValueError("มีใบสมัครที่รอตรวจสอบสำหรับเบอร์นี้แล้ว")
             application={"id":f"RAP-{secrets.token_hex(4).upper()}","name":name,"phone":phone,"vehicle_type":vehicle_type,"vehicle_plate":vehicle_plate,"note":note,"status":"pending","created_at":utcnow()}
@@ -1569,7 +1571,7 @@ class Handler(SimpleHTTPRequestHandler):
         except (ValueError,TypeError):raise ValueError("จำนวนปรับสต็อกไม่ถูกต้อง")
         reason=str(form.get("reason","adjustment")).strip()[:80]; note=str(form.get("note","")).strip()[:200]
         if not iid or not delta:raise ValueError("กรุณาระบุรายการและจำนวนที่ต้องการปรับ")
-        with db() as con:
+        with db(immediate=True) as con:
             item=con.execute("SELECT * FROM inventory_items WHERE id=?",(iid,)).fetchone()
             if not item:return self.json({"error":"ไม่พบวัตถุดิบ"},404)
             next_value=float(item["on_hand"])+delta
@@ -1598,7 +1600,7 @@ class Handler(SimpleHTTPRequestHandler):
     def update_delivery(self,oid,form,role,area):
         status=str(form.get("status","")).strip(); rider_id=str(form.get("rider_id","")).strip()
         if status and status not in DELIVERY_STATUSES:raise ValueError("สถานะจัดส่งไม่ถูกต้อง")
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             delivery=con.execute("SELECT * FROM deliveries WHERE order_id=?",(oid,)).fetchone()
             if not delivery:return self.json({"error":"ไม่พบงานจัดส่ง"},404)
             transitions={"queued":{"assigned","cancelled"},"assigned":{"picked_up","cancelled"},"picked_up":{"on_the_way","failed"},"on_the_way":{"delivered","failed"},"failed":{"queued"},"delivered":set(),"cancelled":set()}
@@ -1621,7 +1623,7 @@ class Handler(SimpleHTTPRequestHandler):
                     con.execute("UPDATE orders SET status='completed' WHERE id=?",(oid,)); con.execute("INSERT INTO order_history(order_id,at,status,actor_role,note) VALUES (?,?,?,?,?)",(oid,now,"completed",role,"delivery_delivered")); self.complete_order_effects(con,oid,order,role)
             audit(con,role,"delivery_update","delivery",oid,{"status":status,"rider_id":rider_id});return self.json({"order":row_order(con,oid)})
     def issue_receipt(self,oid,form,role):
-        with db() as con:
+        with db(immediate=True) as con:
             order=row_order(con,oid)
             if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
             existing=con.execute("SELECT * FROM pos_receipts WHERE order_id=?",(oid,)).fetchone()
@@ -1646,7 +1648,7 @@ class Handler(SimpleHTTPRequestHandler):
         with db() as con:set_setting(con,"delivery_pricing",profile);audit(con,role,"update","delivery_pricing","store",{key:profile[key] for key in ("base_fee","per_km_fee","maximum_km")})
         self.json({"delivery_pricing":profile})
     def issue_tax_invoice(self,receipt_id,form,role):
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             receipt=con.execute("SELECT * FROM pos_receipts WHERE id=?",(receipt_id,)).fetchone()
             if not receipt:return self.json({"error":"ไม่พบใบเสร็จ"},404)
             existing=con.execute("SELECT * FROM tax_invoices WHERE receipt_id=?",(receipt_id,)).fetchone()
@@ -1671,7 +1673,7 @@ class Handler(SimpleHTTPRequestHandler):
         status=str(form.get("status", "")); payment=str(form.get("payment_status", ""))
         if status and status not in allowed:raise ValueError("คุณไม่มีสิทธิ์เปลี่ยนสถานะนี้")
         if payment and (area!="admin" or payment not in PAYMENT_STATUSES):raise ValueError("สถานะชำระเงินไม่ถูกต้อง")
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             order=row_order(con,oid)
             if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
             if status=="cancelled" and order["payment"]["status"]=="paid":raise ValueError("ออเดอร์นี้ชำระเงินแล้ว กรุณาดำเนินการคืนเงินก่อนยกเลิก")

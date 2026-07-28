@@ -19,11 +19,11 @@ class MigrationTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_fresh_database_and_idempotence(self):
-        self.assertEqual(apply_migrations(self.connection), [0, 1, 2, 3])
+        self.assertEqual(apply_migrations(self.connection), [0, 1, 2, 3, 4])
         versions = self.connection.execute(
             "SELECT version FROM schema_migrations ORDER BY version"
         ).fetchall()
-        self.assertEqual(versions, [(0,), (1,), (2,), (3,)])
+        self.assertEqual(versions, [(0,), (1,), (2,), (3,), (4,)])
         columns = {
             row[1] for row in self.connection.execute("PRAGMA table_info(deliveries)")
         }
@@ -32,6 +32,13 @@ class MigrationTests(unittest.TestCase):
             row[1] for row in self.connection.execute("PRAGMA table_info(oauth_states)")
         }
         self.assertIn("verifier_cipher", oauth_columns)
+        indexes = {
+            row[1]
+            for row in self.connection.execute(
+                "PRAGMA index_list(inventory_movements)"
+            )
+        }
+        self.assertIn("idx_inventory_order_consumption", indexes)
         payment_sql = self.connection.execute(
             "SELECT sql FROM sqlite_master WHERE name='payment_attempts'"
         ).fetchone()[0]
@@ -195,7 +202,7 @@ class MigrationTests(unittest.TestCase):
         rows = self.connection.execute(
             "SELECT version,COUNT(*) FROM schema_migrations GROUP BY version"
         ).fetchall()
-        self.assertEqual(rows, [(0, 1), (1, 1), (2, 1), (3, 1)])
+        self.assertEqual(rows, [(0, 1), (1, 1), (2, 1), (3, 1), (4, 1)])
 
 
 if __name__ == "__main__":

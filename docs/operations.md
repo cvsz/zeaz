@@ -54,3 +54,9 @@ callback alone is never proof of payment.
 - Count high-value inventory and record an auditable adjustment when needed.
 - Run `./scripts/backup-database.sh` and confirm the backup is stored securely.
 - Review the audit log for unexpected owner changes.
+
+At least monthly and before a migration release, run
+`./scripts/restore-drill.sh <backup>` against the newest replicated backup.
+Record the artifact checksum, drill time, result, operator and recovery-time
+measurement in the operational evidence system. The drill uses an isolated
+copy and must never target the active database.
