@@ -2,6 +2,10 @@
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PYTHON="${MOOPIEW_PYTHON:-$ROOT/.venv/bin/python}"
+if [[ ! -x "$PYTHON" ]]; then
+  PYTHON=python3
+fi
 TMP_DIR="$(mktemp -d)"
 APP_PID=""
 
@@ -16,7 +20,7 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-PORT="$(python3 - <<'PY'
+PORT="$("$PYTHON" - <<'PY'
 import socket
 with socket.socket() as sock:
     sock.bind(("127.0.0.1", 0))
@@ -32,7 +36,7 @@ ADMIN_KEY=ci-admin-key
 EMPLOYEE_KEY=ci-employee-key
 KITCHEN_KEY=ci-kitchen-key
 
-python3 "$ROOT/app.py" >"$TMP_DIR/server.log" 2>&1 &
+"$PYTHON" "$ROOT/app.py" >"$TMP_DIR/server.log" 2>&1 &
 APP_PID="$!"
 for _ in {1..30}; do
   if curl --silent --fail --max-time 1 "$BASE_URL/api/health" >/dev/null; then break; fi
@@ -48,7 +52,31 @@ pickup_date="$(date -u +%F)"
 order="$(curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/orders" \
   --header 'Content-Type: application/json' \
   --data "{\"name\":\"CI Customer\",\"phone\":\"0812345678\",\"pickup_date\":\"$pickup_date\",\"pickup_slot\":\"09:00–10:00\",\"payment_method\":\"cash\",\"items\":[{\"id\":\"classic\",\"quantity\":1}]}")"
-order_id="$(printf '%s' "$order" | python3 -c 'import json,sys; print(json.load(sys.stdin)["order"]["id"])')"
+order_id="$(printf '%s' "$order" | "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin)["order"]["id"])')"
+admin_header="$(printf '%s' "$ADMIN_KEY" | base64 | tr -d '\n')"
+
+receipt="$(curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/admin/orders/$order_id/receipt" \
+  --header 'Content-Type: application/json' \
+  --header "X-Admin-Key-B64: $admin_header" \
+  --data '{}')"
+receipt_id="$(printf '%s' "$receipt" | "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin)["receipt"]["id"])')"
+curl --silent --fail --max-time 3 --dump-header "$TMP_DIR/receipt.headers" \
+  --output "$TMP_DIR/receipt.html" \
+  "$BASE_URL/api/admin/receipts/$receipt_id/print" \
+  --header "X-Admin-Key-B64: $admin_header"
+"$PYTHON" - "$TMP_DIR/receipt.headers" "$TMP_DIR/receipt.html" <<'PY'
+import re
+import sys
+
+headers = open(sys.argv[1], encoding="iso-8859-1").read()
+body = open(sys.argv[2], encoding="utf-8").read()
+csp = next((line.split(":", 1)[1].strip() for line in headers.splitlines() if line.lower().startswith("content-security-policy:")), "")
+nonce = re.search(r"script-src 'self' 'nonce-([^']+)'", csp)
+script = re.search(r"<script nonce='([^']+)'>", body)
+assert nonce and script and nonce.group(1) == script.group(1)
+assert "onclick=" not in body
+assert "addEventListener('click',()=>window.print())" in body
+PY
 
 curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/order-lookup" \
   --header 'Content-Type: application/json' \
@@ -56,12 +84,11 @@ curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/order-lookup" \
 cancelled="$(curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/orders/$order_id/cancel" \
   --header 'Content-Type: application/json' \
   --data '{"phone":"0812345678"}')"
-printf '%s' "$cancelled" | python3 -c 'import json,sys; assert json.load(sys.stdin)["order"]["status"] == "cancelled"'
+printf '%s' "$cancelled" | "$PYTHON" -c 'import json,sys; assert json.load(sys.stdin)["order"]["status"] == "cancelled"'
 
-admin_header="$(printf '%s' "$ADMIN_KEY" | base64 | tr -d '\n')"
 curl --silent --fail --max-time 3 "$BASE_URL/api/admin/dashboard" \
   --header "X-Admin-Key-B64: $admin_header" >"$TMP_DIR/dashboard.json"
-python3 - "$TMP_DIR/dashboard.json" <<'PY'
+"$PYTHON" - "$TMP_DIR/dashboard.json" <<'PY'
 import json
 import sys
 data=json.load(open(sys.argv[1], encoding="utf-8"))
