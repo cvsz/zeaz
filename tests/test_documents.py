@@ -1,5 +1,6 @@
 import base64
 import json
+import subprocess
 import threading
 import unittest
 from pathlib import Path
@@ -66,6 +67,15 @@ class DocumentApiTests(unittest.TestCase):
                 "mime_type": "application/pdf", "content_base64": base64.b64encode(b"not a pdf").decode(),
             })
         self.assertEqual(error.exception.code, 400)
+
+    def test_frontend_document_renderer_contract(self):
+        with urlopen(self.base + "/documents.html", timeout=3) as response:
+            page = response.read().decode()
+        self.assertIn("document-upload/document-page.js", page)
+        source = Path(app.ROOT / "web/components/document-upload/document-upload.js").read_text(encoding="utf-8")
+        self.assertIn("ondrop", source)
+        self.assertIn("capture=\"environment\"", source)
+        subprocess.run(["node", "--check", str(app.ROOT / "web/components/document-upload/document-upload.js")], check=True, capture_output=True)
 
 
 if __name__ == "__main__":
