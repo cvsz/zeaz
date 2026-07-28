@@ -29,6 +29,8 @@ jobs:
           python3 -m pip check
       - name: Run platform checks
         run: ./scripts/ci/test.sh
+      - name: Run Python regression tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
       - name: Run isolated API smoke checks
         run: ./scripts/ci/smoke-api.sh
       - name: Generate example business kit
