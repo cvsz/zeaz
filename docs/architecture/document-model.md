@@ -53,6 +53,10 @@ existing uploaded records remain untouched when a requirement changes.
 
 Never edit an effective requirement in place. Close it with `effective_to`,
 insert a new version, and keep the source URL and review timestamp in metadata.
+Effective windows are end-exclusive UTC timestamps: a row is active when
+`effective_from <= now < effective_to`, or when `effective_to` is empty.
+Version creation uses an immediate write transaction so concurrent requests
+cannot create sibling versions. Historical rows are read-only.
 Names can later be localized by adding a translation table keyed by
 `document_type_id` and locale; the current API returns canonical names and
 metadata so a frontend can provide Thai/English labels without changing the

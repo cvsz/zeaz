@@ -1,0 +1,21 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: moopiew
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: moopiew
+      app.kubernetes.io/component: application
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: engineering-dashboard
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: moopiew
+      app.kubernetes.io/component: engineering-dashboard

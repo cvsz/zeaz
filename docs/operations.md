@@ -54,3 +54,38 @@ callback alone is never proof of payment.
 - Count high-value inventory and record an auditable adjustment when needed.
 - Run `./scripts/backup-database.sh` and confirm the backup is stored securely.
 - Review the audit log for unexpected owner changes.
+
+At least monthly and before a migration release, run
+`./scripts/restore-drill.sh <backup>` against the newest replicated backup.
+Record the artifact checksum, drill time, result, operator and recovery-time
+measurement in the operational evidence system. The drill uses an isolated
+copy and must never target the active database.
+
+## Document storage
+
+Set a dedicated `DOCUMENT_ENCRYPTION_KEY` before accepting onboarding files.
+After a verified database and document-directory backup, migrate legacy
+plaintext objects and inspect the dry-run count first:
+
+```bash
+./scripts/document-storage.sh migrate --dry-run
+./scripts/document-storage.sh migrate
+```
+
+Schedule `./scripts/document-storage.sh purge --dry-run` for policy review and
+`./scripts/document-storage.sh purge` for approved deletion. The purge removes
+only records already soft-deleted longer than
+`DELETED_DOCUMENT_RETENTION_DAYS`; active, pending, approved, rejected, and
+expired records are not inferred as deletable. Record counts and timestamps in
+operational evidence. Backups retain their independent encrypted retention
+policy.
+
+The supported single-host schedule is
+`deploy/systemd/moopiew-document-retention.timer`. Install both retention unit
+files under `~/.config/systemd/user/`, then enable the timer:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now moopiew-document-retention.timer
+systemctl --user list-timers moopiew-document-retention.timer
+```

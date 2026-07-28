@@ -1,8 +1,7 @@
 # Roadmap
 
-- Harden SCB OAuth state/PKCE and provider callback expiry.
-- Add delivery/inventory concurrency invariants and restore verification.
-- Complete provider document-policy admin editing, encrypted object storage,
-  retention jobs and provider-specific integration tests.
-- Publish signed release archives after CI quality gates.
-- Expand integration tests for all configured free AI providers.
+- Raise branch-focused coverage for critical `app.py` mutations beyond the
+  current 41.84% line baseline, prioritizing order authorization and financial
+  lifecycle error paths. The repository-wide enforced floor is 45%.
+- Migrate the Cloudflare Terraform state from the local operator host to an
+  encrypted, locking remote backend with documented bootstrap and recovery.

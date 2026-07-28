@@ -4,7 +4,7 @@
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements-dev.txt
 ADMIN_KEY='local-owner-key' ./scripts/start.sh
 ```
 
@@ -20,6 +20,10 @@ for merchant applications. Do not use production keys locally.
 ./scripts/health-check.sh
 ./scripts/ci/test.sh
 ```
+
+For isolated migration or health validation, set `MOOPIEW_ENV_FILE` and
+`MOOPIEW_PAYMENT_ENV_FILE` to reviewed temporary files. The scripts otherwise
+load the production env files for backward-compatible operator use.
 
 For workflow changes, test at least one pickup and one delivery order, a rider
 application, a merchant application, and the owner approval path against a

@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/cvsz/zeaz
-ExecStart=/home/cvsz/zeaz/scripts/cloudflare-tunnel.sh
+WorkingDirectory=%h/zeaz
+ExecStart=%h/zeaz/scripts/cloudflare-tunnel.sh
 Restart=always
 RestartSec=5
 UMask=0077

@@ -22,8 +22,9 @@ hide conditional documents and require a release for every policy change.
 The browser receives names, MIME limits and statuses, never provider secrets or
 storage paths. Uploads are size/MIME/signature checked, randomised, private and
 audited. Admin authentication is required for upload, review, status and
-deletion. A deployment must add encryption-at-rest and retention scheduling
-before production onboarding of sensitive identity documents.
+deletion. Runtime storage uses dedicated Fernet encryption at rest, provides a
+hash-verified plaintext migration, and purges only aged soft-deletion
+tombstones through an explicit scheduled command.
 
 ## Alternatives rejected
 

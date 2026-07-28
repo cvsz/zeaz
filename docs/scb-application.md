@@ -179,9 +179,16 @@ authorization-code flow: SCB returns a one-time code to the registered HTTPS
 callback and the server exchanges it at `/v1/oauth/token`; this encrypted token
 is not reused as a merchant payment credential. Merchant payment APIs use the
 separate `SCB_PAYMENT_OAUTH_MODE` (normally `client_credentials`) service token.
-Generate a fresh `requestUId` for every SCB request. If the SCB product supports
-a caller-supplied state parameter, enable and validate it before exchanging the
-authorization code.
+Generate a fresh `requestUId` for every SCB request. Every callback must present
+an unexpired URL-safe state value that is atomically consumed exactly once
+before token exchange.
+
+PKCE is available behind `SCB_OAUTH_PKCE_ENABLED`. When enabled, MooPiew creates
+an S256 challenge and stores the one-time verifier encrypted with
+`SCB_TOKEN_ENCRYPTION_KEY`; the callback decrypts it only for token exchange.
+Keep PKCE disabled until the approved SCB product and Sandbox UAT confirm
+support and whether its JSON token field is `codeVerifier` or `code_verifier`.
+Never add an unreviewed provider field to the exchange payload.
 
 The `/v1/oauth/token/refresh` endpoint renews the stored authorization token.
 Do not place access tokens, refresh tokens or authorization codes in

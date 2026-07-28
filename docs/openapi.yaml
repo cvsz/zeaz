@@ -44,8 +44,8 @@ paths:
   /api/documents/upload:
     post: {summary: Upload a validated document for an onboarding requirement, security: [{adminKey: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DocumentUploadRequest'}}}}, responses: {'201': {description: Uploaded}, '400': {description: Validation failure}}}
   /api/documents/{documentId}:
-    patch: {summary: Verify or reject an uploaded document, security: [{adminKey: []}], parameters: [{name: documentId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Updated}}
-    delete: {summary: Soft-delete and remove an uploaded document, security: [{adminKey: []}], parameters: [{name: documentId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Deleted}}
+    patch: {summary: Verify or reject an uploaded document, security: [{adminKey: []}], parameters: [{name: documentId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Updated}}}
+    delete: {summary: Soft-delete and remove an uploaded document, security: [{adminKey: []}], parameters: [{name: documentId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Deleted}}}
   /api/documents/status:
     get: {summary: List document status for owner review, security: [{adminKey: []}], responses: {'200': {description: Document status}}}
   /api/documents/history:
@@ -57,7 +57,7 @@ paths:
   /api/scb/payment/confirm:
     post: {summary: SCB callback trigger; server verifies provider inquiry before settlement, responses: {'200': {description: Verified state}, '401': {description: Invalid signature}}}
   /auth/scb/callback:
-    get: {summary: SCB EASY OAuth callback for the owner flow, parameters: [{name: code, in: query, schema: {type: string}}, {name: authCode, in: query, schema: {type: string}}], responses: {'200': {description: Connection completed}, '400': {description: Missing or rejected authorization code}}}
+    get: {summary: SCB EASY OAuth callback for the owner flow, parameters: [{name: code, in: query, schema: {type: string, maxLength: 4096}}, {name: authCode, in: query, schema: {type: string, maxLength: 4096}}, {name: state, in: query, required: true, schema: {type: string, minLength: 32, maxLength: 128, pattern: '^[A-Za-z0-9_-]+$'}}], responses: {'200': {description: Connection completed}, '400': {description: Missing, expired, replayed or rejected authorization state/code}}}
   /api/admin/dashboard:
     get: {summary: Owner dashboard with orders, payments and audit summary, security: [{adminKey: []}], responses: {'200': {description: Dashboard}}}
   /api/admin/audit:

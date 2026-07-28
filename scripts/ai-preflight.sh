@@ -12,9 +12,11 @@ for argument in "$@"; do
     esac
 done
 [[ -f "$ROOT/.env.ai" ]] || { echo "Missing $ROOT/.env.ai; copy .env.ai.example first." >&2; exit 1; }
+# shellcheck disable=SC1091
 [[ -f "$ROOT/.env.production" ]] && source "$ROOT/.env.production"
+# shellcheck disable=SC1091
 source "$ROOT/.env.ai"
-export AI_PROVIDER_KEYS_JSON HF_ENABLED HF_TOKEN HF_ROUTER_BASE_URL AI_MODEL_CATALOG_TTL HF_MODEL_CATALOG_TTL ZEAZ_AI_GATEWAY_URL AI_GATEWAY_PROVIDER_TOKEN
+export AI_PROVIDER_KEYS_JSON AI_DISABLED_PROVIDERS HF_ENABLED HF_TOKEN HF_ROUTER_BASE_URL AI_MODEL_CATALOG_TTL HF_MODEL_CATALOG_TTL ZEAZ_AI_GATEWAY_URL AI_GATEWAY_PROVIDER_TOKEN
 cd "$ROOT"
 STRICT="$STRICT" SMOKE="$SMOKE" python3 - <<'PY'
 import os

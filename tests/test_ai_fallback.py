@@ -36,6 +36,17 @@ class AiFallbackTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 app.local_ai_base()
 
+    def test_disabled_provider_key_is_not_loaded(self):
+        with patch.dict(
+            os.environ,
+            {
+                "AI_PROVIDER_KEYS_JSON": '{"fireworks":"secret","groq":" active "}',
+                "AI_DISABLED_PROVIDERS": "fireworks,unknown",
+            },
+            clear=False,
+        ):
+            self.assertEqual(app.ai_provider_keys(), {"groq": "active"})
+
     def test_boolean_form_values_are_not_truthy_strings(self):
         self.assertFalse(app.parse_bool("false", True))
         self.assertTrue(app.parse_bool("true", False))

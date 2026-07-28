@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: moopiew
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - persistent-volume-claim.yaml
+  - application.yaml
+  - dashboard.yaml
+  - ingress.yaml
+  - dashboard-ingress.yaml
+  - network-policy.yaml
+  - pod-disruption-budget.yaml
+images:
+  - name: ghcr.io/cvsz/zeaz
+    newTag: 1.0.0
+  - name: ghcr.io/cvsz/zeaz-dashboard
+    newTag: 1.0.0

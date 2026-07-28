@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: moopiew-config
+data:
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  DATA_DIR: "/var/lib/moopiew"
+  DATABASE_PATH: "/var/lib/moopiew/moopiew.sqlite3"
+  REQUIRE_ADMIN_KEY: "true"
+  TRUST_CF_CONNECTING_IP: "false"
+  AUTO_CONFIRM_ORDERS: "false"
+  PAYMENTS_ENABLED: "false"
+  SCB_ENABLED: "false"

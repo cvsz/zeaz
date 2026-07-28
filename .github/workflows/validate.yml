@@ -5,37 +5,77 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validation:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '20'
           cache: npm
       - name: Install validation dependencies
         run: |
-          python3 -m pip install --requirement requirements.txt
+          python3 -m pip install --requirement requirements-dev.txt
           npm ci
       - name: Check shell syntax
         run: find scripts assets/asset-generator -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
       - name: Run lint gate
         run: npm run lint
       - name: Audit dependencies
-        run: |
-          npm audit --omit=dev --audit-level=high
-          python3 -m pip check
+        run: python3 scripts/ci/evidence.py security
+      - name: Run Python tests with coverage
+        run: python3 scripts/ci/evidence.py coverage
       - name: Run platform checks
+        env:
+          SKIP_PYTHON_TESTS: "true"
         run: ./scripts/ci/test.sh
-      - name: Run Python regression tests
-        run: python3 -m unittest discover -s tests -p 'test_*.py'
+      - name: Build deployment images
+        run: |
+          docker build --build-arg VCS_REF="${GITHUB_SHA}" -t zeaz/moopiew:ci .
+          docker build --build-arg VCS_REF="${GITHUB_SHA}" -f dashboard/Dockerfile -t zeaz/dashboard:ci .
+          docker image inspect --format '{{.Id}}' zeaz/moopiew:ci zeaz/dashboard:ci > /tmp/zeaz-image-ids
+      - name: Validate rendered Kubernetes manifests
+        run: |
+          ./scripts/ci/install-kubernetes-tools.sh
+          ./scripts/ci/validate-kubernetes.sh
+      - name: Validate deployment controls
+        run: python3 scripts/ci/evidence.py infrastructure
+      - name: Validate performance budgets
+        if: always()
+        run: python3 scripts/ci/evidence.py performance
       - name: Run isolated API smoke checks
         run: ./scripts/ci/smoke-api.sh
       - name: Generate example business kit
         run: ./scripts/generate.sh examples/cafe.yaml /tmp/cafe-kit
       - name: Package example business kit
         run: ./scripts/package.sh /tmp/cafe-kit /tmp/cafe-kit.zip
+      - name: Publish final engineering evidence
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [[ "$JOB_STATUS" == "success" ]]; then status=pass; else status=fail; fi
+          python3 scripts/ci/evidence.py report ci "$status" "Validation workflow status: $JOB_STATUS."
+          python3 scripts/ci/evidence.py report agents not_applicable "Agent execution state is not available to the CI runtime."
+          python3 -m dashboard.api.health > dashboard/data/health.json
+      - name: Upload engineering evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: engineering-evidence
+          path: dashboard/data/*.json
+          if-no-files-found: error

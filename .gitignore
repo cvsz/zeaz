@@ -1,5 +1,9 @@
 output/*
 !output/.gitkeep
+dashboard/data/*.json
+.codex-namespace-backups/
+*.bak
+/qr.jpg
 data/orders.json
 data/settings.json
 data/*.sqlite3
@@ -34,8 +38,12 @@ cloudflared/
 # Payment secrets stay local; .env.payment.example is the reviewed template.
 infrastructure/terraform/cloudflare/terraform.tfvars
 infrastructure/terraform/cloudflare/.terraform/
+infrastructure/terraform/cloudflare/backend.tf
 infrastructure/terraform/cloudflare/*.tfstate*
 infrastructure/terraform/cloudflare/tfplan*
+infrastructure/terraform/cloudflare/.backend.*.hcl
+infrastructure/terraform/cloudflare/.remote-state.*.json
+infrastructure/terraform/cloudflare/.state-*.txt
 tools/bin/
 *.zip
 .DS_Store

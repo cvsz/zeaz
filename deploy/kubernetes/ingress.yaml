@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: moopiew
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "12m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - moopiew.example.invalid
+      secretName: moopiew-tls
+  rules:
+    - host: moopiew.example.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: moopiew
+                port:
+                  name: http

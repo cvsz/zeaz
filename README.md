@@ -41,6 +41,11 @@ Open `http://127.0.0.1:8000/` for customers and
 `http://127.0.0.1:8000/ops.html` for the owner console. Production values live
 only in ignored `.env.production` / `.env.payment` / `.env.ai` files.
 
+Run `npm run dashboard` to open the live engineering dashboard at
+`http://127.0.0.1:8080`. It streams repository state through SSE and consumes
+machine-readable CI evidence from `dashboard/data/`; see
+[OPERATIONS.md](OPERATIONS.md) for the report contract and Docker command.
+
 ## Main routes
 
 | Audience | Route |
@@ -64,12 +69,15 @@ key in source control, local storage, or a public URL.
 ./scripts/migrate.sh
 ./scripts/health-check.sh
 ./scripts/ci/test.sh
+python3 scripts/ci/evidence.py coverage
 ```
 
 Read [development](docs/DEVELOPMENT.md), [architecture](docs/ARCHITECTURE.md),
 [database operations](docs/DATABASE.md), [owner operations](docs/operations.md),
 [security controls](docs/security.th.md), and the bilingual roadmap
 ([English](docs/roadmap.en.md) / [ไทย](docs/roadmap.th.md)) before deploying.
+The [documentation index](SERVICES.md) identifies the canonical source for
+each operational concern.
 
 Provider rider and merchant checklists are documented under
 [`docs/reference/providers/`](docs/reference/providers/) and rendered from the

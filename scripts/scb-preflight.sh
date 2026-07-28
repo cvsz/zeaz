@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_ENV="$ROOT/.env.production"
-PAYMENT_ENV="$ROOT/.env.payment"
+APP_ENV="${MOOPIEW_ENV_FILE:-$ROOT/.env.production}"
+PAYMENT_ENV="${MOOPIEW_PAYMENT_ENV_FILE:-$ROOT/.env.payment}"
 
 [[ -f "$APP_ENV" ]] || { echo "Missing $APP_ENV" >&2; exit 1; }
 [[ -f "$PAYMENT_ENV" ]] || { echo "Missing $PAYMENT_ENV" >&2; exit 1; }
@@ -23,6 +23,22 @@ done
 [[ "${SCB_PRODUCT:-}" == "qr_api" ]] || { echo "SCB_PRODUCT must be qr_api for Mae Manee QR" >&2; exit 1; }
 [[ "${SCB_OAUTH_MODE:-}" == "authorization_code" ]] || { echo "SCB_OAUTH_MODE must be authorization_code" >&2; exit 1; }
 [[ "${SCB_PAYMENT_OAUTH_MODE:-client_credentials}" == "authorization_code" || "${SCB_PAYMENT_OAUTH_MODE:-client_credentials}" == "client_credentials" ]] || { echo "SCB_PAYMENT_OAUTH_MODE must be authorization_code or client_credentials" >&2; exit 1; }
+[[ "${SCB_OAUTH_PKCE_ENABLED:-false}" == "true" || "${SCB_OAUTH_PKCE_ENABLED:-false}" == "false" ]] || { echo "SCB_OAUTH_PKCE_ENABLED must be true or false" >&2; exit 1; }
+[[ -n "${SCB_AUTHORIZE_ENDPOINT:-}" && -n "${SCB_OAUTH_TOKEN_ENDPOINT:-}" ]] || { echo "SCB authorization-code endpoints are required" >&2; exit 1; }
+
+if [[ "${SCB_OAUTH_PKCE_ENABLED:-false}" == "true" ]]; then
+  [[ "${SCB_OAUTH_PKCE_TOKEN_FIELD:-codeVerifier}" == "codeVerifier" || "${SCB_OAUTH_PKCE_TOKEN_FIELD:-codeVerifier}" == "code_verifier" ]] || { echo "SCB_OAUTH_PKCE_TOKEN_FIELD must be codeVerifier or code_verifier" >&2; exit 1; }
+fi
+
+python3 - <<'PY'
+import os
+from cryptography.fernet import Fernet
+
+try:
+    Fernet(os.environ["SCB_TOKEN_ENCRYPTION_KEY"].encode())
+except (KeyError, TypeError, ValueError) as error:
+    raise SystemExit("SCB_TOKEN_ENCRYPTION_KEY must be a valid Fernet key") from error
+PY
 
 if [[ "${SCB_MTLS_REQUIRED:-false}" == "true" ]]; then
   [[ -r "${SCB_CLIENT_CERT_FILE:-}" && -r "${SCB_CLIENT_KEY_FILE:-}" ]] || { echo "SCB mTLS requires readable certificate and private-key files" >&2; exit 1; }

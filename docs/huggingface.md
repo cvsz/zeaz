@@ -84,6 +84,12 @@ provider’s live models endpoint, so an unavailable provider/model is omitted.
 Z.AI is prepared at `https://api.z.ai/api/paas/v4`; it appears only after a
 dedicated `zai` API key is configured.
 
+Set `AI_DISABLED_PROVIDERS` to a comma-separated set of provider names when an
+account is suspended, under billing review, or operationally disallowed. The
+credential remains in the ignored server environment for controlled recovery,
+but the provider is excluded from model discovery and chat routing. Remove a
+name only after `./scripts/ai-preflight.sh --strict` succeeds.
+
 OpenRouter is filtered to models whose catalog metadata declares zero
 input/output pricing. OpenCode is treated the same only if its catalog supplies
 zero-price metadata; OpenCode Zen itself can require billing and credits.

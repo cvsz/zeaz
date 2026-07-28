@@ -11,6 +11,11 @@ APP_PID=""
 
 cleanup() {
   status="$?"
+  if [[ "$status" -ne 0 && -s "$TMP_DIR/server.log" ]]; then
+    echo "----- isolated API server log -----" >&2
+    cat "$TMP_DIR/server.log" >&2
+    echo "----- end isolated API server log -----" >&2
+  fi
   if [[ -n "$APP_PID" ]] && kill -0 "$APP_PID" 2>/dev/null; then
     kill "$APP_PID" 2>/dev/null || true
     wait "$APP_PID" 2>/dev/null || true
@@ -20,14 +25,14 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-PORT="$("$PYTHON" - <<'PY'
+choose_port() {
+  "$PYTHON" - <<'PY'
 import socket
 with socket.socket() as sock:
     sock.bind(("127.0.0.1", 0))
     print(sock.getsockname()[1])
 PY
-)"
-BASE_URL="http://127.0.0.1:${PORT}"
+}
 export DATA_DIR="$TMP_DIR/data"
 export DATABASE_PATH="$DATA_DIR/moopiew.sqlite3"
 export PORT REQUIRE_ADMIN_KEY ADMIN_KEY EMPLOYEE_KEY KITCHEN_KEY
@@ -36,13 +41,30 @@ ADMIN_KEY=ci-admin-key
 EMPLOYEE_KEY=ci-employee-key
 KITCHEN_KEY=ci-kitchen-key
 
-"$PYTHON" "$ROOT/app.py" >"$TMP_DIR/server.log" 2>&1 &
-APP_PID="$!"
-for _ in {1..30}; do
-  if curl --silent --fail --max-time 1 "$BASE_URL/api/health" >/dev/null; then break; fi
-  sleep 0.1
+ready=false
+for _attempt in {1..5}; do
+  PORT="$(choose_port)"
+  BASE_URL="http://127.0.0.1:${PORT}"
+  : >"$TMP_DIR/server.log"
+  "$PYTHON" "$ROOT/app.py" >"$TMP_DIR/server.log" 2>&1 &
+  APP_PID="$!"
+  for _probe in {1..50}; do
+    if curl --silent --fail --max-time 1 "$BASE_URL/api/health" >/dev/null; then
+      ready=true
+      break
+    fi
+    kill -0 "$APP_PID" 2>/dev/null || break
+    sleep 0.1
+  done
+  [[ "$ready" == "true" ]] && break
+  kill "$APP_PID" 2>/dev/null || true
+  wait "$APP_PID" 2>/dev/null || true
+  APP_PID=""
 done
-curl --silent --fail --max-time 3 "$BASE_URL/api/health" >/dev/null
+[[ "$ready" == "true" ]] || {
+  echo "Isolated API server did not become healthy after 5 attempts." >&2
+  exit 1
+}
 
 status="$(curl --silent --output "$TMP_DIR/admin.json" --write-out '%{http_code}' "$BASE_URL/api/admin/dashboard")"
 [[ "$status" == "401" ]] || { echo "Unauthenticated admin endpoint returned $status" >&2; exit 1; }

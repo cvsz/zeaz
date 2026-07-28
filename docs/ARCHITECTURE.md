@@ -17,8 +17,9 @@ database transaction.
 
 ## Boundaries
 
-- `app.py` owns API validation, authentication, order transitions, audit writes
-  and schema migration.
+- `app.py` owns API validation, authentication, order transitions and audit
+  writes. Ordered files under `migrations/` own schema and upgrade history;
+  startup and `scripts/migrate.sh` use the same checksummed runner.
 - `web/` is the served customer/owner UI. `/ops.html` is an owner console;
   public registration pages have no owner credential.
 - `data/moopiew.sqlite3` is private operational state and is never committed.

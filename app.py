@@ -30,6 +30,8 @@ from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
+from migrations.runner import apply_migrations
+
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
 DATA = Path(os.environ.get("DATA_DIR", ROOT / "data"))
@@ -37,6 +39,9 @@ DB_PATH = Path(os.environ.get("DATABASE_PATH", DATA / "moopiew.sqlite3"))
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "change-me-before-production")
 EMPLOYEE_KEY = os.environ.get("EMPLOYEE_KEY", "change-me-employee-key")
 KITCHEN_KEY = os.environ.get("KITCHEN_KEY", "change-me-kitchen-key")
+TRUST_CF_CONNECTING_IP = (
+    os.environ.get("TRUST_CF_CONNECTING_IP", "false").lower() == "true"
+)
 STORE_LOCK, RATE_LOCK = Lock(), Lock()
 RATE_BUCKETS: dict[tuple[str, str], list[float]] = {}
 RATE_WINDOW_SECONDS, RATE_LIMITS = 60, {"public": 120, "order": 12, "lookup": 20, "quote": 30, "rider": 8, "webhook": 60, "admin": 60, "staff": 90}
@@ -103,11 +108,13 @@ def load_legacy(path: Path, fallback):
     except (OSError, json.JSONDecodeError): return fallback
 
 @contextmanager
-def db():
+def db(*, immediate: bool = False):
     DATA.mkdir(mode=0o700, parents=True, exist_ok=True); DATA.chmod(0o700)
     connection = sqlite3.connect(DB_PATH, timeout=10)
     connection.row_factory = sqlite3.Row
     try:
+        if immediate:
+            connection.execute("BEGIN IMMEDIATE")
         yield connection; connection.commit()
     except Exception:
         connection.rollback(); raise
@@ -115,68 +122,8 @@ def db():
 
 def initialise_database() -> None:
     with db() as con:
-        con.executescript("""
-        PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
-        CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS menu_items (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', price INTEGER NOT NULL CHECK(price >= 0), available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS menu_display_order (menu_item_id TEXT PRIMARY KEY REFERENCES menu_items(id) ON DELETE CASCADE, position INTEGER NOT NULL CHECK(position >= 0));
-        CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('new','confirmed','ready','completed','cancelled')), customer_name TEXT NOT NULL, customer_phone TEXT NOT NULL, pickup_date TEXT NOT NULL, pickup_slot TEXT NOT NULL, total INTEGER NOT NULL, notes TEXT NOT NULL DEFAULT '', payment_method TEXT NOT NULL, payment_status TEXT NOT NULL DEFAULT 'pending');
-        CREATE TABLE IF NOT EXISTS order_items (id INTEGER PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, menu_item_id TEXT NOT NULL, name TEXT NOT NULL, quantity INTEGER NOT NULL CHECK(quantity > 0), unit_price INTEGER NOT NULL CHECK(unit_price >= 0));
-        CREATE TABLE IF NOT EXISTS order_history (id INTEGER PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, at TEXT NOT NULL, status TEXT NOT NULL, actor_role TEXT NOT NULL, note TEXT NOT NULL DEFAULT '');
-        CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY, at TEXT NOT NULL, actor_role TEXT NOT NULL, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, details TEXT NOT NULL DEFAULT '{}');
-        CREATE TABLE IF NOT EXISTS payment_attempts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, provider TEXT NOT NULL, provider_reference TEXT NOT NULL UNIQUE, provider_order_id TEXT UNIQUE, amount INTEGER NOT NULL CHECK(amount >= 0), status TEXT NOT NULL CHECK(status IN ('created','pending','paid','failed','expired','cancelled','refunded')), qr_image TEXT NOT NULL DEFAULT '', qr_type TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, confirmed_at TEXT NOT NULL DEFAULT '', provider_response TEXT NOT NULL DEFAULT '{}');
-        CREATE TABLE IF NOT EXISTS oauth_tokens (subject TEXT PRIMARY KEY, access_cipher TEXT NOT NULL, refresh_cipher TEXT NOT NULL DEFAULT '', owner_cipher TEXT NOT NULL, access_expires_at TEXT NOT NULL, refresh_expires_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS oauth_states (state TEXT PRIMARY KEY, expires_at TEXT NOT NULL, used_at TEXT NOT NULL DEFAULT '');
-        CREATE TABLE IF NOT EXISTS delivery_zones (id TEXT PRIMARY KEY, name TEXT NOT NULL, fee INTEGER NOT NULL CHECK(fee >= 0), minimum_order INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS riders (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS rider_applications (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL, vehicle_type TEXT NOT NULL, vehicle_plate TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')) DEFAULT 'pending', rider_id TEXT REFERENCES riders(id), created_at TEXT NOT NULL, reviewed_at TEXT NOT NULL DEFAULT '', reviewed_by TEXT NOT NULL DEFAULT '');
-        CREATE TABLE IF NOT EXISTS merchant_applications (id TEXT PRIMARY KEY, business_name TEXT NOT NULL, owner_name TEXT NOT NULL, phone TEXT NOT NULL, email TEXT NOT NULL DEFAULT '', address TEXT NOT NULL, category TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')) DEFAULT 'pending', created_at TEXT NOT NULL, reviewed_at TEXT NOT NULL DEFAULT '', reviewed_by TEXT NOT NULL DEFAULT '');
-        CREATE TABLE IF NOT EXISTS deliveries (order_id TEXT PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE, zone_id TEXT NOT NULL REFERENCES delivery_zones(id), recipient_name TEXT NOT NULL, recipient_phone TEXT NOT NULL, address TEXT NOT NULL, landmark TEXT NOT NULL DEFAULT '', rider_id TEXT REFERENCES riders(id), status TEXT NOT NULL CHECK(status IN ('queued','assigned','picked_up','on_the_way','delivered','failed','cancelled')) DEFAULT 'queued', tracking_code TEXT NOT NULL UNIQUE, assigned_at TEXT NOT NULL DEFAULT '', picked_up_at TEXT NOT NULL DEFAULT '', delivered_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS order_financials (order_id TEXT PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE, subtotal INTEGER NOT NULL, delivery_fee INTEGER NOT NULL DEFAULT 0, discount INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL, coupon_code TEXT NOT NULL DEFAULT '', points_earned INTEGER NOT NULL DEFAULT 0, points_redeemed INTEGER NOT NULL DEFAULT 0);
-        CREATE TABLE IF NOT EXISTS inventory_items (id TEXT PRIMARY KEY, name TEXT NOT NULL, unit TEXT NOT NULL, on_hand REAL NOT NULL DEFAULT 0, reorder_level REAL NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS menu_recipes (menu_item_id TEXT NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE, inventory_item_id TEXT NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE, quantity REAL NOT NULL CHECK(quantity > 0), PRIMARY KEY(menu_item_id,inventory_item_id));
-        CREATE TABLE IF NOT EXISTS inventory_movements (id TEXT PRIMARY KEY, inventory_item_id TEXT NOT NULL REFERENCES inventory_items(id), delta REAL NOT NULL, reason TEXT NOT NULL, order_id TEXT REFERENCES orders(id), note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, actor_role TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS customers (phone TEXT PRIMARY KEY, name TEXT NOT NULL, points_balance INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS loyalty_ledger (id TEXT PRIMARY KEY, customer_phone TEXT NOT NULL REFERENCES customers(phone), points_delta INTEGER NOT NULL, reason TEXT NOT NULL, order_id TEXT REFERENCES orders(id), created_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS coupons (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, kind TEXT NOT NULL CHECK(kind IN ('fixed','percent')), value INTEGER NOT NULL CHECK(value > 0), minimum_order INTEGER NOT NULL DEFAULT 0, maximum_uses INTEGER NOT NULL DEFAULT 0, used_count INTEGER NOT NULL DEFAULT 0, starts_at TEXT NOT NULL DEFAULT '', ends_at TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS coupon_redemptions (coupon_id TEXT NOT NULL REFERENCES coupons(id), order_id TEXT PRIMARY KEY REFERENCES orders(id), customer_phone TEXT NOT NULL, discount INTEGER NOT NULL, created_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS pos_receipts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL UNIQUE REFERENCES orders(id), receipt_number TEXT NOT NULL UNIQUE, customer_tax_name TEXT NOT NULL DEFAULT '', customer_tax_id TEXT NOT NULL DEFAULT '', subtotal INTEGER NOT NULL, discount INTEGER NOT NULL, delivery_fee INTEGER NOT NULL, total INTEGER NOT NULL, issued_at TEXT NOT NULL, issued_by TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS tax_invoices (receipt_id TEXT PRIMARY KEY REFERENCES pos_receipts(id), tax_invoice_number TEXT NOT NULL UNIQUE, seller_name TEXT NOT NULL, seller_tax_id TEXT NOT NULL, seller_address TEXT NOT NULL, seller_branch TEXT NOT NULL, buyer_name TEXT NOT NULL, buyer_tax_id TEXT NOT NULL DEFAULT '', buyer_address TEXT NOT NULL DEFAULT '', amount_before_vat INTEGER NOT NULL, vat_rate INTEGER NOT NULL, vat_amount INTEGER NOT NULL, total INTEGER NOT NULL, issued_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS providers (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, country TEXT NOT NULL DEFAULT 'TH', status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')), metadata TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS provider_services (id TEXT PRIMARY KEY, provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE, slug TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')), metadata TEXT NOT NULL DEFAULT '{}', UNIQUE(provider_id,slug));
-        CREATE TABLE IF NOT EXISTS merchant_types (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, metadata TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')));
-        CREATE TABLE IF NOT EXISTS vehicle_types (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, metadata TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')));
-        CREATE TABLE IF NOT EXISTS document_types (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, subject_type TEXT NOT NULL CHECK(subject_type IN ('rider','merchant','both')), allowed_mime_types TEXT NOT NULL DEFAULT '[]', max_size_bytes INTEGER NOT NULL DEFAULT 10485760, metadata TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')));
-        CREATE TABLE IF NOT EXISTS provider_document_requirements (id TEXT PRIMARY KEY, provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE, service_id TEXT REFERENCES provider_services(id) ON DELETE SET NULL, subject_type TEXT NOT NULL CHECK(subject_type IN ('rider','merchant')), merchant_type_id TEXT REFERENCES merchant_types(id) ON DELETE SET NULL, vehicle_type_id TEXT REFERENCES vehicle_types(id) ON DELETE SET NULL, document_type_id TEXT NOT NULL REFERENCES document_types(id) ON DELETE RESTRICT, country TEXT NOT NULL DEFAULT 'TH', effective_from TEXT NOT NULL, effective_to TEXT NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}', is_required INTEGER NOT NULL DEFAULT 0 CHECK(is_required IN (0,1)), is_optional INTEGER NOT NULL DEFAULT 0 CHECK(is_optional IN (0,1)), display_order INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS merchant_document_requirements (id TEXT PRIMARY KEY, merchant_type_id TEXT NOT NULL REFERENCES merchant_types(id) ON DELETE CASCADE, document_type_id TEXT NOT NULL REFERENCES document_types(id) ON DELETE RESTRICT, country TEXT NOT NULL DEFAULT 'TH', effective_from TEXT NOT NULL, effective_to TEXT NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}', is_required INTEGER NOT NULL DEFAULT 0 CHECK(is_required IN (0,1)), is_optional INTEGER NOT NULL DEFAULT 0 CHECK(is_optional IN (0,1)), display_order INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS uploaded_documents (id TEXT PRIMARY KEY, provider_id TEXT REFERENCES providers(id) ON DELETE SET NULL, subject_type TEXT NOT NULL CHECK(subject_type IN ('rider','merchant')), subject_id TEXT NOT NULL, requirement_id TEXT REFERENCES provider_document_requirements(id) ON DELETE SET NULL, original_filename TEXT NOT NULL, storage_path TEXT NOT NULL UNIQUE, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL CHECK(size_bytes > 0), sha256 TEXT NOT NULL, expires_at TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','expired','deleted')), metadata TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS document_verification (document_id TEXT PRIMARY KEY REFERENCES uploaded_documents(id) ON DELETE CASCADE, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','expired')), verified_by TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '', verified_at TEXT NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}');
-        CREATE TABLE IF NOT EXISTS verification_history (id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES uploaded_documents(id) ON DELETE CASCADE, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','expired','deleted')), actor_role TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL);
-        CREATE INDEX IF NOT EXISTS idx_orders_pickup ON orders(pickup_date, pickup_slot);
-        CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
-        CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_logs(at DESC);
-        CREATE INDEX IF NOT EXISTS idx_payment_attempts_order ON payment_attempts(order_id, created_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_payment_attempts_provider_order ON payment_attempts(provider, provider_order_id);
-        CREATE INDEX IF NOT EXISTS idx_deliveries_status ON deliveries(status, updated_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_inventory_movements_item ON inventory_movements(inventory_item_id, created_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_provider_requirements_lookup ON provider_document_requirements(provider_id,subject_type,country,status,display_order);
-        CREATE INDEX IF NOT EXISTS idx_merchant_requirements_lookup ON merchant_document_requirements(merchant_type_id,country,status,display_order);
-        CREATE INDEX IF NOT EXISTS idx_uploaded_documents_subject ON uploaded_documents(subject_type,subject_id,status,created_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_verification_history_document ON verification_history(document_id,created_at DESC);
-        """)
-        payment_schema=con.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='payment_attempts'").fetchone()[0]
-        if "'refunded'" not in payment_schema:
-            con.execute("DROP INDEX IF EXISTS idx_payment_attempts_order")
-            con.execute("DROP INDEX IF EXISTS idx_payment_attempts_provider_order")
-            con.execute("ALTER TABLE payment_attempts RENAME TO payment_attempts_legacy")
-            con.execute("CREATE TABLE payment_attempts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, provider TEXT NOT NULL, provider_reference TEXT NOT NULL UNIQUE, provider_order_id TEXT UNIQUE, amount INTEGER NOT NULL CHECK(amount >= 0), status TEXT NOT NULL CHECK(status IN ('created','pending','paid','failed','expired','cancelled','refunded')), qr_image TEXT NOT NULL DEFAULT '', qr_type TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, confirmed_at TEXT NOT NULL DEFAULT '', provider_response TEXT NOT NULL DEFAULT '{}')")
-            con.execute("INSERT INTO payment_attempts SELECT * FROM payment_attempts_legacy")
-            con.execute("DROP TABLE payment_attempts_legacy")
-            con.execute("CREATE INDEX idx_payment_attempts_order ON payment_attempts(order_id, created_at DESC)")
-            con.execute("CREATE INDEX idx_payment_attempts_provider_order ON payment_attempts(provider, provider_order_id)")
+        apply_migrations(con)
         con.execute("INSERT OR IGNORE INTO menu_display_order(menu_item_id,position) SELECT id,CASE id WHEN 'classic' THEN 1 WHEN 'milk-tender' THEN 2 WHEN 'fatty' THEN 3 WHEN 'spicy' THEN 4 WHEN 'sticky-rice' THEN 5 END FROM menu_items WHERE id IN ('classic','milk-tender','fatty','spicy','sticky-rice')")
-        if "distance_km" not in {row[1] for row in con.execute("PRAGMA table_info(deliveries)")}:
-            con.execute("ALTER TABLE deliveries ADD COLUMN distance_km REAL NOT NULL DEFAULT 0")
         now=utcnow()
         con.execute("INSERT OR IGNORE INTO delivery_zones VALUES (?,?,?,?,?,?,?)", ("central", "พื้นที่จัดส่งหลัก", 30, 0, 1, now, now))
         seed_document_requirements(con)
@@ -234,7 +181,6 @@ def seed_document_requirements(con: sqlite3.Connection) -> None:
         for order,doc in enumerate(docs,1): req(f"{provider}-rider-{doc}",provider,"rider","rider",doc,1,0,order,rider_sources[provider])
     for order,doc in enumerate(["ror-yor-17-18","power-of-attorney","relationship-proof"],1):
         req(f"bolt-rider-optional-{doc}","bolt","rider","rider",doc,0,1,order+20,"https://bolt.eu/th-th/support/articles/4406002078610/")
-    con.execute("INSERT OR IGNORE INTO provider_document_requirements(id,provider_id,service_id,subject_type,country,effective_from,metadata,is_required,is_optional,display_order,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", ("lineman-rider-review","provider-lineman","lineman-rider","rider","TH","2024-01-01",json.dumps({"source":"https://lineman.line.me/rider/","source_confidence":"check_at_submission","note":"Public page describes registration but does not publish a stable document checklist."},ensure_ascii=False),0,1,1,now,now))
     for merchant_type,docs in {"individual":["national-id","bank-account"],"company":["company-certificate","vat-certificate","shareholder-list","director-id","business-bank-account"]}.items():
         for order,doc in enumerate(docs,1):
             req(f"grab-merchant-{merchant_type}-{doc}","grab","merchant","merchant",doc,1,0,order,"https://www.grab.com/th/merchant/",merchant_type_id=f"merchant-type-{merchant_type}")
@@ -260,7 +206,8 @@ def requirement_rows(con: sqlite3.Connection, provider_slug: str, subject: str, 
              LEFT JOIN provider_services s ON s.id=r.service_id JOIN document_types d ON d.id=r.document_type_id
              LEFT JOIN merchant_types mt ON mt.id=r.merchant_type_id LEFT JOIN vehicle_types vt ON vt.id=r.vehicle_type_id
              WHERE p.slug=? AND r.subject_type=? AND r.country=? AND r.status='active'
-               AND r.effective_from<=date('now') AND (r.effective_to='' OR r.effective_to>=date('now'))"""
+               AND datetime(r.effective_from)<=datetime('now')
+               AND (r.effective_to='' OR datetime(r.effective_to)>datetime('now'))"""
     if merchant_type: query += " AND (mt.slug=? OR r.merchant_type_id IS NULL)"; params.append(merchant_type)
     if vehicle_type: query += " AND (vt.slug=? OR r.vehicle_type_id IS NULL)"; params.append(vehicle_type)
     rows=[]
@@ -275,6 +222,22 @@ def document_public(row):
         except (TypeError,json.JSONDecodeError): item[key]={}
     item.pop("storage_path",None)
     return item
+
+def document_cipher() -> Fernet:
+    key=env("DOCUMENT_ENCRYPTION_KEY")
+    if not key:raise ValueError("ยังไม่ได้ตั้งค่า DOCUMENT_ENCRYPTION_KEY")
+    try:return Fernet(key.encode())
+    except (TypeError,ValueError) as error:raise ValueError("DOCUMENT_ENCRYPTION_KEY ไม่ถูกต้อง") from error
+
+def store_document(doc_id: str, raw: bytes) -> Path:
+    root=DATA/"documents";root.mkdir(mode=0o700,parents=True,exist_ok=True)
+    path=root/f"{doc_id}.fernet";tmp=root/f".{doc_id}.{secrets.token_hex(4)}.tmp"
+    try:
+        tmp.write_bytes(document_cipher().encrypt(raw));os.chmod(tmp,0o600);os.replace(tmp,path)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    return path
 
 def set_setting(con, key, value): con.execute("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, json.dumps(value, ensure_ascii=False)))
 def audit(con, role, action, entity_type, entity_id, details=None): con.execute("INSERT INTO audit_logs(at,actor_role,action,entity_type,entity_id,details) VALUES (?,?,?,?,?,?)", (utcnow(), role, action, entity_type, entity_id, json.dumps(details or {}, ensure_ascii=False)))
@@ -297,6 +260,56 @@ def active_payment(con, order_id: str) -> dict | None:
                 return None
         except ValueError: return None
     return payment
+
+def record_verified_scb_payment(
+    con: sqlite3.Connection,
+    payment: dict,
+    response: dict,
+    actor_role: str,
+    confirmed_action: str,
+    audit_details: dict | None = None,
+) -> None:
+    """Persist provider truth while keeping a cancelled order cancelled."""
+    if payment["status"] not in {"created","pending"}:
+        return
+    order=con.execute(
+        "SELECT status FROM orders WHERE id=?",
+        (payment["order_id"],),
+    ).fetchone()
+    if not order:
+        raise ValueError("ไม่พบออเดอร์ของ payment attempt")
+    now=utcnow()
+    updated=con.execute(
+        """UPDATE payment_attempts
+           SET status='paid',confirmed_at=?,updated_at=?,provider_response=?
+           WHERE id=? AND status IN ('created','pending')""",
+        (now,now,json.dumps(response,ensure_ascii=False),payment["id"]),
+    )
+    if updated.rowcount != 1:
+        return
+    details={"order_id":payment["order_id"],**(audit_details or {})}
+    if order["status"]=="cancelled":
+        audit(
+            con,
+            actor_role,
+            "payment_received_cancelled_order",
+            "payment_attempt",
+            payment["id"],
+            {**details,"requires_reconciliation":True},
+        )
+        return
+    con.execute(
+        "UPDATE orders SET payment_status='paid' WHERE id=? AND status!='cancelled'",
+        (payment["order_id"],),
+    )
+    audit(
+        con,
+        actor_role,
+        confirmed_action,
+        "payment_attempt",
+        payment["id"],
+        details,
+    )
 
 def env(name: str, default="") -> str: return os.environ.get(name, default).strip()
 def parse_bool(value, default=False) -> bool:
@@ -329,7 +342,20 @@ def ai_provider_keys() -> dict[str,str]:
     try: parsed=json.loads(raw)
     except json.JSONDecodeError: return {}
     if not isinstance(parsed,dict): return {}
-    return {name:value for name,value in parsed.items() if name in AI_PROVIDER_NAMES and isinstance(value,str) and value.strip() and not value.startswith("replace-with-")}
+    disabled={
+        name.strip().lower()
+        for name in env("AI_DISABLED_PROVIDERS").split(",")
+        if name.strip().lower() in AI_PROVIDER_NAMES
+    }
+    return {
+        name:value.strip()
+        for name,value in parsed.items()
+        if name in AI_PROVIDER_NAMES
+        and name not in disabled
+        and isinstance(value,str)
+        and value.strip()
+        and not value.startswith("replace-with-")
+    }
 
 def local_ai_base() -> str:
     base=env("LOCAL_AI_BASE_URL").rstrip("/")
@@ -717,10 +743,15 @@ def scb_token_response(data: dict, headers: dict) -> tuple[str, str, str, int, i
     if not isinstance(token,str) or not token: raise ValueError("SCB OAuth ไม่ได้ส่ง access token")
     return token, str(refresh), str(owner), int(body.get("expiresIn",data.get("expiresIn",1800)) or 1800), int(body.get("refreshExpiresIn",data.get("refreshExpiresIn",3600)) or 3600)
 
-def scb_exchange_auth_code(code: str) -> None:
+def scb_exchange_auth_code(code: str, verifier: str = "") -> None:
     key,secret,endpoint=env("SCB_API_KEY"),env("SCB_API_SECRET"),env("SCB_OAUTH_TOKEN_ENDPOINT")
     if not key or not secret or not endpoint: raise ValueError("ยังไม่ได้ตั้งค่า SCB OAuth credentials")
-    data,headers=scb_http(endpoint,{"applicationKey":key,"applicationSecret":secret,"authCode":code},{"resourceOwnerId":key,"accept-language":"EN"})
+    payload={"applicationKey":key,"applicationSecret":secret,"authCode":code}
+    if verifier:
+        field=env("SCB_OAUTH_PKCE_TOKEN_FIELD","codeVerifier")
+        if field not in {"codeVerifier","code_verifier"}: raise ValueError("SCB OAuth PKCE token field ไม่ถูกต้อง")
+        payload[field]=verifier
+    data,headers=scb_http(endpoint,payload,{"resourceOwnerId":key,"accept-language":"EN"})
     scb_store_token(*scb_token_response(data,headers))
 
 def scb_refresh_saved_token() -> tuple[str,str] | None:
@@ -800,13 +831,38 @@ def scb_authorize() -> str:
     except (UnicodeDecodeError,json.JSONDecodeError) as error: raise ValueError("SCB authorization ตอบกลับไม่ถูกต้อง") from error
     callback=data.get("callbackUrl") if isinstance(data,dict) else ""
     if not isinstance(callback,str) or not callback: raise ValueError("SCB authorization ไม่ได้ส่ง callback URL")
+    parsed=urlparse(callback)
+    if parsed.scheme!="https" or not parsed.netloc: raise ValueError("SCB authorization callback URL ต้องเป็น HTTPS")
     state=secrets.token_urlsafe(32)
-    with db() as con:
+    verifier=""
+    query_values={"state":state}
+    if env("SCB_OAUTH_PKCE_ENABLED","false").lower()=="true":
+        verifier=secrets.token_urlsafe(64)
+        challenge=base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+        query_values.update(code_challenge=challenge,code_challenge_method="S256")
+    verifier_cipher=scb_cipher().encrypt(verifier.encode()).decode() if verifier else ""
+    with db(immediate=True) as con:
         con.execute("DELETE FROM oauth_states WHERE expires_at < ? OR used_at != ''",(utcnow(),))
-        con.execute("INSERT INTO oauth_states(state,expires_at) VALUES (?,?)",(state,(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat()))
-    parsed=urlparse(callback); query=parse_qs(parsed.query,keep_blank_values=True); query["state"]=[state]
+        con.execute("INSERT INTO oauth_states(state,expires_at,verifier_cipher) VALUES (?,?,?)",(state,(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat(),verifier_cipher))
+    query=parse_qs(parsed.query,keep_blank_values=True)
+    for name,value in query_values.items(): query[name]=[value]
     encoded="&".join(f"{quote(key)}={quote(value)}" for key,values in query.items() for value in values)
     return parsed._replace(query=encoded).geturl()
+
+def scb_consume_oauth_state(state: str) -> str | None:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{32,128}",state):return None
+    now=utcnow()
+    with db(immediate=True) as con:
+        row=con.execute(
+            """UPDATE oauth_states SET used_at=?
+            WHERE state=? AND used_at='' AND expires_at>=?
+            RETURNING verifier_cipher""",
+            (now,state,now),
+        ).fetchone()
+    if not row:return None
+    if not row["verifier_cipher"]:return ""
+    try:return scb_cipher().decrypt(row["verifier_cipher"].encode()).decode()
+    except (InvalidToken,UnicodeDecodeError) as error:raise ValueError("ไม่สามารถอ่าน SCB OAuth PKCE verifier ได้") from error
 
 def scb_create_qr(order: dict) -> dict:
     if not scb_active(): raise ValueError("SCB QR ยังไม่เปิดให้บริการ")
@@ -976,7 +1032,12 @@ class Handler(SimpleHTTPRequestHandler):
             if key and secrets.compare_digest(supplied, key): return role
         return None
     def client_key(self):
-        peer=self.client_address[0]; forwarded=self.headers.get("CF-Connecting-IP", "") if peer in {"127.0.0.1","::1"} else ""
+        peer=self.client_address[0]
+        forwarded = (
+            self.headers.get("CF-Connecting-IP", "")
+            if TRUST_CF_CONNECTING_IP and peer in {"127.0.0.1", "::1"}
+            else ""
+        )
         return forwarded if re.fullmatch(r"[0-9a-fA-F:.]{3,45}", forwarded) else peer
     def rate(self, bucket):
         now=time.monotonic(); key=(bucket,self.client_key())
@@ -999,9 +1060,19 @@ class Handler(SimpleHTTPRequestHandler):
     def upload_document(self, form, role):
         provider=str(form.get("provider","")).strip().lower(); subject=str(form.get("subject_type","")).strip().lower(); subject_id=str(form.get("subject_id","")).strip(); requirement_id=str(form.get("requirement_id","")).strip(); filename=os.path.basename(str(form.get("filename","")))[:180]; mime=str(form.get("mime_type","")).strip().lower(); encoded=form.get("content_base64","")
         if not re.fullmatch(r"[a-z0-9-]{2,40}",provider) or subject not in {"rider","merchant"} or not re.fullmatch(r"[A-Za-z0-9_-]{2,100}",subject_id) or not filename or not isinstance(encoded,str): raise ValueError("ข้อมูลเอกสารไม่ถูกต้อง")
-        with db() as con:
+        with db(immediate=True) as con:
             prow=con.execute("SELECT id FROM providers WHERE slug=? AND status='active'",(provider,)).fetchone()
-            req=con.execute("SELECT r.*,d.allowed_mime_types,d.max_size_bytes FROM provider_document_requirements r JOIN providers p ON p.id=r.provider_id JOIN document_types d ON d.id=r.document_type_id WHERE r.id=? AND p.slug=? AND r.subject_type=? AND r.status='active'",(requirement_id,provider,subject)).fetchone()
+            req=con.execute(
+                """SELECT r.*,d.allowed_mime_types,d.max_size_bytes
+                   FROM provider_document_requirements r
+                   JOIN providers p ON p.id=r.provider_id
+                   JOIN document_types d ON d.id=r.document_type_id
+                   WHERE r.id=? AND p.slug=? AND r.subject_type=?
+                     AND r.status='active'
+                     AND datetime(r.effective_from)<=datetime('now')
+                     AND (r.effective_to='' OR datetime(r.effective_to)>datetime('now'))""",
+                (requirement_id,provider,subject),
+            ).fetchone()
             if not prow or not req: raise ValueError("ไม่พบ requirement ของเอกสาร")
             allowed=json.loads(req["allowed_mime_types"])
             if mime not in allowed: raise ValueError("ชนิดไฟล์นี้ไม่อยู่ในรายการที่อนุญาต")
@@ -1009,34 +1080,37 @@ class Handler(SimpleHTTPRequestHandler):
             except (ValueError,TypeError): raise ValueError("ไฟล์เอกสารต้องเป็น base64 ที่ถูกต้อง")
             if not raw or len(raw)>min(int(req["max_size_bytes"]),10*1024*1024): raise ValueError("ขนาดไฟล์ไม่ถูกต้อง")
             if (mime=="application/pdf" and not raw.startswith(b"%PDF")) or (mime=="image/png" and not raw.startswith(b"\x89PNG\r\n\x1a\n")) or (mime=="image/jpeg" and not raw.startswith(b"\xff\xd8\xff")): raise ValueError("เนื้อไฟล์ไม่ตรงกับชนิดไฟล์")
-            doc_id=f"DOC-{secrets.token_hex(8).upper()}"; suffix=Path(filename).suffix.lower()[:10] or ".bin"; root=DATA/"documents"; root.mkdir(mode=0o700,parents=True,exist_ok=True); path=root/f"{doc_id}{suffix}"; tmp=root/f".{doc_id}.tmp"; digest=hashlib.sha256(raw).hexdigest()
-            try:
-                tmp.write_bytes(raw); os.chmod(tmp,0o600); os.replace(tmp,path)
-            except OSError as error:
-                try: tmp.unlink(missing_ok=True)
-                except OSError: pass
-                raise ValueError("ไม่สามารถจัดเก็บเอกสารได้") from error
-            now=utcnow(); con.execute("INSERT INTO uploaded_documents(id,provider_id,subject_type,subject_id,requirement_id,original_filename,storage_path,mime_type,size_bytes,sha256,status,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(doc_id,prow["id"],subject,subject_id,requirement_id,filename,str(path),mime,len(raw),digest,"pending",json.dumps({"uploaded_by":role}),now,now)); con.execute("INSERT INTO document_verification(document_id,status) VALUES (?,?)",(doc_id,"pending")); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",doc_id,"pending",role,"",json.dumps({}),now)); audit(con,role,"upload","document",doc_id,{"provider":provider,"subject_type":subject,"requirement_id":requirement_id,"size_bytes":len(raw),"mime_type":mime})
+            doc_id=f"DOC-{secrets.token_hex(8).upper()}";digest=hashlib.sha256(raw).hexdigest()
+            try:path=store_document(doc_id,raw)
+            except (OSError,ValueError) as error:raise ValueError("ไม่สามารถจัดเก็บเอกสารแบบเข้ารหัสได้") from error
+            metadata={"uploaded_by":role,"storage_encryption":"fernet-v1"}
+            now=utcnow(); con.execute("INSERT INTO uploaded_documents(id,provider_id,subject_type,subject_id,requirement_id,original_filename,storage_path,mime_type,size_bytes,sha256,status,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(doc_id,prow["id"],subject,subject_id,requirement_id,filename,str(path),mime,len(raw),digest,"pending",json.dumps(metadata),now,now)); con.execute("INSERT INTO document_verification(document_id,status) VALUES (?,?)",(doc_id,"pending")); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",doc_id,"pending",role,"",json.dumps({}),now)); audit(con,role,"upload","document",doc_id,{"provider":provider,"subject_type":subject,"requirement_id":requirement_id,"size_bytes":len(raw),"mime_type":mime,"storage_encryption":"fernet-v1"})
             row=con.execute("SELECT * FROM uploaded_documents WHERE id=?",(doc_id,)).fetchone()
-            return self.json({"document":document_public(row)},201)
+            response={"document":document_public(row)}
+        return self.json(response,201)
     def update_document(self, document_id, form, role):
         status=str(form.get("status","")).strip().lower(); reason=str(form.get("reason","")).strip()[:500]
         if status not in {"pending","approved","rejected","expired"}: raise ValueError("สถานะเอกสารไม่ถูกต้อง")
-        with db() as con:
+        with db(immediate=True) as con:
             row=con.execute("SELECT * FROM uploaded_documents WHERE id=? AND status!='deleted'",(document_id,)).fetchone()
             if not row:return self.json({"error":"ไม่พบเอกสาร"},404)
-            now=utcnow(); con.execute("UPDATE uploaded_documents SET status=?,updated_at=? WHERE id=?",(status,now,document_id)); con.execute("UPDATE document_verification SET status=?,verified_by=?,reason=?,verified_at=?,metadata=? WHERE document_id=?",(status,role,reason,now,json.dumps({}),document_id)); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",document_id,status,role,reason,json.dumps({}),now)); audit(con,role,"verify","document",document_id,{"status":status}); return self.json({"document":document_public(con.execute("SELECT * FROM uploaded_documents WHERE id=?",(document_id,)).fetchone())})
+            now=utcnow(); con.execute("UPDATE uploaded_documents SET status=?,updated_at=? WHERE id=?",(status,now,document_id)); con.execute("UPDATE document_verification SET status=?,verified_by=?,reason=?,verified_at=?,metadata=? WHERE document_id=?",(status,role,reason,now,json.dumps({}),document_id)); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",document_id,status,role,reason,json.dumps({}),now)); audit(con,role,"verify","document",document_id,{"status":status}); response={"document":document_public(con.execute("SELECT * FROM uploaded_documents WHERE id=?",(document_id,)).fetchone())}
+        return self.json(response)
     def delete_document(self, document_id, role):
-        with db() as con:
+        with db(immediate=True) as con:
             row=con.execute("SELECT * FROM uploaded_documents WHERE id=? AND status!='deleted'",(document_id,)).fetchone()
             if not row:return self.json({"error":"ไม่พบเอกสาร"},404)
-            try: Path(row["storage_path"]).unlink(missing_ok=True)
-            except OSError: pass
-            now=utcnow(); con.execute("UPDATE uploaded_documents SET status='deleted',updated_at=? WHERE id=?",(now,document_id)); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",document_id,"deleted",role,"ลบเอกสาร",json.dumps({}),now)); audit(con,role,"delete","document",document_id); return self.json({"deleted":True,"id":document_id})
+            storage_path=Path(row["storage_path"])
+            now=utcnow(); con.execute("UPDATE uploaded_documents SET status='deleted',updated_at=? WHERE id=?",(now,document_id)); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",document_id,"deleted",role,"ลบเอกสาร",json.dumps({}),now)); audit(con,role,"delete","document",document_id)
+        try: storage_path.unlink(missing_ok=True)
+        except OSError: pass
+        return self.json({"deleted":True,"id":document_id})
     def admin_document_requirements(self, form, requirement_id, role):
-        with db() as con:
+        with db(immediate=True) as con:
             row=con.execute("SELECT * FROM provider_document_requirements WHERE id=?",(requirement_id,)).fetchone()
             if not row:return self.json({"error":"ไม่พบ requirement"},404)
+            if row["effective_to"]:
+                raise ValueError("แก้ไข historical requirement ไม่ได้")
             required=parse_bool(form.get("is_required"),bool(row["is_required"])); optional=parse_bool(form.get("is_optional"),bool(row["is_optional"]))
             if required and optional: raise ValueError("requirement เป็น required และ optional พร้อมกันไม่ได้")
             try: order=int(form.get("display_order",row["display_order"]))
@@ -1049,21 +1123,32 @@ class Handler(SimpleHTTPRequestHandler):
             if supplied is not None:
                 if not isinstance(supplied,dict): raise ValueError("metadata ไม่ถูกต้อง")
                 metadata.update(supplied)
-            now_date=date.today().isoformat(); yesterday=(date.today()-timedelta(days=1)).isoformat(); new_id=f"{requirement_id}-v{secrets.token_hex(3).upper()}"
-            con.execute("UPDATE provider_document_requirements SET effective_to=?,updated_at=? WHERE id=? AND effective_to=''",(yesterday,utcnow(),requirement_id))
-            con.execute("INSERT INTO provider_document_requirements(id,provider_id,service_id,subject_type,merchant_type_id,vehicle_type_id,document_type_id,country,effective_from,effective_to,metadata,is_required,is_optional,display_order,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(new_id,row["provider_id"],row["service_id"],row["subject_type"],row["merchant_type_id"],row["vehicle_type_id"],row["document_type_id"],row["country"],now_date,"",json.dumps(metadata,ensure_ascii=False),int(required),int(optional),order,status,utcnow(),utcnow()))
-            audit(con,role,"version","provider_document_requirement",new_id,{"previous_id":requirement_id,"status":status,"is_required":required,"is_optional":optional,"display_order":order}); return self.json({"requirement_id":new_id,"previous_id":requirement_id,"effective_from":now_date},201)
+            try:
+                encoded_metadata=json.dumps(metadata,ensure_ascii=False,separators=(",",":"))
+            except (TypeError,ValueError):
+                raise ValueError("metadata ไม่ถูกต้อง")
+            if len(encoded_metadata.encode("utf-8"))>16_384:
+                raise ValueError("metadata มีขนาดใหญ่เกินไป")
+            now=utcnow(); new_id=f"{requirement_id}-v{secrets.token_hex(3).upper()}"
+            updated=con.execute(
+                "UPDATE provider_document_requirements SET effective_to=?,updated_at=? WHERE id=? AND effective_to=''",
+                (now,now,requirement_id),
+            )
+            if updated.rowcount != 1:
+                raise ValueError("requirement ถูกสร้างเวอร์ชันแล้ว")
+            con.execute("INSERT INTO provider_document_requirements(id,provider_id,service_id,subject_type,merchant_type_id,vehicle_type_id,document_type_id,country,effective_from,effective_to,metadata,is_required,is_optional,display_order,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(new_id,row["provider_id"],row["service_id"],row["subject_type"],row["merchant_type_id"],row["vehicle_type_id"],row["document_type_id"],row["country"],now,"",encoded_metadata,int(required),int(optional),order,status,now,now))
+            audit(con,role,"version","provider_document_requirement",new_id,{"previous_id":requirement_id,"status":status,"is_required":required,"is_optional":optional,"display_order":order})
+            return self.json({"requirement_id":new_id,"previous_id":requirement_id,"effective_from":now},201)
     def do_GET(self):
         parsed=urlparse(self.path); path, query=parsed.path, parse_qs(parsed.query)
         if path == "/auth/scb/callback":
             code=(query.get("code") or query.get("authCode") or [""])[0]
             state=(query.get("state") or [""])[0]
-            if not code or not state: return self.html("<h1>SCB connection failed</h1><p>Authorization code or state is missing.</p>",400)
-            with db() as con:
-                valid=con.execute("SELECT state FROM oauth_states WHERE state=? AND used_at='' AND expires_at>=?",(state,utcnow())).fetchone()
-                if not valid: return self.html("<h1>SCB connection failed</h1><p>Authorization state is invalid or expired.</p>",400)
-                con.execute("UPDATE oauth_states SET used_at=? WHERE state=? AND used_at=''",(utcnow(),state))
-            try: scb_exchange_auth_code(code)
+            if not code or not state or len(code)>4096 or len(state)>128:return self.html("<h1>SCB connection failed</h1><p>Authorization code or state is missing or invalid.</p>",400)
+            try: verifier=scb_consume_oauth_state(state)
+            except ValueError as error:return self.html(f"<h1>SCB connection failed</h1><p>{escape_html(str(error))}</p>",400)
+            if verifier is None:return self.html("<h1>SCB connection failed</h1><p>Authorization state is invalid or expired.</p>",400)
+            try: scb_exchange_auth_code(code,verifier)
             except ValueError as error: return self.html(f"<h1>SCB connection failed</h1><p>{escape_html(str(error))}</p>",400)
             return self.html("<h1>SCB connected</h1><p>Return to MooPiew Owner dashboard to enable and test QR payment.</p>")
         if path == "/api/health":
@@ -1111,7 +1196,7 @@ class Handler(SimpleHTTPRequestHandler):
             with db() as con:
                 rows=[]
                 for row in con.execute("SELECT r.*,p.slug provider_slug,p.name provider_name,s.slug service_slug,d.slug document_slug,d.name document_name,mt.slug merchant_type_slug,vt.slug vehicle_type_slug FROM provider_document_requirements r JOIN providers p ON p.id=r.provider_id LEFT JOIN provider_services s ON s.id=r.service_id JOIN document_types d ON d.id=r.document_type_id LEFT JOIN merchant_types mt ON mt.id=r.merchant_type_id LEFT JOIN vehicle_types vt ON vt.id=r.vehicle_type_id ORDER BY p.name,r.subject_type,r.display_order,r.effective_from"):
-                    item=dict(row); item["metadata"]=json.loads(item["metadata"]); item["is_required"]=bool(item["is_required"]); item["is_optional"]=bool(item["is_optional"]); rows.append(item)
+                    item=dict(row); item["metadata"]=json.loads(item["metadata"]); item["is_required"]=bool(item["is_required"]); item["is_optional"]=bool(item["is_optional"]); item["is_current"]=not bool(item["effective_to"]); rows.append(item)
                 return self.json({"requirements":rows})
         tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]{32})/events",path)
         if tracking:return self.stream_tracking(tracking.group(1))
@@ -1212,7 +1297,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.register_merchant(form)
             if path in {"/api/documents/upload","/documents/upload"}:
                 role=self.require("admin")
-                if role:return self.upload_document(form,role)
+                if not role:return
+                return self.upload_document(form,role)
             if path=="/api/delivery/quote":
                 if not self.rate("quote"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.delivery_quote(form)
@@ -1228,10 +1314,12 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.lookup_order(form)
             if path=="/api/admin/ai/chat":
                 role=self.require("admin")
-                if role: return self.ai_chat(form,role)
+                if not role:return
+                return self.ai_chat(form,role)
             if path=="/api/admin/menu":
                 role=self.require("admin")
-                if role: return self.create_menu_item(form,role)
+                if not role:return
+                return self.create_menu_item(form,role)
             admin_actions={
                 "/api/admin/riders":self.create_rider,
                 "/api/admin/delivery-zones":self.create_delivery_zone,
@@ -1244,19 +1332,23 @@ class Handler(SimpleHTTPRequestHandler):
             }
             if path in admin_actions:
                 role=self.require("admin")
-                if role:return admin_actions[path](form,role)
+                if not role:return
+                return admin_actions[path](form,role)
             receipt=re.fullmatch(r"/api/admin/orders/(MPP-[A-Z0-9-]+)/receipt",path)
             if receipt:
                 role=self.require("admin")
-                if role:return self.issue_receipt(receipt.group(1),form,role)
+                if not role:return
+                return self.issue_receipt(receipt.group(1),form,role)
             invoice=re.fullmatch(r"/api/admin/receipts/(RCT-[A-Z0-9-]+)/tax-invoice",path)
             if invoice:
                 role=self.require("admin")
-                if role:return self.issue_tax_invoice(invoice.group(1),form,role)
+                if not role:return
+                return self.issue_tax_invoice(invoice.group(1),form,role)
             inquiry=re.fullmatch(r"/api/admin/payments/scb/(PAY-SCB-[A-Z0-9-]+)/inquire",path)
             if inquiry:
                 role=self.require("admin")
-                if role: return self.inquire_scb_payment(inquiry.group(1),role)
+                if not role:return
+                return self.inquire_scb_payment(inquiry.group(1),role)
             if path.endswith("/cancel") and re.fullmatch(r"/api/orders/MPP-[A-Z0-9-]+/cancel",path):
                 if not self.rate("lookup"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.cancel_order(path.split("/")[3],form)
@@ -1343,7 +1435,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not 2<=len(name)<=80:raise ValueError("กรุณาระบุชื่ออย่างน้อย 2 ตัวอักษร")
         if not re.fullmatch(r"(?:\+66|0)\d{8,9}",phone):raise ValueError("กรุณาระบุเบอร์โทรศัพท์ที่ถูกต้อง")
         if fulfillment not in {"pickup","delivery"}: raise ValueError("รูปแบบการรับสินค้าไม่ถูกต้อง")
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             conf=config(con)
             if fulfillment=="pickup":
                 if not valid_pickup(pickup_date,conf):raise ValueError("เลือกรับสินค้าได้เฉพาะวันที่เปิดให้สั่งล่วงหน้า")
@@ -1458,12 +1550,20 @@ class Handler(SimpleHTTPRequestHandler):
             payment=dict(payment)
         try: response,paid=scb_inquire_payment(payment)
         except ValueError as error: return self.json({"error":str(error)},503)
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             current=row_payment(con,payment["id"])
             if paid and current["status"] in {"created","pending"}:
-                order=con.execute("SELECT status FROM orders WHERE id=?",(current["order_id"],)).fetchone()
-                if order and order["status"]!="cancelled":
-                    now=utcnow(); con.execute("UPDATE payment_attempts SET status='paid',confirmed_at=?,updated_at=?,provider_response=? WHERE id=? AND status IN ('created','pending')",(now,now,json.dumps(response,ensure_ascii=False),current["id"])); con.execute("UPDATE orders SET payment_status='paid' WHERE id=? AND status!='cancelled'",(current["order_id"],)); audit(con,"scb_webhook","payment_confirmed","payment_attempt",current["id"],{"order_id":current["order_id"],"provider_order_id":provider_order,"signature_verified":True})
+                record_verified_scb_payment(
+                    con,
+                    current,
+                    response,
+                    "scb_webhook",
+                    "payment_confirmed",
+                    {
+                        "provider_order_id":provider_order,
+                        "signature_verified":True,
+                    },
+                )
             elif not paid: con.execute("UPDATE payment_attempts SET updated_at=?,provider_response=? WHERE id=?",(utcnow(),json.dumps(response,ensure_ascii=False),current["id"]));audit(con,"scb_webhook","payment_callback_pending","payment_attempt",current["id"],{"provider_order_id":provider_order})
         self.json({"status":"paid" if paid else "pending"})
     def inquire_scb_payment(self,payment_id,role):
@@ -1472,12 +1572,12 @@ class Handler(SimpleHTTPRequestHandler):
             if not payment or not payment["provider"].startswith("scb_"): return self.json({"error":"ไม่พบ SCB payment attempt"},404)
             if payment["status"]=="paid": return self.json({"payment":payment_public(payment),"inquiry":"already_paid"})
         response,paid=scb_inquire_payment(payment)
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             current=row_payment(con,payment_id)
             if paid and current["status"] in {"created","pending"}:
-                order=con.execute("SELECT status FROM orders WHERE id=?",(current["order_id"],)).fetchone()
-                if order and order["status"]!="cancelled":
-                    now=utcnow(); con.execute("UPDATE payment_attempts SET status='paid',confirmed_at=?,updated_at=?,provider_response=? WHERE id=? AND status IN ('created','pending')",(now,now,json.dumps(response,ensure_ascii=False),payment_id)); con.execute("UPDATE orders SET payment_status='paid' WHERE id=? AND status!='cancelled'",(current["order_id"],)); audit(con,role,"payment_inquiry_paid","payment_attempt",payment_id,{"order_id":current["order_id"]})
+                record_verified_scb_payment(
+                    con,current,response,role,"payment_inquiry_paid"
+                )
             elif not paid: con.execute("UPDATE payment_attempts SET updated_at=?,provider_response=? WHERE id=?",(utcnow(),json.dumps(response,ensure_ascii=False),payment_id));audit(con,role,"payment_inquiry_pending","payment_attempt",payment_id)
             return self.json({"payment":payment_public(row_payment(con,payment_id)),"inquiry":"paid" if paid else "pending"})
     def lookup_order(self,form):
@@ -1490,14 +1590,15 @@ class Handler(SimpleHTTPRequestHandler):
         self.json({"error":"ไม่พบออเดอร์ หรือเบอร์โทรศัพท์ไม่ตรงกัน"},404)
     def cancel_order(self,oid,form):
         phone=re.sub(r"[^0-9+]","",str(form.get("phone","")))
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             order=row_order(con,oid)
             if not order or not secrets.compare_digest(order["customer"]["phone"],phone):return self.json({"error":"ไม่พบออเดอร์ หรือเบอร์โทรศัพท์ไม่ตรงกัน"},404)
             if order["status"] not in {"new","confirmed"}:raise ValueError("ออเดอร์นี้ไม่สามารถยกเลิกทางออนไลน์ได้")
             if order["payment"]["status"] == "paid":raise ValueError("ออเดอร์นี้ชำระเงินแล้ว กรุณาติดต่อร้านเพื่อดำเนินการคืนเงิน")
             now=utcnow();self.reverse_order_redemptions(con,oid,order,phone,now)
             con.execute("UPDATE orders SET status='cancelled' WHERE id=?",(oid,));con.execute("UPDATE payment_attempts SET status='cancelled',updated_at=? WHERE order_id=? AND status IN ('created','pending')",(now,oid));con.execute("INSERT INTO order_history(order_id,at,status,actor_role) VALUES (?,?,?,?)",(oid,now,"cancelled","customer"));audit(con,"customer","cancel","order",oid)
-            return self.json({"order":public_order(row_order(con,oid))})
+            response={"order":public_order(row_order(con,oid))}
+        return self.json(response)
     def create_menu_item(self,form,role):
         name,description=str(form.get("name","")).strip(),str(form.get("description","")).strip()[:160]
         try:price=int(form.get("price",0))
@@ -1515,7 +1616,7 @@ class Handler(SimpleHTTPRequestHandler):
     def register_rider(self,form):
         name=str(form.get("name","")).strip()[:80]; phone=re.sub(r"[^0-9+]","",str(form.get("phone", ""))); vehicle_type=str(form.get("vehicle_type","")).strip()[:40]; vehicle_plate=str(form.get("vehicle_plate","")).strip()[:20]; note=str(form.get("note","")).strip()[:300]
         if len(name)<2 or not re.fullmatch(r"(?:\+66|0)\d{8,9}",phone) or vehicle_type not in {"motorcycle","bicycle","car"}:raise ValueError("กรุณากรอกข้อมูลสมัครไรเดอร์ให้ครบถ้วน")
-        with db() as con:
+        with db(immediate=True) as con:
             pending=con.execute("SELECT 1 FROM rider_applications WHERE phone=? AND status='pending'",(phone,)).fetchone()
             if pending:raise ValueError("มีใบสมัครที่รอตรวจสอบสำหรับเบอร์นี้แล้ว")
             application={"id":f"RAP-{secrets.token_hex(4).upper()}","name":name,"phone":phone,"vehicle_type":vehicle_type,"vehicle_plate":vehicle_plate,"note":note,"status":"pending","created_at":utcnow()}
@@ -1583,7 +1684,7 @@ class Handler(SimpleHTTPRequestHandler):
         except (ValueError,TypeError):raise ValueError("จำนวนปรับสต็อกไม่ถูกต้อง")
         reason=str(form.get("reason","adjustment")).strip()[:80]; note=str(form.get("note","")).strip()[:200]
         if not iid or not delta:raise ValueError("กรุณาระบุรายการและจำนวนที่ต้องการปรับ")
-        with db() as con:
+        with db(immediate=True) as con:
             item=con.execute("SELECT * FROM inventory_items WHERE id=?",(iid,)).fetchone()
             if not item:return self.json({"error":"ไม่พบวัตถุดิบ"},404)
             next_value=float(item["on_hand"])+delta
@@ -1612,7 +1713,7 @@ class Handler(SimpleHTTPRequestHandler):
     def update_delivery(self,oid,form,role,area):
         status=str(form.get("status","")).strip(); rider_id=str(form.get("rider_id","")).strip()
         if status and status not in DELIVERY_STATUSES:raise ValueError("สถานะจัดส่งไม่ถูกต้อง")
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             delivery=con.execute("SELECT * FROM deliveries WHERE order_id=?",(oid,)).fetchone()
             if not delivery:return self.json({"error":"ไม่พบงานจัดส่ง"},404)
             transitions={"queued":{"assigned","cancelled"},"assigned":{"picked_up","cancelled"},"picked_up":{"on_the_way","failed"},"on_the_way":{"delivered","failed"},"failed":{"queued"},"delivered":set(),"cancelled":set()}
@@ -1633,16 +1734,18 @@ class Handler(SimpleHTTPRequestHandler):
                 sql+=" WHERE order_id=?";params.append(oid);con.execute(sql,params)
                 if status=="delivered":
                     con.execute("UPDATE orders SET status='completed' WHERE id=?",(oid,)); con.execute("INSERT INTO order_history(order_id,at,status,actor_role,note) VALUES (?,?,?,?,?)",(oid,now,"completed",role,"delivery_delivered")); self.complete_order_effects(con,oid,order,role)
-            audit(con,role,"delivery_update","delivery",oid,{"status":status,"rider_id":rider_id});return self.json({"order":row_order(con,oid)})
+            audit(con,role,"delivery_update","delivery",oid,{"status":status,"rider_id":rider_id});response={"order":row_order(con,oid)}
+        return self.json(response)
     def issue_receipt(self,oid,form,role):
-        with db() as con:
+        with db(immediate=True) as con:
             order=row_order(con,oid)
             if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
             existing=con.execute("SELECT * FROM pos_receipts WHERE order_id=?",(oid,)).fetchone()
             if existing:return self.json({"receipt":dict(existing)})
             if order["status"]=="cancelled":raise ValueError("ออเดอร์ถูกยกเลิกแล้ว ไม่สามารถออกใบเสร็จได้")
             finance=order["financial"]; now=utcnow(); receipt={"id":f"RCT-{secrets.token_hex(4).upper()}","receipt_number":f"MP-{datetime.now():%Y%m%d}-{secrets.token_hex(3).upper()}","order_id":oid,"customer_tax_name":str(form.get("customer_tax_name","")).strip()[:160],"customer_tax_id":re.sub(r"[^0-9]","",str(form.get("customer_tax_id", "")))[:13],"subtotal":finance["subtotal"],"discount":finance["discount"],"delivery_fee":finance["delivery_fee"],"total":finance["total"],"issued_at":now,"issued_by":role}
-            con.execute("INSERT INTO pos_receipts VALUES (?,?,?,?,?,?,?,?,?,?,?)",tuple(receipt[key] for key in ("id","order_id","receipt_number","customer_tax_name","customer_tax_id","subtotal","discount","delivery_fee","total","issued_at","issued_by")));audit(con,role,"issue","pos_receipt",receipt["id"],{"order_id":oid});return self.json({"receipt":receipt},201)
+            con.execute("INSERT INTO pos_receipts VALUES (?,?,?,?,?,?,?,?,?,?,?)",tuple(receipt[key] for key in ("id","order_id","receipt_number","customer_tax_name","customer_tax_id","subtotal","discount","delivery_fee","total","issued_at","issued_by")));audit(con,role,"issue","pos_receipt",receipt["id"],{"order_id":oid})
+        return self.json({"receipt":receipt},201)
     def update_business_profile(self,form,role):
         profile={"legal_name":str(form.get("legal_name","")).strip()[:160],"tax_id":re.sub(r"[^0-9]","",str(form.get("tax_id","")))[:13],"address":str(form.get("address","")).strip()[:500],"branch":str(form.get("branch","สำนักงานใหญ่")).strip()[:80] or "สำนักงานใหญ่","vat_registered":parse_bool(form.get("vat_registered"),False),"vat_rate":7}
         if not profile["legal_name"] or not profile["address"]:raise ValueError("กรุณาระบุชื่อกิจการและที่อยู่")
@@ -1660,7 +1763,7 @@ class Handler(SimpleHTTPRequestHandler):
         with db() as con:set_setting(con,"delivery_pricing",profile);audit(con,role,"update","delivery_pricing","store",{key:profile[key] for key in ("base_fee","per_km_fee","maximum_km")})
         self.json({"delivery_pricing":profile})
     def issue_tax_invoice(self,receipt_id,form,role):
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             receipt=con.execute("SELECT * FROM pos_receipts WHERE id=?",(receipt_id,)).fetchone()
             if not receipt:return self.json({"error":"ไม่พบใบเสร็จ"},404)
             existing=con.execute("SELECT * FROM tax_invoices WHERE receipt_id=?",(receipt_id,)).fetchone()
@@ -1685,7 +1788,7 @@ class Handler(SimpleHTTPRequestHandler):
         status=str(form.get("status", "")); payment=str(form.get("payment_status", ""))
         if status and status not in allowed:raise ValueError("คุณไม่มีสิทธิ์เปลี่ยนสถานะนี้")
         if payment and (area!="admin" or payment not in PAYMENT_STATUSES):raise ValueError("สถานะชำระเงินไม่ถูกต้อง")
-        with STORE_LOCK,db() as con:
+        with STORE_LOCK,db(immediate=True) as con:
             order=row_order(con,oid)
             if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
             if status=="cancelled" and order["payment"]["status"]=="paid":raise ValueError("ออเดอร์นี้ชำระเงินแล้ว กรุณาดำเนินการคืนเงินก่อนยกเลิก")
@@ -1708,7 +1811,8 @@ class Handler(SimpleHTTPRequestHandler):
                 if order["payment"]["method"]=="scb_qr" and payment in {"paid","refunded"}:
                     con.execute("UPDATE payment_attempts SET status=?,confirmed_at=CASE WHEN ?='paid' THEN COALESCE(NULLIF(confirmed_at,''),?) ELSE confirmed_at END,updated_at=? WHERE order_id=? AND provider LIKE 'scb_%' AND status NOT IN ('cancelled','expired')",(payment,payment,now,now,oid))
                 audit(con,role,"payment_change","order",oid,{"to":payment})
-            return self.json({"order":row_order(con,oid)})
+            response={"order":row_order(con,oid)}
+        return self.json(response)
     def complete_order_effects(self,con,oid,order,role):
         """Award points and consume recipe stock once, only when the order closes."""
         exists=con.execute("SELECT 1 FROM loyalty_ledger WHERE order_id=? AND reason='order_completed'",(oid,)).fetchone()

@@ -1,0 +1,22 @@
+[Unit]
+Description=MooPiew engineering health dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/zeaz
+Environment=ZEAZ_ROOT=%h/zeaz
+Environment=DASHBOARD_HOST=127.0.0.1
+Environment=DASHBOARD_PORT=8082
+Environment=DASHBOARD_REFRESH_SECONDS=10
+ExecStart=/usr/bin/python3 -m dashboard.api.server
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=default.target

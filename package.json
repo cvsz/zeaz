@@ -7,7 +7,10 @@
   "scripts": {
     "build": "turbo build",
     "lint": "bash scripts/lint.sh",
+    "test": "python3 -m unittest discover -s tests -p 'test_*.py'",
     "typecheck": "turbo typecheck",
+    "validate": "npm run lint && npm run typecheck && npm run build && npm test",
+    "dashboard": "python3 -m dashboard.api.server",
     "publish:platform": "bash scripts/publish-platform.sh",
     "validate:packages": "npm run typecheck"
   },

@@ -3,6 +3,23 @@
 	auto_https off
 }
 
+http://piewdash.zeaz.dev:80 {
+	bind 127.0.0.1
+
+	basicauth {
+		{$PIEWDASH_BASIC_AUTH_USER} {$PIEWDASH_BASIC_AUTH_HASH}
+	}
+
+	header {
+		-Server
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+	}
+
+	reverse_proxy 127.0.0.1:8082
+}
+
 :8080 {
 	bind 127.0.0.1
 
@@ -27,5 +44,4 @@
 		header_up X-Real-IP {http.request.header.CF-Connecting-IP}
 		header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
 	}
-
 }

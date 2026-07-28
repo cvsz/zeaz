@@ -62,6 +62,39 @@ variable "moopiew_origin" {
   }
 }
 
+variable "piewdash_hostname" {
+  type        = string
+  default     = "piewdash.zeaz.dev"
+  description = "Public hostname for the MooPiew engineering dashboard."
+  validation {
+    condition     = endswith(lower(var.piewdash_hostname), ".${lower(var.zone_name)}")
+    error_message = "piewdash_hostname must be a subdomain of zone_name."
+  }
+}
+
+variable "piewdash_origin" {
+  type        = string
+  default     = "http://127.0.0.1:8082"
+  description = "Dashboard origin reached by cloudflared on the tunnel host."
+  validation {
+    condition     = can(regex("^https?://[^[:space:]]+$", var.piewdash_origin))
+    error_message = "piewdash_origin must be an HTTP(S) URL."
+  }
+}
+
+variable "piewdash_access_allowed_emails" {
+  type        = set(string)
+  description = "Exact operator emails allowed through Cloudflare Access."
+
+  validation {
+    condition = length(var.piewdash_access_allowed_emails) > 0 && alltrue([
+      for email in var.piewdash_access_allowed_emails :
+      can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$", lower(email)))
+    ])
+    error_message = "piewdash_access_allowed_emails must contain at least one valid operator email."
+  }
+}
+
 variable "manage_tunnel_config" {
   type        = bool
   default     = false

@@ -6,16 +6,20 @@ The project uses the same split of responsibilities as z-platform:
 2. An existing Cloudflare Tunnel owns the public-to-private connection.
 3. `cloudflared` forwards that hostname to Caddy on `127.0.0.1:8080`.
 4. Caddy proxies to the MooPiew service on `127.0.0.1:8000`.
+5. Cloudflare Access and Caddy Basic Auth protect `piewdash.zeaz.dev`.
 
 ## Required operator values
 
 Populate `.env.cloudflare` locally from the Cloudflare account that owns
 `zeaz.dev`:
 
-- `CLOUDFLARE_API_TOKEN`: scoped to the account/zone, with Zone DNS Edit and
-  read/edit permission for the selected existing tunnel.
+- `CLOUDFLARE_API_TOKEN`: scoped to the account/zone, with Zone DNS Edit,
+  read/edit permission for the selected existing tunnel, and Account Access:
+  Apps and Policies Edit.
 - `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, and `CLOUDFLARE_TUNNEL_ID`.
 - `CLOUDFLARE_TUNNEL_TOKEN`: only on the origin host that runs cloudflared.
+- `PIEWDASH_ACCESS_ALLOWED_EMAILS`: a JSON array containing exact operator
+  emails. Never use an `everyone` or domain-wide Access rule.
 
 The API token and tunnel token are distinct secrets. Never commit either one.
 
@@ -39,15 +43,29 @@ Start the connector on the origin host with:
 ./scripts/cloudflare-tunnel.sh
 ```
 
-For a durable user service, copy `deploy/systemd/moopiew.service`,
-`deploy/systemd/moopiew-proxy.service`, and
-`deploy/systemd/moopiew-cloudflared.service` to `~/.config/systemd/user/`, then
-run `systemctl --user daemon-reload` and `systemctl --user enable --now
-moopiew.service moopiew-proxy.service moopiew-cloudflared.service`. Create
-`.env.production` from its example and set a unique `ADMIN_KEY` first. Keep
-payment and Cloudflare credentials in separate ignored files. Verify all paths
-with `./scripts/production-check.sh`.
+For durable user services, copy `deploy/systemd/moopiew.service`,
+`deploy/systemd/moopiew-dashboard.service`, and
+`deploy/systemd/moopiew-cloudflared.service` to `~/.config/systemd/user/`.
+Install `deploy/systemd/moopiew-proxy-system@.service` under
+`/etc/systemd/system/`; this system template runs Caddy as the selected user
+with only the low-port bind capability. Then run:
 
-Then verify `https://moopiew.zeaz.dev/api/menu`, `/api/ready`, and the customer
-storefront. A 530 response indicates that the proxied DNS name exists but
-Cloudflare cannot reach a healthy tunnel.
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now moopiew.service moopiew-dashboard.service moopiew-cloudflared.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now "moopiew-proxy-system@$USER.service"
+```
+
+Create `.env.production` from its example and set unique role keys first. Keep
+payment and Cloudflare credentials in separate ignored files. Create
+`.env.dashboard` from its example, generate a random password and its Caddy
+bcrypt hash, and keep the file mode `0600`. Verify all paths with
+`./scripts/production-check.sh`.
+
+Then verify `https://moopiew.zeaz.dev/api/menu`,
+authenticated `https://piewdash.zeaz.dev/api/health`, `/api/ready`, and the
+customer storefront. An anonymous dashboard request must receive a Caddy
+`401` or a Cloudflare Access login redirect, never dashboard data. A 502
+response indicates an unreachable origin; a 530 indicates that Cloudflare
+cannot reach a healthy tunnel.
