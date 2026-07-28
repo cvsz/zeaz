@@ -107,6 +107,18 @@ paid_cancel_status="$(curl --silent --output "$TMP_DIR/paid-cancel.json" --write
   --data '{"phone":"0812345679"}')"
 [[ "$paid_cancel_status" == "400" ]]
 printf '%s' "$(cat "$TMP_DIR/paid-cancel.json")" | "$PYTHON" -c 'import json,sys; assert "ชำระเงินแล้ว" in json.load(sys.stdin)["error"]'
+admin_paid_cancel_status="$(curl --silent --output "$TMP_DIR/admin-paid-cancel.json" --write-out '%{http_code}' --max-time 3 --request PATCH "$BASE_URL/api/admin/orders/$paid_order_id" \
+  --header 'Content-Type: application/json' \
+  --header "X-Admin-Key-B64: $admin_header" \
+  --data '{"status":"cancelled"}')"
+[[ "$admin_paid_cancel_status" == "400" ]]
+printf '%s' "$(cat "$TMP_DIR/admin-paid-cancel.json")" | "$PYTHON" -c 'import json,sys; assert "ชำระเงินแล้ว" in json.load(sys.stdin)["error"]'
+cancelled_complete_status="$(curl --silent --output "$TMP_DIR/cancelled-complete.json" --write-out '%{http_code}' --max-time 3 --request PATCH "$BASE_URL/api/admin/orders/$order_id" \
+  --header 'Content-Type: application/json' \
+  --header "X-Admin-Key-B64: $admin_header" \
+  --data '{"status":"completed"}')"
+[[ "$cancelled_complete_status" == "400" ]]
+printf '%s' "$(cat "$TMP_DIR/cancelled-complete.json")" | "$PYTHON" -c 'import json,sys; assert "ปิดแล้ว" in json.load(sys.stdin)["error"]'
 
 curl --silent --fail --max-time 3 "$BASE_URL/api/admin/dashboard" \
   --header "X-Admin-Key-B64: $admin_header" >"$TMP_DIR/dashboard.json"

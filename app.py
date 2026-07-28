@@ -980,6 +980,11 @@ class Handler(SimpleHTTPRequestHandler):
         except ValueError as error: return self.json({"error":str(error)},400)
         return self.json({"error":"ไม่พบ API"},404)
     def do_PATCH(self):
+        try:
+            return self._do_PATCH()
+        except ValueError as error:
+            return self.json({"error":str(error)},400)
+    def _do_PATCH(self):
         path=urlparse(self.path).path
         try: form=self.body()
         except ValueError as error: return self.json({"error":str(error)},400)
@@ -1309,14 +1314,20 @@ class Handler(SimpleHTTPRequestHandler):
             if status:
                 now=utcnow(); columns={"picked_up":"picked_up_at","delivered":"delivered_at"};sql="UPDATE deliveries SET status=?,updated_at=?";params=[status,now]
                 if status in columns:sql+=f",{columns[status]}=?";params.append(now)
+                if status=="delivered":
+                    order=row_order(con,oid)
+                    if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
+                    if order["status"] in {"cancelled","completed"}:raise ValueError("ออเดอร์นี้ปิดแล้ว ไม่สามารถส่งสำเร็จซ้ำได้")
+                    if order["payment"]["method"]=="scb_qr" and order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงิน SCB ก่อนปิดงานจัดส่ง")
                 sql+=" WHERE order_id=?";params.append(oid);con.execute(sql,params)
                 if status=="delivered":
-                    order=row_order(con,oid); con.execute("UPDATE orders SET status='completed' WHERE id=?",(oid,)); self.complete_order_effects(con,oid,order,role)
+                    con.execute("UPDATE orders SET status='completed' WHERE id=?",(oid,)); self.complete_order_effects(con,oid,order,role)
             audit(con,role,"delivery_update","delivery",oid,{"status":status,"rider_id":rider_id});return self.json({"order":row_order(con,oid)})
     def issue_receipt(self,oid,form,role):
         with db() as con:
             order=row_order(con,oid)
             if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
+            if order["status"]=="cancelled":raise ValueError("ออเดอร์ถูกยกเลิกแล้ว ไม่สามารถออกใบเสร็จได้")
             existing=con.execute("SELECT * FROM pos_receipts WHERE order_id=?",(oid,)).fetchone()
             if existing:return self.json({"receipt":dict(existing)})
             finance=order["financial"]; now=utcnow(); receipt={"id":f"RCT-{secrets.token_hex(4).upper()}","receipt_number":f"MP-{datetime.now():%Y%m%d}-{secrets.token_hex(3).upper()}","order_id":oid,"customer_tax_name":str(form.get("customer_tax_name","")).strip()[:160],"customer_tax_id":re.sub(r"[^0-9]","",str(form.get("customer_tax_id", "")))[:13],"subtotal":finance["subtotal"],"discount":finance["discount"],"delivery_fee":finance["delivery_fee"],"total":finance["total"],"issued_at":now,"issued_by":role}
@@ -1364,6 +1375,9 @@ class Handler(SimpleHTTPRequestHandler):
         with STORE_LOCK,db() as con:
             order=row_order(con,oid)
             if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
+            if status=="cancelled" and order["payment"]["status"]=="paid":raise ValueError("ออเดอร์นี้ชำระเงินแล้ว กรุณาดำเนินการคืนเงินก่อนยกเลิก")
+            if status=="completed" and order["status"] in {"cancelled","completed"}:raise ValueError("ออเดอร์นี้ปิดแล้ว ไม่สามารถปิดซ้ำได้")
+            if status=="completed" and order["payment"]["method"]=="scb_qr" and order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงิน SCB ก่อนปิดออเดอร์")
             transitions={"staff": {("new","confirmed"), ("ready","completed")}, "kitchen": {("confirmed","ready")}}
             if status and area in transitions and (order["status"], status) not in transitions[area]:
                 raise ValueError("ลำดับสถานะไม่ถูกต้อง")
