@@ -23,6 +23,8 @@ jobs:
           npm ci
       - name: Check shell syntax
         run: find scripts assets/asset-generator -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+      - name: Run lint gate
+        run: npm run lint
       - name: Audit dependencies
         run: |
           npm audit --omit=dev --audit-level=high

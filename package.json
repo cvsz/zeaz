@@ -6,7 +6,7 @@
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "build": "turbo build",
-    "lint": "turbo lint",
+    "lint": "bash scripts/lint.sh && turbo lint",
     "typecheck": "turbo typecheck",
     "publish:platform": "bash scripts/publish-platform.sh",
     "validate:packages": "npm run typecheck"
