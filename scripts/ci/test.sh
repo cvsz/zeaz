@@ -89,6 +89,19 @@ node --check "$ROOT/web/admin.js"
 node --check "$ROOT/web/ops.js"
 node --check "$ROOT/web/menu-preview.js"
 node --check "$ROOT/web/api-monitor.js"
+ROOT="$ROOT" python3 - <<'PY'
+import os
+from pathlib import Path
+
+root = Path(os.environ["ROOT"])
+app = (root / "web/app.js").read_text(encoding="utf-8")
+page = (root / "web/index.html").read_text(encoding="utf-8")
+for marker in ("/payments/scb/qr", "data:image/png;base64,", "payment-qr-status"):
+    assert marker in app, marker
+for marker in ("payment-qr-panel", "payment-qr", "payment-qr-status"):
+    assert marker in page, marker
+print("SCB QR checkout UI coverage checks passed.")
+PY
 if [[ -d "$ROOT/node_modules" ]]; then
   (cd "$ROOT" && npm run typecheck && npm run build)
   cmp --silent "$ROOT/apps/web/dist/index.html" "$ROOT/web/platform/index.html" || {
