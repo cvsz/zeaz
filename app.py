@@ -903,9 +903,9 @@ class Handler(SimpleHTTPRequestHandler):
                 catalog=ai_catalog()
                 return self.json({**catalog,"catalog":"live-provider","cached_seconds":max(0,int(float(AI_MODEL_CACHE.get("expires",0))-time.monotonic()))})
             except ValueError as error: return self.json({"error":str(error)},503)
-        tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]+)/events",path)
+        tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]{32})/events",path)
         if tracking:return self.stream_tracking(tracking.group(1))
-        tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]+)",path)
+        tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]{32})",path)
         if tracking:
             if not self.rate("lookup"): return self.json({"error":"คำขอมากเกินไป"},429)
             return self.tracking_snapshot(tracking.group(1))
@@ -1158,7 +1158,7 @@ class Handler(SimpleHTTPRequestHandler):
             if points_redeemed:
                 con.execute("UPDATE customers SET points_balance=points_balance-?,updated_at=? WHERE phone=?",(points_redeemed,now,phone));con.execute("INSERT INTO loyalty_ledger VALUES (?,?,?,?,?,?)",(f"LOY-{secrets.token_hex(4).upper()}",phone,-points_redeemed,"order_redeemed",oid,now))
             if delivery:
-                tracking=f"TRK-{secrets.token_hex(4).upper()}"; con.execute("INSERT INTO deliveries(order_id,zone_id,recipient_name,recipient_phone,address,landmark,tracking_code,updated_at,distance_km) VALUES (?,?,?,?,?,?,?,?,?)",(oid,*delivery,tracking,now,delivery_distance))
+                tracking=f"TRK-{secrets.token_hex(16).upper()}"; con.execute("INSERT INTO deliveries(order_id,zone_id,recipient_name,recipient_phone,address,landmark,tracking_code,updated_at,distance_km) VALUES (?,?,?,?,?,?,?,?,?)",(oid,*delivery,tracking,now,delivery_distance))
             if coupon:
                 con.execute("UPDATE coupons SET used_count=used_count+1 WHERE id=?",(coupon["id"],)); con.execute("INSERT INTO coupon_redemptions VALUES (?,?,?,?,?)",(coupon["id"],oid,phone,discount,now))
             con.execute("INSERT INTO order_history(order_id,at,status,actor_role,note) VALUES (?,?,?,?,?)",(oid,now,status,"automation" if AUTO_CONFIRM_ORDERS else "customer","auto_confirmed" if AUTO_CONFIRM_ORDERS else "")); audit(con,"automation" if AUTO_CONFIRM_ORDERS else "customer","create","order",oid,{"total":final_total,"status":status,"fulfillment":fulfillment})
@@ -1518,10 +1518,20 @@ class Handler(SimpleHTTPRequestHandler):
             audit(con,role,"update","settings","store")
             return self.json({"settings":config(con)})
 
+class BoundedHTTPServer(ThreadingHTTPServer):
+    daemon_threads=True
+    request_queue_size=64
+    def get_request(self):
+        request, address = super().get_request()
+        request.settimeout(30)
+        return request, address
+
 def summary(rows):
     active=[row for row in rows if row["status"]!="cancelled"]
     return {"orders":len(rows),"active_orders":len(active),"revenue":sum(row["total"] for row in active),"ready":sum(row["status"]=="ready" for row in active),"new":sum(row["status"]=="new" for row in active),"completed":sum(row["status"]=="completed" for row in active)}
 
 if __name__=="__main__":
-    if os.environ.get("REQUIRE_ADMIN_KEY","false").lower()=="true" and (ADMIN_KEY=="change-me-before-production" or EMPLOYEE_KEY=="change-me-employee-key" or KITCHEN_KEY=="change-me-kitchen-key"):raise SystemExit("Production requires ADMIN_KEY, EMPLOYEE_KEY and KITCHEN_KEY")
-    initialise_database(); port=int(os.environ.get("PORT","8000"));host=os.environ.get("HOST","127.0.0.1");print(f"Moo Piw Piw is running at http://{host}:{port}");ThreadingHTTPServer((host,port),Handler).serve_forever()
+    host=os.environ.get("HOST","127.0.0.1")
+    defaults=(ADMIN_KEY=="change-me-before-production" or EMPLOYEE_KEY=="change-me-employee-key" or KITCHEN_KEY=="change-me-kitchen-key")
+    if defaults and (os.environ.get("REQUIRE_ADMIN_KEY","false").lower()=="true" or host not in {"127.0.0.1","::1","localhost"}):raise SystemExit("Production requires ADMIN_KEY, EMPLOYEE_KEY and KITCHEN_KEY")
+    initialise_database(); port=int(os.environ.get("PORT","8000"));print(f"Moo Piw Piw is running at http://{host}:{port}");BoundedHTTPServer((host,port),Handler).serve_forever()
