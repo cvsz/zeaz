@@ -747,6 +747,20 @@ def valid_pickup(day, conf):
     try: picked = date.fromisoformat(day)
     except ValueError: return False
     return date.today() <= picked <= date.today() + timedelta(days=int(conf["advance_days"]))
+def valid_email(value: str) -> bool:
+    """Validate the small contact-email subset without a user-controlled regex."""
+    if not 3 <= len(value) <= 160 or any(character.isspace() for character in value):
+        return False
+    local, marker, domain = value.rpartition("@")
+    return bool(
+        marker
+        and local
+        and domain
+        and "." in domain
+        and not domain.startswith((".", "-"))
+        and not domain.endswith((".", "-"))
+        and ".." not in domain
+    )
 def slots_for(day, rows, conf):
     used = {slot: 0 for slot in conf["pickup_slots"]}
     for order in rows:
@@ -1216,7 +1230,7 @@ class Handler(SimpleHTTPRequestHandler):
     def register_merchant(self,form):
         business_name=str(form.get("business_name","")).strip()[:160];owner_name=str(form.get("owner_name","")).strip()[:80];phone=re.sub(r"[^0-9+]","",str(form.get("phone", "")));email=str(form.get("email","")).strip()[:160];address=str(form.get("address","")).strip()[:500];category=str(form.get("category","")).strip()[:80];note=str(form.get("note","")).strip()[:300]
         if len(business_name)<2 or len(owner_name)<2 or not re.fullmatch(r"(?:\+66|0)\d{8,9}",phone) or len(address)<5 or len(category)<2:raise ValueError("กรุณากรอกข้อมูลสมัครร้านค้าให้ครบถ้วน")
-        if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",email):raise ValueError("อีเมลไม่ถูกต้อง")
+        if email and not valid_email(email):raise ValueError("อีเมลไม่ถูกต้อง")
         with db() as con:
             pending=con.execute("SELECT 1 FROM merchant_applications WHERE phone=? AND status='pending'",(phone,)).fetchone()
             if pending:raise ValueError("มีใบสมัครร้านค้าที่รอตรวจสอบสำหรับเบอร์นี้แล้ว")

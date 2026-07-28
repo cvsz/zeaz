@@ -49,7 +49,13 @@ from http.server import BaseHTTPRequestHandler
 from email.message import Message
 
 sys.path.insert(0, os.environ["ROOT"])
-from app import Handler
+from app import Handler, valid_email
+
+assert valid_email("merchant@example.co.th")
+assert not valid_email("merchant@localhost")
+assert not valid_email("merchant @example.com")
+assert not valid_email("merchant@.example.com")
+assert not valid_email("!" * 160 + "@example.com")
 
 def csp_for(nonce: str) -> str:
     handler = Handler.__new__(Handler)
