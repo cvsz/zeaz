@@ -126,6 +126,7 @@ def initialise_database() -> None:
         CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY, at TEXT NOT NULL, actor_role TEXT NOT NULL, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, details TEXT NOT NULL DEFAULT '{}');
         CREATE TABLE IF NOT EXISTS payment_attempts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, provider TEXT NOT NULL, provider_reference TEXT NOT NULL UNIQUE, provider_order_id TEXT UNIQUE, amount INTEGER NOT NULL CHECK(amount >= 0), status TEXT NOT NULL CHECK(status IN ('created','pending','paid','failed','expired','cancelled','refunded')), qr_image TEXT NOT NULL DEFAULT '', qr_type TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, confirmed_at TEXT NOT NULL DEFAULT '', provider_response TEXT NOT NULL DEFAULT '{}');
         CREATE TABLE IF NOT EXISTS oauth_tokens (subject TEXT PRIMARY KEY, access_cipher TEXT NOT NULL, refresh_cipher TEXT NOT NULL DEFAULT '', owner_cipher TEXT NOT NULL, access_expires_at TEXT NOT NULL, refresh_expires_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS oauth_states (state TEXT PRIMARY KEY, expires_at TEXT NOT NULL, used_at TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS delivery_zones (id TEXT PRIMARY KEY, name TEXT NOT NULL, fee INTEGER NOT NULL CHECK(fee >= 0), minimum_order INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS riders (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS rider_applications (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL, vehicle_type TEXT NOT NULL, vehicle_plate TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')) DEFAULT 'pending', rider_id TEXT REFERENCES riders(id), created_at TEXT NOT NULL, reviewed_at TEXT NOT NULL DEFAULT '', reviewed_by TEXT NOT NULL DEFAULT '');
@@ -691,7 +692,13 @@ def scb_authorize() -> str:
     except (UnicodeDecodeError,json.JSONDecodeError) as error: raise ValueError("SCB authorization ตอบกลับไม่ถูกต้อง") from error
     callback=data.get("callbackUrl") if isinstance(data,dict) else ""
     if not isinstance(callback,str) or not callback: raise ValueError("SCB authorization ไม่ได้ส่ง callback URL")
-    return callback
+    state=secrets.token_urlsafe(32)
+    with db() as con:
+        con.execute("DELETE FROM oauth_states WHERE expires_at < ? OR used_at != ''",(utcnow(),))
+        con.execute("INSERT INTO oauth_states(state,expires_at) VALUES (?,?)",(state,(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat()))
+    parsed=urlparse(callback); query=parse_qs(parsed.query,keep_blank_values=True); query["state"]=[state]
+    encoded="&".join(f"{quote(key)}={quote(value)}" for key,values in query.items() for value in values)
+    return parsed._replace(query=encoded).geturl()
 
 def scb_create_qr(order: dict) -> dict:
     if not scb_active(): raise ValueError("SCB QR ยังไม่เปิดให้บริการ")
@@ -875,7 +882,12 @@ class Handler(SimpleHTTPRequestHandler):
         parsed=urlparse(self.path); path, query=parsed.path, parse_qs(parsed.query)
         if path == "/auth/scb/callback":
             code=(query.get("code") or query.get("authCode") or [""])[0]
-            if not code: return self.html("<h1>SCB connection failed</h1><p>Authorization code is missing.</p>",400)
+            state=(query.get("state") or [""])[0]
+            if not code or not state: return self.html("<h1>SCB connection failed</h1><p>Authorization code or state is missing.</p>",400)
+            with db() as con:
+                valid=con.execute("SELECT state FROM oauth_states WHERE state=? AND used_at='' AND expires_at>=?",(state,utcnow())).fetchone()
+                if not valid: return self.html("<h1>SCB connection failed</h1><p>Authorization state is invalid or expired.</p>",400)
+                con.execute("UPDATE oauth_states SET used_at=? WHERE state=? AND used_at=''",(utcnow(),state))
             try: scb_exchange_auth_code(code)
             except ValueError as error: return self.html(f"<h1>SCB connection failed</h1><p>{escape_html(str(error))}</p>",400)
             return self.html("<h1>SCB connected</h1><p>Return to MooPiew Owner dashboard to enable and test QR payment.</p>")
@@ -904,7 +916,10 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/admin/scb/auth/status":
             if not self.require("admin"): return
             with db() as con: row=con.execute("SELECT access_expires_at,refresh_expires_at,updated_at FROM oauth_tokens WHERE subject='scb_merchant'").fetchone()
-            return self.json({"connected":bool(row),"access_expires_at":row["access_expires_at"] if row else "","refresh_expires_at":row["refresh_expires_at"] if row else "","updated_at":row["updated_at"] if row else ""})
+            now=datetime.now(timezone.utc)
+            access_valid=bool(row and datetime.fromisoformat(row["access_expires_at"])>now)
+            refresh_valid=bool(row and row["refresh_expires_at"] and datetime.fromisoformat(row["refresh_expires_at"])>now)
+            return self.json({"connected":access_valid or refresh_valid,"access_valid":access_valid,"refresh_valid":refresh_valid,"access_expires_at":row["access_expires_at"] if row else "","refresh_expires_at":row["refresh_expires_at"] if row else "","updated_at":row["updated_at"] if row else ""})
         with db() as con:
             conf=config(con)
             if path == "/api/ready":
@@ -1468,6 +1483,7 @@ class Handler(SimpleHTTPRequestHandler):
             for recipe in con.execute("SELECT inventory_item_id,quantity FROM menu_recipes WHERE menu_item_id=?",(line["id"],)):
                 delta=-float(recipe["quantity"])*int(line["quantity"]); item=con.execute("SELECT on_hand FROM inventory_items WHERE id=?",(recipe["inventory_item_id"],)).fetchone()
                 if item:
+                    if float(item["on_hand"])+delta < 0: raise ValueError("สต็อกสินค้าไม่เพียงพอสำหรับปิดออเดอร์")
                     con.execute("UPDATE inventory_items SET on_hand=?,updated_at=? WHERE id=?",(float(item["on_hand"])+delta,utcnow(),recipe["inventory_item_id"]));con.execute("INSERT INTO inventory_movements VALUES (?,?,?,?,?,?,?,?)",(f"MOV-{secrets.token_hex(4).upper()}",recipe["inventory_item_id"],delta,"order_completed",oid,"ตัดตามสูตรอาหาร",utcnow(),role))
     def reverse_order_redemptions(self,con,oid,order,phone,now):
         """Return reserved points and coupon use exactly once when an order is cancelled."""
