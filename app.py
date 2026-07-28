@@ -142,6 +142,16 @@ def initialise_database() -> None:
         CREATE TABLE IF NOT EXISTS coupon_redemptions (coupon_id TEXT NOT NULL REFERENCES coupons(id), order_id TEXT PRIMARY KEY REFERENCES orders(id), customer_phone TEXT NOT NULL, discount INTEGER NOT NULL, created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS pos_receipts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL UNIQUE REFERENCES orders(id), receipt_number TEXT NOT NULL UNIQUE, customer_tax_name TEXT NOT NULL DEFAULT '', customer_tax_id TEXT NOT NULL DEFAULT '', subtotal INTEGER NOT NULL, discount INTEGER NOT NULL, delivery_fee INTEGER NOT NULL, total INTEGER NOT NULL, issued_at TEXT NOT NULL, issued_by TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS tax_invoices (receipt_id TEXT PRIMARY KEY REFERENCES pos_receipts(id), tax_invoice_number TEXT NOT NULL UNIQUE, seller_name TEXT NOT NULL, seller_tax_id TEXT NOT NULL, seller_address TEXT NOT NULL, seller_branch TEXT NOT NULL, buyer_name TEXT NOT NULL, buyer_tax_id TEXT NOT NULL DEFAULT '', buyer_address TEXT NOT NULL DEFAULT '', amount_before_vat INTEGER NOT NULL, vat_rate INTEGER NOT NULL, vat_amount INTEGER NOT NULL, total INTEGER NOT NULL, issued_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS providers (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, country TEXT NOT NULL DEFAULT 'TH', status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')), metadata TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS provider_services (id TEXT PRIMARY KEY, provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE, slug TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')), metadata TEXT NOT NULL DEFAULT '{}', UNIQUE(provider_id,slug));
+        CREATE TABLE IF NOT EXISTS merchant_types (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, metadata TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')));
+        CREATE TABLE IF NOT EXISTS vehicle_types (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, metadata TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')));
+        CREATE TABLE IF NOT EXISTS document_types (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, subject_type TEXT NOT NULL CHECK(subject_type IN ('rider','merchant','both')), allowed_mime_types TEXT NOT NULL DEFAULT '[]', max_size_bytes INTEGER NOT NULL DEFAULT 10485760, metadata TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')));
+        CREATE TABLE IF NOT EXISTS provider_document_requirements (id TEXT PRIMARY KEY, provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE, service_id TEXT REFERENCES provider_services(id) ON DELETE SET NULL, subject_type TEXT NOT NULL CHECK(subject_type IN ('rider','merchant')), merchant_type_id TEXT REFERENCES merchant_types(id) ON DELETE SET NULL, vehicle_type_id TEXT REFERENCES vehicle_types(id) ON DELETE SET NULL, document_type_id TEXT NOT NULL REFERENCES document_types(id) ON DELETE RESTRICT, country TEXT NOT NULL DEFAULT 'TH', effective_from TEXT NOT NULL, effective_to TEXT NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}', is_required INTEGER NOT NULL DEFAULT 0 CHECK(is_required IN (0,1)), is_optional INTEGER NOT NULL DEFAULT 0 CHECK(is_optional IN (0,1)), display_order INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS merchant_document_requirements (id TEXT PRIMARY KEY, merchant_type_id TEXT NOT NULL REFERENCES merchant_types(id) ON DELETE CASCADE, document_type_id TEXT NOT NULL REFERENCES document_types(id) ON DELETE RESTRICT, country TEXT NOT NULL DEFAULT 'TH', effective_from TEXT NOT NULL, effective_to TEXT NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}', is_required INTEGER NOT NULL DEFAULT 0 CHECK(is_required IN (0,1)), is_optional INTEGER NOT NULL DEFAULT 0 CHECK(is_optional IN (0,1)), display_order INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS uploaded_documents (id TEXT PRIMARY KEY, provider_id TEXT REFERENCES providers(id) ON DELETE SET NULL, subject_type TEXT NOT NULL CHECK(subject_type IN ('rider','merchant')), subject_id TEXT NOT NULL, requirement_id TEXT REFERENCES provider_document_requirements(id) ON DELETE SET NULL, original_filename TEXT NOT NULL, storage_path TEXT NOT NULL UNIQUE, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL CHECK(size_bytes > 0), sha256 TEXT NOT NULL, expires_at TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','expired','deleted')), metadata TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS document_verification (document_id TEXT PRIMARY KEY REFERENCES uploaded_documents(id) ON DELETE CASCADE, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','expired')), verified_by TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '', verified_at TEXT NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}');
+        CREATE TABLE IF NOT EXISTS verification_history (id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES uploaded_documents(id) ON DELETE CASCADE, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','expired','deleted')), actor_role TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS idx_orders_pickup ON orders(pickup_date, pickup_slot);
         CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
         CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_logs(at DESC);
@@ -149,6 +159,10 @@ def initialise_database() -> None:
         CREATE INDEX IF NOT EXISTS idx_payment_attempts_provider_order ON payment_attempts(provider, provider_order_id);
         CREATE INDEX IF NOT EXISTS idx_deliveries_status ON deliveries(status, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_inventory_movements_item ON inventory_movements(inventory_item_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_provider_requirements_lookup ON provider_document_requirements(provider_id,subject_type,country,status,display_order);
+        CREATE INDEX IF NOT EXISTS idx_merchant_requirements_lookup ON merchant_document_requirements(merchant_type_id,country,status,display_order);
+        CREATE INDEX IF NOT EXISTS idx_uploaded_documents_subject ON uploaded_documents(subject_type,subject_id,status,created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_verification_history_document ON verification_history(document_id,created_at DESC);
         """)
         payment_schema=con.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='payment_attempts'").fetchone()[0]
         if "'refunded'" not in payment_schema:
@@ -165,6 +179,7 @@ def initialise_database() -> None:
             con.execute("ALTER TABLE deliveries ADD COLUMN distance_km REAL NOT NULL DEFAULT 0")
         now=utcnow()
         con.execute("INSERT OR IGNORE INTO delivery_zones VALUES (?,?,?,?,?,?,?)", ("central", "พื้นที่จัดส่งหลัก", 30, 0, 1, now, now))
+        seed_document_requirements(con)
         if con.execute("SELECT COUNT(*) FROM settings").fetchone()[0]: return
         legacy_settings = load_legacy(DATA / "settings.json", {})
         config = {**DEFAULT_SETTINGS, **legacy_settings}
@@ -182,10 +197,84 @@ def import_legacy_order(con: sqlite3.Connection, order: dict) -> None:
     for item in order.get("items", []): con.execute("INSERT INTO order_items(order_id,menu_item_id,name,quantity,unit_price) VALUES (?,?,?,?,?)", (order["id"], item.get("id", "legacy"), item.get("name", "รายการ"), int(item.get("quantity", 1)), int(item.get("unit_price", 0))))
     for event in order.get("history", [{"at": values[1], "status": values[2], "by": "legacy"}]): con.execute("INSERT INTO order_history(order_id,at,status,actor_role) VALUES (?,?,?,?)", (order["id"], event.get("at", values[1]), event.get("status", values[2]), event.get("by", "legacy")))
 
+def seed_document_requirements(con: sqlite3.Connection) -> None:
+    """Seed provider requirements from published Thailand provider pages."""
+    now = utcnow()
+    providers = [
+        ("grab", "Grab", "https://www.grab.com/th/driver/drive/", "https://www.grab.com/th/merchant/"),
+        ("bolt", "Bolt", "https://bolt.eu/th-th/support/articles/4406002078610/", "https://bolt.eu/en-th/driver/"),
+        ("lineman", "LINE MAN", "https://lineman.line.me/rider/", "https://lineman.line.me/"),
+        ("lalamove", "Lalamove", "https://www.lalamove.com/th-th/driver", "https://www.lalamove.com/th-th/")
+    ]
+    for slug, name, rider_url, merchant_url in providers:
+        pid=f"provider-{slug}"
+        con.execute("INSERT OR IGNORE INTO providers(id,slug,name,country,status,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)", (pid,slug,name,"TH","active",json.dumps({"rider_reference":rider_url,"merchant_reference":merchant_url}),now,now))
+        for service,label in (("rider","Rider registration"),("merchant","Merchant registration")):
+            con.execute("INSERT OR IGNORE INTO provider_services(id,provider_id,slug,name,metadata) VALUES (?,?,?,?,?)", (f"{slug}-{service}",pid,service,label,json.dumps({"country":"TH"})))
+    for slug,name in [("individual","Individual"),("company","Company"),("restaurant","Restaurant"),("cloud-kitchen","Cloud Kitchen"),("cafe","Cafe"),("retail","Retail"),("grocery","Grocery")]:
+        con.execute("INSERT OR IGNORE INTO merchant_types(id,slug,name) VALUES (?,?,?)", (f"merchant-type-{slug}",slug,name))
+    for slug,name in [("motorcycle","Motorcycle"),("car","Car"),("van","Van"),("truck","Truck"),("bicycle","Bicycle")]:
+        con.execute("INSERT OR IGNORE INTO vehicle_types(id,slug,name) VALUES (?,?,?)", (f"vehicle-type-{slug}",slug,name))
+    types=[
+        ("national-id","National ID card","both"),("driver-license","Driving license","rider"),("vehicle-registration","Vehicle registration","rider"),("vehicle-photo","Vehicle photo","rider"),("profile-photo","Driver profile photo","rider"),("bank-account","Bank account or passbook","both"),("ror-yor-17-18","Ror Yor 17 / Ror Yor 18","rider"),("power-of-attorney","Vehicle owner power of attorney","rider"),("relationship-proof","Proof of relationship to vehicle owner","rider"),("company-certificate","Company certificate","merchant"),("vat-certificate","VAT registration ( ภพ.20 )","merchant"),("shareholder-list","Shareholder list ( บอจ.5 )","merchant"),("director-id","Company director ID","merchant"),("business-bank-account","Business bank account","merchant"),("proof-of-address","Proof of residence or business address","merchant"),("foreign-work-permit","Thai work permit","merchant"),("foreign-business-certificate","Foreign business certificate","merchant")
+    ]
+    image_pdf=json.dumps(["image/jpeg","image/png","application/pdf"])
+    for slug,name,subject in types:
+        con.execute("INSERT OR IGNORE INTO document_types(id,slug,name,subject_type,allowed_mime_types,metadata) VALUES (?,?,?,?,?,?)", (f"document-type-{slug}",slug,name,subject,image_pdf,json.dumps({"retention":"operator_policy"})))
+    def req(rid,provider,service,subject,doc,required,optional,order,source,merchant_type_id=None,vehicle_type_id=None,extra=None):
+        metadata={"source":source,"source_confidence":"published"}|(extra or {})
+        con.execute("INSERT OR IGNORE INTO provider_document_requirements(id,provider_id,service_id,subject_type,merchant_type_id,vehicle_type_id,document_type_id,country,effective_from,metadata,is_required,is_optional,display_order,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (rid,f"provider-{provider}",f"{provider}-{service}",subject,merchant_type_id,vehicle_type_id,f"document-type-{doc}","TH","2024-01-01",json.dumps(metadata,ensure_ascii=False),required,optional,order,now,now))
+    rider_sets={
+        "grab":["national-id","driver-license","vehicle-registration","vehicle-photo","profile-photo","bank-account"],
+        "bolt":["national-id","driver-license","vehicle-registration","vehicle-photo","profile-photo"],
+        "lalamove":["national-id","driver-license","vehicle-registration","vehicle-photo","profile-photo","bank-account"]
+    }
+    rider_sources={"grab":"https://www.grab.com/th/driver/drive/","bolt":"https://bolt.eu/th-th/support/articles/4406002078610/","lalamove":"https://www.lalamove.com/th-th/driver"}
+    for provider,docs in rider_sets.items():
+        for order,doc in enumerate(docs,1): req(f"{provider}-rider-{doc}",provider,"rider","rider",doc,1,0,order,rider_sources[provider])
+    for order,doc in enumerate(["ror-yor-17-18","power-of-attorney","relationship-proof"],1):
+        req(f"bolt-rider-optional-{doc}","bolt","rider","rider",doc,0,1,order+20,"https://bolt.eu/th-th/support/articles/4406002078610/")
+    con.execute("INSERT OR IGNORE INTO provider_document_requirements(id,provider_id,service_id,subject_type,country,effective_from,metadata,is_required,is_optional,display_order,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", ("lineman-rider-review","provider-lineman","lineman-rider","rider","TH","2024-01-01",json.dumps({"source":"https://lineman.line.me/rider/","source_confidence":"check_at_submission","note":"Public page describes registration but does not publish a stable document checklist."},ensure_ascii=False),0,1,1,now,now))
+    for merchant_type,docs in {"individual":["national-id","bank-account"],"company":["company-certificate","vat-certificate","shareholder-list","director-id","business-bank-account"]}.items():
+        for order,doc in enumerate(docs,1):
+            req(f"grab-merchant-{merchant_type}-{doc}","grab","merchant","merchant",doc,1,0,order,"https://www.grab.com/th/merchant/",merchant_type_id=f"merchant-type-{merchant_type}")
+            con.execute("INSERT OR IGNORE INTO merchant_document_requirements(id,merchant_type_id,document_type_id,country,effective_from,metadata,is_required,is_optional,display_order,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)", (f"merchant-{merchant_type}-{doc}",f"merchant-type-{merchant_type}",f"document-type-{doc}","TH","2024-01-01",json.dumps({"source":"https://www.grab.com/th/merchant/","source_confidence":"published","provider_override":"grab"},ensure_ascii=False),1,0,order,now,now))
+
 def config(con: sqlite3.Connection) -> dict:
     result = DEFAULT_SETTINGS | {row["key"]: json.loads(row["value"]) for row in con.execute("SELECT key,value FROM settings")}
     result["menu"] = [dict(row) | {"available": bool(row["available"])} for row in con.execute("SELECT m.id,m.name,m.description,m.price,m.available FROM menu_items m LEFT JOIN menu_display_order o ON o.menu_item_id=m.id ORDER BY COALESCE(o.position,9999),m.created_at")]
     return result
+
+def provider_rows(con: sqlite3.Connection, slug: str | None = None):
+    query="SELECT * FROM providers WHERE status='active'"; args=()
+    if slug: query += " AND slug=?"; args=(slug,)
+    return [dict(row) | {"metadata":json.loads(row["metadata"])} for row in con.execute(query+" ORDER BY name",args)]
+
+def requirement_rows(con: sqlite3.Connection, provider_slug: str, subject: str, country: str, merchant_type: str = "", vehicle_type: str = ""):
+    if subject not in {"rider","merchant"}: raise ValueError("ประเภทเอกสารไม่ถูกต้อง")
+    params=[provider_slug,subject,country]
+    query="""SELECT r.*,p.slug AS provider_slug,p.name AS provider_name,s.slug AS service_slug,
+                    d.slug AS document_slug,d.name AS document_name,d.allowed_mime_types,d.max_size_bytes,
+                    mt.slug AS merchant_type_slug,vt.slug AS vehicle_type_slug
+             FROM provider_document_requirements r JOIN providers p ON p.id=r.provider_id
+             LEFT JOIN provider_services s ON s.id=r.service_id JOIN document_types d ON d.id=r.document_type_id
+             LEFT JOIN merchant_types mt ON mt.id=r.merchant_type_id LEFT JOIN vehicle_types vt ON vt.id=r.vehicle_type_id
+             WHERE p.slug=? AND r.subject_type=? AND r.country=? AND r.status='active'
+               AND r.effective_from<=date('now') AND (r.effective_to='' OR r.effective_to>=date('now'))"""
+    if merchant_type: query += " AND (mt.slug=? OR r.merchant_type_id IS NULL)"; params.append(merchant_type)
+    if vehicle_type: query += " AND (vt.slug=? OR r.vehicle_type_id IS NULL)"; params.append(vehicle_type)
+    rows=[]
+    for row in con.execute(query+" ORDER BY r.display_order,r.id",params):
+        item=dict(row); item["metadata"]=json.loads(item["metadata"]); item["allowed_mime_types"]=json.loads(item["allowed_mime_types"]); item["is_required"]=bool(item["is_required"]); item["is_optional"]=bool(item["is_optional"]); rows.append(item)
+    return rows
+
+def document_public(row):
+    item=dict(row)
+    for key in ("metadata",):
+        try: item[key]=json.loads(item[key])
+        except (TypeError,json.JSONDecodeError): item[key]={}
+    item.pop("storage_path",None)
+    return item
 
 def set_setting(con, key, value): con.execute("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, json.dumps(value, ensure_ascii=False)))
 def audit(con, role, action, entity_type, entity_id, details=None): con.execute("INSERT INTO audit_logs(at,actor_role,action,entity_type,entity_id,details) VALUES (?,?,?,?,?,?)", (utcnow(), role, action, entity_type, entity_id, json.dumps(details or {}, ensure_ascii=False)))
@@ -871,10 +960,10 @@ class Handler(SimpleHTTPRequestHandler):
             encoded=content.encode(); self.send_response(status); self.send_header("Content-Type", "text/html; charset=utf-8"); self.send_header("Content-Length",str(len(encoded))); self.send_header("Cache-Control","no-store"); self.end_headers(); self.wfile.write(encoded)
         finally:
             self._script_nonce=""
-    def body(self):
+    def body(self, max_length=100_000):
         try: length=int(self.headers.get("Content-Length", "0"))
         except ValueError: raise ValueError("ขนาดข้อมูลไม่ถูกต้อง")
-        if not 0 < length <= 100_000: raise ValueError("ขนาดข้อมูลไม่ถูกต้อง")
+        if not 0 < length <= max_length: raise ValueError("ขนาดข้อมูลไม่ถูกต้อง")
         raw=self.rfile.read(length); self.raw_body=raw
         try: value=json.loads(raw.decode())
         except (UnicodeDecodeError,json.JSONDecodeError): raise ValueError("ข้อมูลที่ส่งมาไม่ถูกต้อง")
@@ -900,6 +989,70 @@ class Handler(SimpleHTTPRequestHandler):
         role=self.role()
         if role == "admin" or role in roles: return role
         self.json({"error":"ไม่ได้รับอนุญาต"},401); return None
+    def provider_requirements(self, provider_slug, subject, query):
+        with db() as con:
+            if not con.execute("SELECT 1 FROM providers WHERE slug=? AND status='active'",(provider_slug,)).fetchone(): return self.json({"error":"ไม่พบ provider"},404)
+            country=(query.get("country") or ["TH"])[0].upper()[:2]
+            merchant_type=(query.get("merchant_type") or [""])[0].lower()
+            vehicle_type=(query.get("vehicle_type") or [""])[0].lower()
+            return self.json({"provider":provider_slug,"subject_type":subject,"country":country,"requirements":requirement_rows(con,provider_slug,subject,country,merchant_type,vehicle_type)})
+    def upload_document(self, form, role):
+        provider=str(form.get("provider","")).strip().lower(); subject=str(form.get("subject_type","")).strip().lower(); subject_id=str(form.get("subject_id","")).strip(); requirement_id=str(form.get("requirement_id","")).strip(); filename=os.path.basename(str(form.get("filename","")))[:180]; mime=str(form.get("mime_type","")).strip().lower(); encoded=form.get("content_base64","")
+        if not re.fullmatch(r"[a-z0-9-]{2,40}",provider) or subject not in {"rider","merchant"} or not re.fullmatch(r"[A-Za-z0-9_-]{2,100}",subject_id) or not filename or not isinstance(encoded,str): raise ValueError("ข้อมูลเอกสารไม่ถูกต้อง")
+        with db() as con:
+            prow=con.execute("SELECT id FROM providers WHERE slug=? AND status='active'",(provider,)).fetchone()
+            req=con.execute("SELECT r.*,d.allowed_mime_types,d.max_size_bytes FROM provider_document_requirements r JOIN providers p ON p.id=r.provider_id JOIN document_types d ON d.id=r.document_type_id WHERE r.id=? AND p.slug=? AND r.subject_type=? AND r.status='active'",(requirement_id,provider,subject)).fetchone()
+            if not prow or not req: raise ValueError("ไม่พบ requirement ของเอกสาร")
+            allowed=json.loads(req["allowed_mime_types"])
+            if mime not in allowed: raise ValueError("ชนิดไฟล์นี้ไม่อยู่ในรายการที่อนุญาต")
+            try: raw=base64.b64decode(encoded,validate=True)
+            except (ValueError,TypeError): raise ValueError("ไฟล์เอกสารต้องเป็น base64 ที่ถูกต้อง")
+            if not raw or len(raw)>min(int(req["max_size_bytes"]),10*1024*1024): raise ValueError("ขนาดไฟล์ไม่ถูกต้อง")
+            if (mime=="application/pdf" and not raw.startswith(b"%PDF")) or (mime=="image/png" and not raw.startswith(b"\x89PNG\r\n\x1a\n")) or (mime=="image/jpeg" and not raw.startswith(b"\xff\xd8\xff")): raise ValueError("เนื้อไฟล์ไม่ตรงกับชนิดไฟล์")
+            doc_id=f"DOC-{secrets.token_hex(8).upper()}"; suffix=Path(filename).suffix.lower()[:10] or ".bin"; root=DATA/"documents"; root.mkdir(mode=0o700,parents=True,exist_ok=True); path=root/f"{doc_id}{suffix}"; tmp=root/f".{doc_id}.tmp"; digest=hashlib.sha256(raw).hexdigest()
+            try:
+                tmp.write_bytes(raw); os.chmod(tmp,0o600); os.replace(tmp,path)
+            except OSError as error:
+                try: tmp.unlink(missing_ok=True)
+                except OSError: pass
+                raise ValueError("ไม่สามารถจัดเก็บเอกสารได้") from error
+            now=utcnow(); con.execute("INSERT INTO uploaded_documents(id,provider_id,subject_type,subject_id,requirement_id,original_filename,storage_path,mime_type,size_bytes,sha256,status,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(doc_id,prow["id"],subject,subject_id,requirement_id,filename,str(path),mime,len(raw),digest,"pending",json.dumps({"uploaded_by":role}),now,now)); con.execute("INSERT INTO document_verification(document_id,status) VALUES (?,?)",(doc_id,"pending")); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",doc_id,"pending",role,"",json.dumps({}),now)); audit(con,role,"upload","document",doc_id,{"provider":provider,"subject_type":subject,"requirement_id":requirement_id,"size_bytes":len(raw),"mime_type":mime})
+            row=con.execute("SELECT * FROM uploaded_documents WHERE id=?",(doc_id,)).fetchone()
+            return self.json({"document":document_public(row)},201)
+    def update_document(self, document_id, form, role):
+        status=str(form.get("status","")).strip().lower(); reason=str(form.get("reason","")).strip()[:500]
+        if status not in {"pending","approved","rejected","expired"}: raise ValueError("สถานะเอกสารไม่ถูกต้อง")
+        with db() as con:
+            row=con.execute("SELECT * FROM uploaded_documents WHERE id=? AND status!='deleted'",(document_id,)).fetchone()
+            if not row:return self.json({"error":"ไม่พบเอกสาร"},404)
+            now=utcnow(); con.execute("UPDATE uploaded_documents SET status=?,updated_at=? WHERE id=?",(status,now,document_id)); con.execute("UPDATE document_verification SET status=?,verified_by=?,reason=?,verified_at=?,metadata=? WHERE document_id=?",(status,role,reason,now,json.dumps({}),document_id)); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",document_id,status,role,reason,json.dumps({}),now)); audit(con,role,"verify","document",document_id,{"status":status}); return self.json({"document":document_public(con.execute("SELECT * FROM uploaded_documents WHERE id=?",(document_id,)).fetchone())})
+    def delete_document(self, document_id, role):
+        with db() as con:
+            row=con.execute("SELECT * FROM uploaded_documents WHERE id=? AND status!='deleted'",(document_id,)).fetchone()
+            if not row:return self.json({"error":"ไม่พบเอกสาร"},404)
+            try: Path(row["storage_path"]).unlink(missing_ok=True)
+            except OSError: pass
+            now=utcnow(); con.execute("UPDATE uploaded_documents SET status='deleted',updated_at=? WHERE id=?",(now,document_id)); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",document_id,"deleted",role,"ลบเอกสาร",json.dumps({}),now)); audit(con,role,"delete","document",document_id); return self.json({"deleted":True,"id":document_id})
+    def admin_document_requirements(self, form, requirement_id, role):
+        with db() as con:
+            row=con.execute("SELECT * FROM provider_document_requirements WHERE id=?",(requirement_id,)).fetchone()
+            if not row:return self.json({"error":"ไม่พบ requirement"},404)
+            required=parse_bool(form.get("is_required"),bool(row["is_required"])); optional=parse_bool(form.get("is_optional"),bool(row["is_optional"]))
+            if required and optional: raise ValueError("requirement เป็น required และ optional พร้อมกันไม่ได้")
+            try: order=int(form.get("display_order",row["display_order"]))
+            except (TypeError,ValueError): raise ValueError("ลำดับไม่ถูกต้อง")
+            if order<0: raise ValueError("ลำดับไม่ถูกต้อง")
+            status=str(form.get("status",row["status"])).strip().lower()
+            if status not in {"active","inactive"}: raise ValueError("สถานะ requirement ไม่ถูกต้อง")
+            metadata=json.loads(row["metadata"])
+            supplied=form.get("metadata")
+            if supplied is not None:
+                if not isinstance(supplied,dict): raise ValueError("metadata ไม่ถูกต้อง")
+                metadata.update(supplied)
+            now_date=date.today().isoformat(); yesterday=(date.today()-timedelta(days=1)).isoformat(); new_id=f"{requirement_id}-v{secrets.token_hex(3).upper()}"
+            con.execute("UPDATE provider_document_requirements SET effective_to=?,updated_at=? WHERE id=? AND effective_to=''",(yesterday,utcnow(),requirement_id))
+            con.execute("INSERT INTO provider_document_requirements(id,provider_id,service_id,subject_type,merchant_type_id,vehicle_type_id,document_type_id,country,effective_from,effective_to,metadata,is_required,is_optional,display_order,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(new_id,row["provider_id"],row["service_id"],row["subject_type"],row["merchant_type_id"],row["vehicle_type_id"],row["document_type_id"],row["country"],now_date,"",json.dumps(metadata,ensure_ascii=False),int(required),int(optional),order,status,utcnow(),utcnow()))
+            audit(con,role,"version","provider_document_requirement",new_id,{"previous_id":requirement_id,"status":status,"is_required":required,"is_optional":optional,"display_order":order}); return self.json({"requirement_id":new_id,"previous_id":requirement_id,"effective_from":now_date},201)
     def do_GET(self):
         parsed=urlparse(self.path); path, query=parsed.path, parse_qs(parsed.query)
         if path == "/auth/scb/callback":
@@ -925,6 +1078,41 @@ class Handler(SimpleHTTPRequestHandler):
                 catalog=ai_catalog()
                 return self.json({**catalog,"catalog":"live-provider","cached_seconds":max(0,int(float(AI_MODEL_CACHE.get("expires",0))-time.monotonic()))})
             except ValueError as error: return self.json({"error":str(error)},503)
+        if path in {"/providers","/api/providers"}:
+            with db() as con: return self.json({"providers":provider_rows(con)})
+        provider_match=re.fullmatch(r"(?:/api)?/providers/([a-z0-9-]+)",path)
+        if provider_match:
+            with db() as con:
+                rows=provider_rows(con,provider_match.group(1))
+                if not rows:return self.json({"error":"ไม่พบ provider"},404)
+                services=[dict(row) | {"metadata":json.loads(row["metadata"])} for row in con.execute("SELECT * FROM provider_services WHERE provider_id=? AND status='active' ORDER BY name",(rows[0]["id"],))]
+                return self.json({"provider":rows[0],"services":services})
+        requirements_match=re.fullmatch(r"(?:/api)?/providers/([a-z0-9-]+)/requirements(?:/(rider|merchant))?",path)
+        if requirements_match:
+            provider_slug,subject=requirements_match.groups(); subject=subject or (query.get("subject_type") or ["rider"])[0]
+            return self.provider_requirements(provider_slug,subject,query)
+        if path in {"/api/documents/status","/documents/status"}:
+            if not self.require("admin"): return
+            with db() as con:
+                subject=(query.get("subject_type") or [""])[0]; subject_id=(query.get("subject_id") or [""])[0]; params=[]; where=["status!='deleted'"]
+                if subject in {"rider","merchant"}: where.append("subject_type=?"); params.append(subject)
+                if subject_id: where.append("subject_id=?"); params.append(subject_id)
+                rows=[document_public(row) for row in con.execute(f"SELECT * FROM uploaded_documents WHERE {' AND '.join(where)} ORDER BY created_at DESC",params)]
+                return self.json({"documents":rows})
+        if path in {"/api/documents/history","/documents/history"}:
+            if not self.require("admin"): return
+            with db() as con:
+                doc_id=(query.get("document_id") or [""])[0]; params=[]; where=""
+                if doc_id: where=" WHERE h.document_id=?"; params=[doc_id]
+                rows=[dict(row) | {"metadata":json.loads(row["metadata"])} for row in con.execute(f"SELECT h.* FROM verification_history h{where} ORDER BY h.created_at DESC",params)]
+                return self.json({"history":rows})
+        if path == "/api/admin/document-requirements":
+            if not self.require("admin"): return
+            with db() as con:
+                rows=[]
+                for row in con.execute("SELECT r.*,p.slug provider_slug,p.name provider_name,s.slug service_slug,d.slug document_slug,d.name document_name,mt.slug merchant_type_slug,vt.slug vehicle_type_slug FROM provider_document_requirements r JOIN providers p ON p.id=r.provider_id LEFT JOIN provider_services s ON s.id=r.service_id JOIN document_types d ON d.id=r.document_type_id LEFT JOIN merchant_types mt ON mt.id=r.merchant_type_id LEFT JOIN vehicle_types vt ON vt.id=r.vehicle_type_id ORDER BY p.name,r.subject_type,r.display_order,r.effective_from"):
+                    item=dict(row); item["metadata"]=json.loads(item["metadata"]); item["is_required"]=bool(item["is_required"]); item["is_optional"]=bool(item["is_optional"]); rows.append(item)
+                return self.json({"requirements":rows})
         tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]{32})/events",path)
         if tracking:return self.stream_tracking(tracking.group(1))
         tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]{32})",path)
@@ -1010,7 +1198,7 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_HEAD()
     def do_POST(self):
         path=urlparse(self.path).path
-        try: form=self.body()
+        try: form=self.body(15_000_000 if path in {"/api/documents/upload","/documents/upload"} else 100_000)
         except ValueError as error: return self.json({"error":str(error)},400)
         try:
             if path=="/api/orders":
@@ -1022,6 +1210,9 @@ class Handler(SimpleHTTPRequestHandler):
             if path=="/api/merchants/register":
                 if not self.rate("rider"):return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.register_merchant(form)
+            if path in {"/api/documents/upload","/documents/upload"}:
+                role=self.require("admin")
+                if role:return self.upload_document(form,role)
             if path=="/api/delivery/quote":
                 if not self.rate("quote"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.delivery_quote(form)
@@ -1080,6 +1271,16 @@ class Handler(SimpleHTTPRequestHandler):
         path=urlparse(self.path).path
         try: form=self.body()
         except ValueError as error: return self.json({"error":str(error)},400)
+        requirement=re.fullmatch(r"/api/admin/document-requirements/([A-Za-z0-9_-]+)",path)
+        if requirement:
+            role=self.require("admin")
+            if role:return self.admin_document_requirements(form,requirement.group(1),role)
+            return
+        document=re.fullmatch(r"(?:/api)?/documents/(DOC-[A-F0-9]+)",path)
+        if document:
+            role=self.require("admin")
+            if role:return self.update_document(document.group(1),form,role)
+            return
         match=re.fullmatch(r"/api/(admin|staff|kitchen)/orders/(MPP-[A-Z0-9-]+)",path)
         if match:
             area, order_id=match.groups(); expected={"admin":"admin","staff":"employee","kitchen":"kitchen"}[area]; role=self.require(expected)
@@ -1114,6 +1315,14 @@ class Handler(SimpleHTTPRequestHandler):
             if path=="/api/admin/settings":return self.update_settings(form,role)
         except ValueError as error:return self.json({"error":str(error)},400)
         self.json({"error":"ไม่พบ API"},404)
+    def do_DELETE(self):
+        path=urlparse(self.path).path
+        document=re.fullmatch(r"(?:/api)?/documents/(DOC-[A-F0-9]+)",path)
+        if document:
+            role=self.require("admin")
+            if role:return self.delete_document(document.group(1),role)
+            return
+        return self.json({"error":"ไม่พบ API"},404)
     def ai_chat(self,form,role):
         try:
             result=ai_chat(form.get("model",""),form.get("prompt",""),form.get("max_tokens",512),form.get("temperature",0.2))

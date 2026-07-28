@@ -2,6 +2,11 @@
 
 ## 1.0.0 — 2026-07-28
 
+- Added additive provider document-policy schema and Thailand provider
+  references for Grab, Bolt, LINE MAN and Lalamove.
+- Added database-driven requirement APIs, secure owner document upload,
+  verification, deletion and history endpoints, plus the reusable upload UI.
+
 - Established MooPiew as a restaurant ordering and delivery platform with a
   customer storefront and owner operations console.
 - Added pickup/delivery orders, distance quotations, tracking codes and

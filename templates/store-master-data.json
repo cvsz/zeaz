@@ -1,37 +1,247 @@
 {
-  "business_profile": {
-    "legal_name": "",
-    "tax_id": "",
-    "address": "",
-    "branch": "สำนักงานใหญ่",
-    "vat_registered": false
+  "schema_version": "1.1",
+  "store_name": "หมูปิ้ววว",
+  "brand": {
+    "display_name": "MooPiew",
+    "tagline": "หมูปิ้งนุ่ม ๆ พร้อมรับตามเวลาที่คุณเลือก",
+    "primary_color": "#FF6B35",
+    "logo": "/assets/branding/logo/moopiew-logo.svg"
   },
+  "business_profile": {
+    "legal_name": "MooPiew",
+    "tax_id": "3102000769733",
+    "address": "39 แขวงดอกไม้ เขตประเวท กรุงเทพมหานคร",
+    "branch": "สำนักงานใหญ่",
+    "vat_registered": false,
+    "vat_rate": 7,
+    "contact_phone": "",
+    "contact_email": ""
+  },
+  "store_operations": {
+    "timezone": "Asia/Bangkok",
+    "currency": "THB",
+    "slot_capacity": 80,
+    "advance_days": 14,
+    "pickup_slots": [
+      "09:00–10:00",
+      "10:00–11:00",
+      "11:00–12:00",
+      "12:00–13:00"
+    ],
+    "order_cutoff_minutes": 30,
+    "auto_confirm_orders": false,
+    "accepting_orders": true
+  },
+  "menu": [
+    {
+      "id": "classic",
+      "name": "หมูปิ้ววว ต้นตำรับ",
+      "description": "หมูหมักนุ่ม ย่างหอมถ่าน",
+      "price": 10,
+      "unit": "ไม้",
+      "available": true,
+      "display_order": 1,
+      "category": "หมูปิ้ง"
+    },
+    {
+      "id": "spicy",
+      "name": "หมูปิ้ววว เผ็ดนัว",
+      "description": "รสจัดจ้าน กลมกล่อม",
+      "price": 10,
+      "unit": "ไม้",
+      "available": true,
+      "display_order": 2,
+      "category": "หมูปิ้ง"
+    },
+    {
+      "id": "sticky-rice",
+      "name": "ข้าวเหนียว",
+      "description": "ห่อละกำลังดี",
+      "price": 10,
+      "unit": "ห่อ",
+      "available": true,
+      "display_order": 3,
+      "category": "เครื่องเคียง"
+    },
+    {
+      "id": "milk-tender",
+      "name": "หมูปิ้ววว นมสุดดด",
+      "description": "หมูหมักนมเนื้อนุ่ม ย่างหอมถ่าน",
+      "price": 10,
+      "unit": "ไม้",
+      "available": true,
+      "display_order": 4,
+      "category": "หมูปิ้ง"
+    },
+    {
+      "id": "fatty",
+      "name": "หมูปิ้ววว ติดมันส์",
+      "description": "หมูติดมันย่างหอมถ่าน นุ่มฉ่ำ",
+      "price": 10,
+      "unit": "ไม้",
+      "available": true,
+      "display_order": 5,
+      "category": "หมูปิ้ง"
+    }
+  ],
   "delivery_zones": [
     {
-      "name": "",
-      "fee": 0,
-      "minimum_order": 0
+      "id": "bangkok",
+      "name": "กรุงเทพมหานคร",
+      "fee": 15,
+      "minimum_order": 0,
+      "active": true
     }
   ],
+  "delivery_pricing": {
+    "mode": "distance",
+    "formula": "ceil(base_fee + per_km_fee * distance_km)",
+    "base_fee": 15,
+    "per_km_fee": 9,
+    "maximum_km": 15,
+    "zero_km_fee": 15,
+    "provider_reference": "LINE MAN distance-based delivery pricing",
+    "store_latitude": 13.6690625,
+    "store_longitude": 100.6828125
+  },
   "riders": [
     {
-      "name": "",
-      "phone": ""
+      "id": "RDR-SEA",
+      "name": "Sea",
+      "phone": "0936537081",
+      "vehicle_type": "motorcycle",
+      "vehicle_plate": "",
+      "active": true,
+      "available": true
     }
   ],
+  "rider_registration": {
+    "enabled": true,
+    "endpoint": "/api/riders/register",
+    "required_fields": ["name", "phone", "vehicle_type", "vehicle_plate"],
+    "review_statuses": ["pending", "approved", "rejected"]
+  },
+  "merchant_registration": {
+    "enabled": true,
+    "endpoint": "/api/merchant-applications",
+    "review_statuses": ["pending", "approved", "rejected"],
+    "required_fields": ["business_name", "owner_name", "phone", "address", "category"]
+  },
   "inventory": [
     {
-      "name": "",
-      "unit": "kg",
+      "id": "pork",
+      "name": "หมูสด",
+      "unit": "กก.",
       "on_hand": 0,
-      "reorder_level": 0
+      "reorder_level": 5,
+      "active": true
+    },
+    {
+      "id": "milk-marinade",
+      "name": "นมหมักหมู",
+      "unit": "ลิตร",
+      "on_hand": 0,
+      "reorder_level": 2,
+      "active": true
+    },
+    {
+      "id": "spicy-marinade",
+      "name": "ซอสหมักเผ็ดนัว",
+      "unit": "ลิตร",
+      "on_hand": 0,
+      "reorder_level": 2,
+      "active": true
+    },
+    {
+      "id": "sticky-rice",
+      "name": "ข้าวเหนียวดิบ",
+      "unit": "กก.",
+      "on_hand": 0,
+      "reorder_level": 5,
+      "active": true
+    },
+    {
+      "id": "skewer",
+      "name": "ไม้เสียบ",
+      "unit": "ชิ้น",
+      "on_hand": 0,
+      "reorder_level": 100,
+      "active": true
+    },
+    {
+      "id": "charcoal",
+      "name": "ถ่านย่าง",
+      "unit": "กก.",
+      "on_hand": 0,
+      "reorder_level": 5,
+      "active": true
+    },
+    {
+      "id": "packaging",
+      "name": "บรรจุภัณฑ์",
+      "unit": "ชุด",
+      "on_hand": 0,
+      "reorder_level": 50,
+      "active": true
     }
   ],
   "recipes": [
     {
       "menu_item_id": "classic",
-      "inventory_name": "",
-      "quantity": 0
+      "inventory_name": "หมูสด",
+      "inventory_item_id": "pork",
+      "quantity": 0.05,
+      "unit": "กก."
+    },
+    {
+      "menu_item_id": "spicy",
+      "inventory_name": "หมูสด",
+      "inventory_item_id": "pork",
+      "quantity": 0.05,
+      "unit": "กก."
+    },
+    {
+      "menu_item_id": "spicy",
+      "inventory_name": "ซอสหมักเผ็ดนัว",
+      "inventory_item_id": "spicy-marinade",
+      "quantity": 0.01,
+      "unit": "ลิตร"
+    },
+    {
+      "menu_item_id": "sticky-rice",
+      "inventory_name": "ข้าวเหนียวดิบ",
+      "inventory_item_id": "sticky-rice",
+      "quantity": 0.08,
+      "unit": "กก."
+    },
+    {
+      "menu_item_id": "milk-tender",
+      "inventory_name": "หมูสด",
+      "inventory_item_id": "pork",
+      "quantity": 0.05,
+      "unit": "กก."
+    },
+    {
+      "menu_item_id": "milk-tender",
+      "inventory_name": "นมหมักหมู",
+      "inventory_item_id": "milk-marinade",
+      "quantity": 0.01,
+      "unit": "ลิตร"
+    },
+    {
+      "menu_item_id": "fatty",
+      "inventory_name": "หมูสด",
+      "inventory_item_id": "pork",
+      "quantity": 0.05,
+      "unit": "กก."
     }
-  ]
+  ],
+  "integrations": {
+    "delivery_provider": "lineman",
+    "payment_provider": "scb_maemanee",
+    "payment_confirmation": "transaction_inquiry",
+    "catalog_endpoint": "/api/menu",
+    "health_endpoint": "/api/health",
+    "ready_endpoint": "/api/ready"
+  }
 }

@@ -33,6 +33,23 @@ paths:
     post: {summary: Submit a rider application, responses: {'201': {description: Application received}}}
   /api/merchants/register:
     post: {summary: Submit a merchant application, responses: {'201': {description: Application received}}}
+  /api/providers:
+    get: {summary: List active document-policy providers, responses: {'200': {description: Providers}}}
+  /api/providers/{provider}:
+    get: {summary: Get provider services and metadata, parameters: [{name: provider, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Provider}}}
+  /api/providers/{provider}/requirements:
+    get: {summary: Get dynamic provider requirements, parameters: [{name: provider, in: path, required: true, schema: {type: string}}, {name: subject_type, in: query, schema: {type: string, enum: [rider, merchant]}}], responses: {'200': {description: Requirements}}}
+  /api/providers/{provider}/requirements/{subject}:
+    get: {summary: Get rider or merchant requirements, parameters: [{name: provider, in: path, required: true, schema: {type: string}}, {name: subject, in: path, required: true, schema: {type: string, enum: [rider, merchant]}}], responses: {'200': {description: Requirements}}}
+  /api/documents/upload:
+    post: {summary: Upload a validated document for an onboarding requirement, security: [{adminKey: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DocumentUploadRequest'}}}}, responses: {'201': {description: Uploaded}, '400': {description: Validation failure}}}
+  /api/documents/{documentId}:
+    patch: {summary: Verify or reject an uploaded document, security: [{adminKey: []}], parameters: [{name: documentId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Updated}}
+    delete: {summary: Soft-delete and remove an uploaded document, security: [{adminKey: []}], parameters: [{name: documentId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Deleted}}
+  /api/documents/status:
+    get: {summary: List document status for owner review, security: [{adminKey: []}], responses: {'200': {description: Document status}}}
+  /api/documents/history:
+    get: {summary: List immutable document verification history, security: [{adminKey: []}], responses: {'200': {description: Verification history}}}
   /api/payments/scb/config:
     get: {summary: Public SCB capability flags only; never returns credentials, responses: {'200': {description: Capability}}}
   /api/orders/{orderId}/payments/scb/qr:
@@ -47,6 +64,10 @@ paths:
     get: {summary: Owner audit log, security: [{adminKey: []}], responses: {'200': {description: Recent audit events}}}
   /api/admin/operations:
     get: {summary: Owner operational aggregate, security: [{adminKey: []}], responses: {'200': {description: Operations payload}}}
+  /api/admin/document-requirements:
+    get: {summary: List provider document policy versions, security: [{adminKey: []}], responses: {'200': {description: Requirements}}}
+  /api/admin/document-requirements/{requirementId}:
+    patch: {summary: Version and update requirement ordering/status, security: [{adminKey: []}], parameters: [{name: requirementId, in: path, required: true, schema: {type: string}}], responses: {'201': {description: New version}}}
   /api/admin/menu:
     get: {summary: Owner menu management data, security: [{adminKey: []}], responses: {'200': {description: Menu data}}}
     post: {summary: Create menu item, security: [{adminKey: []}], responses: {'201': {description: Created}}}
@@ -136,3 +157,14 @@ components:
         fulfillment_type: {type: string, enum: [pickup, delivery]}
         payment_method: {type: string, enum: [cash, transfer, scb_qr]}
         items: {type: array, minItems: 1}
+    DocumentUploadRequest:
+      type: object
+      required: [provider, subject_type, subject_id, requirement_id, filename, mime_type, content_base64]
+      properties:
+        provider: {type: string}
+        subject_type: {type: string, enum: [rider, merchant]}
+        subject_id: {type: string}
+        requirement_id: {type: string}
+        filename: {type: string}
+        mime_type: {type: string, enum: [image/jpeg, image/png, image/webp, application/pdf]}
+        content_base64: {type: string, format: byte, description: Base64 file body; max 10 MiB decoded}
