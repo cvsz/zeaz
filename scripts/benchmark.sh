@@ -15,7 +15,12 @@ PY
 )"
 DATA_DIR="$TMP_DIR/data" DATABASE_PATH="$TMP_DIR/data/moopiew.sqlite3" PORT="$PORT" HOST=127.0.0.1 \
   "$ROOT/.venv/bin/python" "$ROOT/app.py" >"$TMP_DIR/server.log" 2>&1 & PID=$!
-for _ in {1..30}; do curl -fsS --max-time 1 "http://127.0.0.1:$PORT/api/health" >/dev/null && break; sleep .1; done
+ready=false
+for _ in {1..30}; do
+  if curl -fsS --max-time 1 "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then ready=true; break; fi
+  sleep .1
+done
+$ready || { echo "Benchmark server did not become ready." >&2; exit 1; }
 times="$TMP_DIR/times"
 for _ in $(seq 1 20); do curl -sS -o /dev/null -w '%{time_total}\n' "http://127.0.0.1:$PORT/api/health"; done | sort -n >"$times"
 python3 - "$times" <<'PY'
