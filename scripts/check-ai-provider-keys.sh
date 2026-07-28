@@ -41,7 +41,7 @@ const probes = [
   ["zai", "ZAI_API_KEY", "https://api.z.ai/api/paas/v4/models", (key) => ({authorization: `Bearer ${key}`})],
 ];
 const request = (url, headers) => new Promise((resolve) => {
-  const req = https.request(url, {method: "GET", headers: {accept: "application/json", ...headers}, timeout: 15000}, (res) => {
+  const req = https.request(url, {method: "GET", headers: {accept: "application/json", "user-agent": "MooPiew-ZEAZ/1.0", ...headers}, timeout: 15000}, (res) => {
     let size = 0, body = "";
     res.on("data", (chunk) => { if (size < 1_000_000) { body += chunk; size += chunk.length; } });
     res.on("end", () => {
