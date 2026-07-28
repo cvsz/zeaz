@@ -39,7 +39,7 @@ EMPLOYEE_KEY = os.environ.get("EMPLOYEE_KEY", "change-me-employee-key")
 KITCHEN_KEY = os.environ.get("KITCHEN_KEY", "change-me-kitchen-key")
 STORE_LOCK, RATE_LOCK = Lock(), Lock()
 RATE_BUCKETS: dict[tuple[str, str], list[float]] = {}
-RATE_WINDOW_SECONDS, RATE_LIMITS = 60, {"order": 12, "lookup": 20, "rider": 8, "admin": 60, "staff": 90}
+RATE_WINDOW_SECONDS, RATE_LIMITS = 60, {"public": 120, "order": 12, "lookup": 20, "quote": 30, "rider": 8, "webhook": 60, "admin": 60, "staff": 90}
 STATUS = ("new", "confirmed", "ready", "completed", "cancelled")
 PAYMENT_STATUSES, PAYMENT_METHODS = ("pending", "paid", "refunded"), ("cash", "transfer", "scb_qr")
 AUTO_CONFIRM_ORDERS = os.environ.get("AUTO_CONFIRM_ORDERS", "false").lower() == "true"
@@ -825,7 +825,9 @@ class Handler(SimpleHTTPRequestHandler):
         tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]+)/events",path)
         if tracking:return self.stream_tracking(tracking.group(1))
         tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]+)",path)
-        if tracking:return self.tracking_snapshot(tracking.group(1))
+        if tracking:
+            if not self.rate("lookup"): return self.json({"error":"คำขอมากเกินไป"},429)
+            return self.tracking_snapshot(tracking.group(1))
         if path == "/api/admin/scb/auth/start":
             if not self.require("admin"): return
             try: return self.json({"authorization_url":scb_authorize()})
@@ -842,6 +844,7 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/status":
                 return self.json({"status":"operational","service":"moopiew","time":utcnow(),"database":"ok","api_version":"1.1","endpoints":{"health":"/api/health","ready":"/api/ready","menu":"/api/menu"}})
             if path=="/api/menu":
+                if not self.rate("public"): return self.json({"error":"คำขอมากเกินไป"},429)
                 day=query.get("date",[date.today().isoformat()])[0]
                 if not valid_pickup(day,conf): return self.json({"error":"วันรับสินค้าไม่พร้อมให้บริการ"},400)
                 available_items=[item for item in conf["menu"] if item["available"]]
@@ -914,12 +917,15 @@ class Handler(SimpleHTTPRequestHandler):
                 if not self.rate("rider"):return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.register_merchant(form)
             if path=="/api/delivery/quote":
+                if not self.rate("quote"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.delivery_quote(form)
             qr=re.fullmatch(r"/api/orders/(MPP-[A-Z0-9-]+)/payments/scb/qr",path)
             if qr:
                 if not self.rate("order"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.create_scb_qr(qr.group(1),form)
-            if path=="/api/scb/payment/confirm": return self.scb_payment_callback(form, getattr(self,"raw_body",b""))
+            if path=="/api/scb/payment/confirm":
+                if not self.rate("webhook"): return self.json({"error":"คำขอมากเกินไป"},429)
+                return self.scb_payment_callback(form, getattr(self,"raw_body",b""))
             if path=="/api/order-lookup":
                 if not self.rate("lookup"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.lookup_order(form)

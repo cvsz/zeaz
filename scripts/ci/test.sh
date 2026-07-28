@@ -7,6 +7,7 @@ ROOT="$ROOT" python3 - <<'PY'
 import os
 import sys
 from http.server import BaseHTTPRequestHandler
+from email.message import Message
 
 sys.path.insert(0, os.environ["ROOT"])
 from app import Handler
@@ -27,7 +28,16 @@ def csp_for(nonce: str) -> str:
 
 assert "'nonce-test-nonce'" in csp_for("test-nonce")
 assert "'nonce-" not in csp_for("")
-print("CSP nonce regression checks passed.")
+
+rate_handler = Handler.__new__(Handler)
+rate_handler.client_address = ("198.51.100.7", 0)
+rate_handler.headers = Message()
+for _ in range(120):
+    assert rate_handler.rate("public")
+assert not rate_handler.rate("public")
+from app import RATE_BUCKETS
+RATE_BUCKETS.clear()
+print("CSP nonce and rate-limit regression checks passed.")
 PY
 node --check "$ROOT/web/app.js"
 node --check "$ROOT/web/admin.js"
