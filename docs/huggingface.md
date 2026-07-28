@@ -24,8 +24,13 @@ workloads need a separate reviewed integration.
    permission.
 2. Copy `.env.ai.example` to an ignored local file such as `.env.ai`, add only
    the provider keys approved for use, and load it into the service environment.
-3. Run `./scripts/ai-preflight.sh`; use `./scripts/huggingface-preflight.sh`
-   only when enabling Hugging Face chat inference. Restart the service, open
+3. When the approved credentials are in
+   `/home/cvsz/zeaz-provider/.env.provider`, run
+   `./scripts/sync-ai-credentials.sh` to copy only the supported AI keys into
+   ignored `.env.ai` without printing them. Run `./scripts/ai-preflight.sh` to
+   inspect the usable catalog, or add `--strict` to fail when any configured
+   provider is unavailable. Use `./scripts/huggingface-preflight.sh` only when
+   enabling Hugging Face chat inference. Restart the service, open
    `/ai.html`, enter the owner key and load the
    catalog.
 
@@ -39,10 +44,14 @@ provider’s live models endpoint, so an unavailable provider/model is omitted.
 Z.AI is prepared at `https://api.z.ai/api/paas/v4`; it appears only after a
 dedicated `zai` API key is configured.
 
-OpenCode Zen and OpenRouter are filtered to models whose catalog metadata
-declares zero input/output pricing. A provider’s free tier, rate limit and
-regional availability can still change, so the page reports live provider
-availability rather than promising permanent free inference.
+OpenRouter is filtered to models whose catalog metadata declares zero
+input/output pricing. OpenCode is treated the same only if its catalog supplies
+zero-price metadata; OpenCode Zen itself can require billing and credits.
+Gemini and NVIDIA NIM expose live model catalogs but do not expose universal
+per-model free-price metadata through the endpoint, so they are shown as
+available models—not incorrectly labelled as free. A provider’s free tier,
+rate limit and regional availability can still change, so the page reports
+live provider availability rather than promising permanent free inference.
 
 ## Privacy and control
 
