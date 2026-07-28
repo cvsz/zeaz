@@ -89,6 +89,11 @@ cancelled_lookup="$(curl --silent --fail --max-time 3 --request POST "$BASE_URL/
   --header 'Content-Type: application/json' \
   --data "{\"order_id\":\"$order_id\",\"phone\":\"0812345678\"}")"
 printf '%s' "$cancelled_lookup" | "$PYTHON" -c 'import json,sys; assert json.load(sys.stdin)["order"]["status"] == "cancelled"'
+cancelled_receipt="$(curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/admin/orders/$order_id/receipt" \
+  --header 'Content-Type: application/json' \
+  --header "X-Admin-Key-B64: $admin_header" \
+  --data '{}')"
+printf '%s' "$cancelled_receipt" | "$PYTHON" -c 'import json,sys; assert json.load(sys.stdin)["receipt"]["id"] == sys.argv[1]' "$receipt_id"
 
 paid_order="$(curl --silent --fail --max-time 3 --request POST "$BASE_URL/api/orders" \
   --header 'Content-Type: application/json' \
