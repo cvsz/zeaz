@@ -21,8 +21,8 @@ Cloudflare Tunnel ส่งเข้า Caddy ที่ `127.0.0.1:8080` ก่�
 
 ## Operations
 
-- `.env.production` และ `.env.cloudflare` ต้องเป็น `0600` และไม่อยู่ใน Git
+- `.env.production`, `.env.cloudflare` และ `.env.ai` ต้องเป็น `0600` และไม่อยู่ใน Git
 - user services เปิด `Restart=always`, `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem` และ `UMask=0077`
 - ตรวจสถานะด้วย `./scripts/production-check.sh` หลังเปลี่ยน config หรือ restart service
 - เก็บ Cloudflare API/tunnel token ใน secret store และหมุน token เมื่อสงสัยว่าถูกเปิดเผย
-- ห้าม commit `.env.payment`, QR image, SCB token, certificate, private key, backup หรือไฟล์ master data ที่กรอกจริง
+- ห้าม commit `.env.payment`, `.env.ai`, QR image, SCB/Hugging Face token, certificate, private key, backup หรือไฟล์ master data ที่กรอกจริง

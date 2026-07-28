@@ -21,6 +21,8 @@ Live service: [moopiew.zeaz.dev](https://moopiew.zeaz.dev/) · API menu:
   applications, riders, orders, receipts and tax invoices.
 - Private SQLite data with audit history, backups, Cloudflare Tunnel deployment
   and operational health checks.
+- Optional owner-only Hugging Face AI console that discovers the live Router
+  catalog without exposing `HF_TOKEN`; see [the AI guide](docs/huggingface.md).
 
 SCB payment support is intentionally disabled until approved credentials,
 certificate material and successful Sandbox verification are configured. See
@@ -34,7 +36,7 @@ ADMIN_KEY='replace-with-a-strong-local-key' ./scripts/start.sh
 
 Open `http://127.0.0.1:8000/` for customers and
 `http://127.0.0.1:8000/ops.html` for the owner console. Production values live
-only in ignored `.env.production` / `.env.payment` files.
+only in ignored `.env.production` / `.env.payment` / `.env.ai` files.
 
 ## Main routes
 
@@ -44,6 +46,7 @@ only in ignored `.env.production` / `.env.payment` files.
 | Owner operations | `/ops.html` |
 | Rider registration | `/rider-register.html` |
 | Merchant registration | `/merchant-register.html` |
+| Owner AI console | `/ai.html` |
 | Delivery tracking | `/api/tracking/{trackingCode}` |
 | OpenAPI reference | `docs/openapi.yaml` |
 

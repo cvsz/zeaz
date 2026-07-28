@@ -48,6 +48,10 @@ SCB_ENABLED = os.environ.get("SCB_ENABLED", "false").lower() == "true"
 SCB_TOKEN_CACHE: dict[str, object] = {}
 SCB_SERVICE_TOKEN_CACHE: dict[str, object] = {}
 SCB_TOKEN_LOCK = Lock()
+HF_MODEL_CACHE: dict[str, object] = {"models": [], "expires": 0.0}
+HF_MODEL_LOCK = Lock()
+HF_ROUTER_DEFAULT = "https://router.huggingface.co/v1"
+HF_MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.:-]*")
 DEFAULT_SETTINGS = {
     "store_name": "หมูปิ้ววว", "slot_capacity": 80, "advance_days": 14,
     "pickup_slots": ["09:00–10:00", "10:00–11:00", "11:00–12:00", "12:00–13:00"],
@@ -166,6 +170,73 @@ def active_payment(con, order_id: str) -> dict | None:
     return dict(row) if row else None
 
 def env(name: str, default="") -> str: return os.environ.get(name, default).strip()
+
+def hf_enabled() -> bool:
+    return env("HF_ENABLED", "false").lower() == "true" and bool(env("HF_TOKEN"))
+
+def hf_router_base() -> str:
+    """Return the fixed Hugging Face router base; never use this as a user URL."""
+    base=env("HF_ROUTER_BASE_URL", HF_ROUTER_DEFAULT).rstrip("/")
+    parsed=urlparse(base)
+    if parsed.scheme != "https" or parsed.hostname != "router.huggingface.co" or parsed.path != "/v1":
+        raise ValueError("HF_ROUTER_BASE_URL ต้องเป็น https://router.huggingface.co/v1")
+    return base
+
+def hf_public_config() -> dict:
+    return {"enabled":hf_enabled(),"provider":"huggingface","catalog":"router","chat_only":True,"token_configured":bool(env("HF_TOKEN"))}
+
+def hf_request(path: str, payload: dict | None = None) -> dict:
+    """Call the official HF Router with a server-only token and bounded body."""
+    if not hf_enabled(): raise ValueError("Hugging Face AI ยังไม่เปิดใช้ หรือยังไม่ได้ตั้งค่า HF_TOKEN")
+    token=env("HF_TOKEN")
+    headers={"Authorization":f"Bearer {token}","Accept":"application/json"}
+    data=None
+    if payload is not None:
+        headers["Content-Type"]="application/json"; data=json.dumps(payload,ensure_ascii=False).encode()
+    try:
+        with urlopen(Request(f"{hf_router_base()}{path}",data=data,headers=headers,method="POST" if payload is not None else "GET"),timeout=30) as response:
+            raw=response.read(2_000_000)
+    except HTTPError as error:
+        # Provider messages can contain account or policy details; keep them out
+        # of browser responses while retaining the status for the operator.
+        raise ValueError(f"Hugging Face Router ปฏิเสธคำขอ ({error.code})") from error
+    except (URLError,OSError) as error:
+        raise ValueError("ไม่สามารถเชื่อมต่อ Hugging Face Router ได้") from error
+    try: result=json.loads(raw.decode())
+    except (UnicodeDecodeError,json.JSONDecodeError) as error: raise ValueError("Hugging Face Router ตอบกลับไม่ใช่ JSON") from error
+    if not isinstance(result,dict): raise ValueError("Hugging Face Router ตอบกลับไม่ถูกต้อง")
+    return result
+
+def hf_models() -> list[dict]:
+    """Discover every chat model currently exposed to this token by the router."""
+    now=time.monotonic()
+    with HF_MODEL_LOCK:
+        cached=HF_MODEL_CACHE.get("models",[])
+        if isinstance(cached,list) and float(HF_MODEL_CACHE.get("expires",0)) > now: return cached
+        data=hf_request("/models")
+        rows=data.get("data",[])
+        if not isinstance(rows,list): raise ValueError("Hugging Face Router ไม่ส่งรายการโมเดล")
+        models=[]
+        for row in rows:
+            if not isinstance(row,dict) or not isinstance(row.get("id"),str) or not HF_MODEL_ID.fullmatch(row["id"]): continue
+            models.append({key:row[key] for key in ("id","object","owned_by","created") if key in row})
+        models.sort(key=lambda item:item["id"].casefold())
+        HF_MODEL_CACHE.update(models=models,expires=now+max(30,min(3600,int(env("HF_MODEL_CATALOG_TTL", "300") or 300))))
+        return models
+
+def hf_chat(model: str, prompt: str, max_tokens=512, temperature=0.2) -> dict:
+    if not isinstance(model,str) or not HF_MODEL_ID.fullmatch(model): raise ValueError("ชื่อ Hugging Face model ไม่ถูกต้อง")
+    if not isinstance(prompt,str) or not prompt.strip() or len(prompt)>12_000: raise ValueError("ข้อความ AI ต้องมี 1–12,000 ตัวอักษร")
+    try: tokens=max(1,min(2048,int(max_tokens))); temp=max(0,min(2,float(temperature)))
+    except (TypeError,ValueError) as error: raise ValueError("พารามิเตอร์ AI ไม่ถูกต้อง") from error
+    available={item["id"] for item in hf_models()}
+    if model not in available: raise ValueError("โมเดลนี้ไม่อยู่ใน Hugging Face Router catalog สำหรับ token นี้")
+    response=hf_request("/chat/completions",{"model":model,"messages":[{"role":"system","content":"You are MooPiew's operator assistant. Do not request or reveal secrets, payment credentials, or customer personal data. Answer concisely in the language used by the operator."},{"role":"user","content":prompt.strip()}],"max_tokens":tokens,"temperature":temp})
+    choices=response.get("choices",[])
+    message=choices[0].get("message",{}) if isinstance(choices,list) and choices and isinstance(choices[0],dict) else {}
+    content=message.get("content") if isinstance(message,dict) else None
+    if not isinstance(content,str): raise ValueError("Hugging Face model ไม่ได้ส่งข้อความตอบกลับ")
+    return {"model":model,"content":content,"usage":response.get("usage",{}) if isinstance(response.get("usage",{}),dict) else {}}
 def scb_feature_enabled(feature: str, default="false") -> bool:
     products={item.strip() for item in env("SCB_ENABLED_PRODUCTS", "maemanee_qr").split(",") if item.strip()}
     return feature in products and env(f"SCB_{feature.upper()}_ENABLED",default).lower()=="true"
@@ -472,6 +543,13 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/health":
             return self.json({"status": "ok", "service": "moopiew", "time": utcnow()})
         if path == "/api/payments/scb/config": return self.json(scb_config_public())
+        if path == "/api/admin/ai/config":
+            if not self.require("admin"): return
+            return self.json(hf_public_config())
+        if path == "/api/admin/ai/models":
+            if not self.require("admin"): return
+            try: return self.json({"models":hf_models(),"catalog":"huggingface-router","cached_seconds":max(0,int(float(HF_MODEL_CACHE.get("expires",0))-time.monotonic()))})
+            except ValueError as error: return self.json({"error":str(error)},503)
         tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]+)/events",path)
         if tracking:return self.stream_tracking(tracking.group(1))
         tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]+)",path)
@@ -573,6 +651,9 @@ class Handler(SimpleHTTPRequestHandler):
             if path=="/api/order-lookup":
                 if not self.rate("lookup"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.lookup_order(form)
+            if path=="/api/admin/ai/chat":
+                role=self.require("admin")
+                if role: return self.huggingface_chat(form,role)
             if path=="/api/admin/menu":
                 role=self.require("admin")
                 if role: return self.create_menu_item(form,role)
@@ -644,6 +725,16 @@ class Handler(SimpleHTTPRequestHandler):
             if path=="/api/admin/settings":return self.update_settings(form,role)
         except ValueError as error:return self.json({"error":str(error)},400)
         self.json({"error":"ไม่พบ API"},404)
+    def huggingface_chat(self,form,role):
+        try:
+            result=hf_chat(form.get("model",""),form.get("prompt",""),form.get("max_tokens",512),form.get("temperature",0.2))
+        except ValueError as error:
+            return self.json({"error":str(error)},400)
+        # Never persist a prompt or model output: both can contain operational or
+        # customer data. Audit only the model and response size.
+        with db() as con:
+            audit(con,role,"huggingface_chat","ai",result["model"],{"response_characters":len(result["content"])})
+        return self.json(result)
     def admin_dashboard(self,con,conf):
         orders=all_orders(con); recent=[dict(row) for row in con.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 10")]
         payments=[payment_public(dict(row)) for row in con.execute("SELECT * FROM payment_attempts WHERE provider LIKE 'scb_%' ORDER BY created_at DESC LIMIT 50")]

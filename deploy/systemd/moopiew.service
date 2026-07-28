@@ -8,6 +8,7 @@ Type=simple
 WorkingDirectory=/home/cvsz/zeaz
 EnvironmentFile=/home/cvsz/zeaz/.env.production
 EnvironmentFile=-/home/cvsz/zeaz/.env.payment
+EnvironmentFile=-/home/cvsz/zeaz/.env.ai
 ExecStart=/usr/bin/python3 /home/cvsz/zeaz/app.py
 Restart=always
 RestartSec=5

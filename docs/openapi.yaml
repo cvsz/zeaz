@@ -38,6 +38,12 @@ paths:
     post: {summary: SCB callback trigger; server verifies provider inquiry before settlement, responses: {'200': {description: Verified state}, '401': {description: Invalid signature}}}
   /api/admin/operations:
     get: {summary: Owner operational aggregate, security: [{adminKey: []}], responses: {'200': {description: Operations payload}}}
+  /api/admin/ai/config:
+    get: {summary: Owner-only Hugging Face feature status without token data, security: [{adminKey: []}], responses: {'200': {description: AI capability flags}}}
+  /api/admin/ai/models:
+    get: {summary: Discover chat models currently available to the configured Hugging Face Router token, security: [{adminKey: []}], responses: {'200': {description: Live model catalog}, '503': {description: AI disabled or Router unavailable}}}
+  /api/admin/ai/chat:
+    post: {summary: Run an owner-only chat prompt against a model from the live Hugging Face catalog; prompts and output are not persisted, security: [{adminKey: []}], responses: {'200': {description: Model response}, '400': {description: Invalid model, prompt or provider response}}}
   /api/admin/menu:
     get: {summary: Owner menu management data, security: [{adminKey: []}], responses: {'200': {description: Menu data}}}
     post: {summary: Create menu item, security: [{adminKey: []}], responses: {'201': {description: Created}}}
