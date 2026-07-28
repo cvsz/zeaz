@@ -6,21 +6,65 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   archive:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install validation dependencies
+        run: |
+          python3 -m pip install --requirement requirements.txt
+          npm ci
+      - name: Validate release source
+        run: |
+          npm run lint
+          npm run typecheck
+          npm run build
+          python3 scripts/ci/evidence.py security
+          python3 scripts/ci/evidence.py coverage
+          SKIP_PYTHON_TESTS=true ./scripts/ci/test.sh
+          ./scripts/ci/smoke-api.sh
+          docker build --build-arg VCS_REF="${GITHUB_SHA}" -t zeaz/moopiew:release .
+          docker build --build-arg VCS_REF="${GITHUB_SHA}" -f dashboard/Dockerfile -t zeaz/dashboard:release .
+          docker image inspect --format '{{.Id}}' zeaz/moopiew:release zeaz/dashboard:release > /tmp/zeaz-image-ids
+          python3 scripts/ci/evidence.py performance
+          python3 scripts/ci/evidence.py infrastructure
       - name: Create source archive
-        run: git archive --format=zip --output moopiew-${{ github.ref_name }}.zip HEAD
-      - uses: actions/upload-artifact@v4
+        run: |
+          git archive --format=zip --output moopiew-${{ github.ref_name }}.zip HEAD
+          sha256sum moopiew-${{ github.ref_name }}.zip > moopiew-${{ github.ref_name }}.zip.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: moopiew-source
-          path: moopiew-*.zip
+          path: |
+            moopiew-*.zip
+            moopiew-*.zip.sha256
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: moopiew-source
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" "moopiew-${{ github.ref_name }}.zip" --generate-notes --verify-tag
+        run: gh release create "${{ github.ref_name }}" moopiew-* --generate-notes --verify-tag

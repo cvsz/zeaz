@@ -7,6 +7,28 @@ CF_ENV="$ROOT/.env.cloudflare"
 
 [[ -f "$APP_ENV" ]] || { echo "Missing $APP_ENV" >&2; exit 1; }
 [[ -f "$CF_ENV" ]] || { echo "Missing $CF_ENV" >&2; exit 1; }
+check_secret_file() {
+  local path="$1" mode owner
+  [[ ! -L "$path" && -f "$path" ]] || {
+    echo "Secret configuration must be a regular, non-symlink file: $path" >&2
+    exit 1
+  }
+  mode="$(stat -c '%a' "$path")"
+  owner="$(stat -c '%u' "$path")"
+  [[ "$owner" == "$(id -u)" ]] || {
+    echo "Secret configuration must be owned by uid $(id -u): $path" >&2
+    exit 1
+  }
+  (( (8#$mode & 8#077) == 0 )) || {
+    echo "Secret configuration must not be group/world accessible: $path ($mode)" >&2
+    exit 1
+  }
+}
+check_secret_file "$APP_ENV"
+check_secret_file "$CF_ENV"
+for optional in "$ROOT/.env.payment" "$ROOT/.env.ai"; do
+  [[ ! -e "$optional" ]] || check_secret_file "$optional"
+done
 set -a
 # shellcheck disable=SC1090
 source "$APP_ENV"
@@ -38,9 +60,15 @@ check_url "http://127.0.0.1:${PORT:-8000}/api/menu" || {
   echo "Local app health check failed; start moopiew.service first" >&2; exit 1;
 }
 check_url "http://127.0.0.1:8080/api/menu" || {
-  echo "Local proxy health check failed; start moopiew-proxy.service first" >&2; exit 1;
+  echo "Local proxy health check failed; start moopiew-proxy-system@$USER.service" >&2; exit 1;
+}
+check_url "http://127.0.0.1:8082/api/health" || {
+  echo "Local engineering dashboard failed; start moopiew-dashboard.service" >&2; exit 1;
 }
 check_url "https://${MOOPIEW_HOSTNAME:-moopiew.zeaz.dev}/api/menu" || {
   echo "Public tunnel health check failed" >&2; exit 1;
+}
+check_url "https://${PIEWDASH_HOSTNAME:-piewdash.zeaz.dev}/api/health" || {
+  echo "Public engineering dashboard failed" >&2; exit 1;
 }
 echo "Production checks passed."

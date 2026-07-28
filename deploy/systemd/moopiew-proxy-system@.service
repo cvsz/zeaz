@@ -1,0 +1,35 @@
+[Unit]
+Description=MooPiew loopback Caddy reverse proxy for %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=/home/%i/zeaz
+Environment=HOME=/home/%i
+ExecStart=/usr/bin/caddy run --environ --config /home/%i/zeaz/deploy/caddy/Caddyfile --adapter caddyfile
+ExecReload=/usr/bin/caddy reload --config /home/%i/zeaz/deploy/caddy/Caddyfile --adapter caddyfile
+Restart=always
+RestartSec=5
+UMask=0077
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/home/%i/.config/caddy /home/%i/.local/share/caddy
+
+[Install]
+WantedBy=multi-user.target

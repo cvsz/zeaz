@@ -5,18 +5,18 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/cvsz/zeaz
-EnvironmentFile=/home/cvsz/zeaz/.env.production
-EnvironmentFile=-/home/cvsz/zeaz/.env.payment
-EnvironmentFile=-/home/cvsz/zeaz/.env.ai
-ExecStart=/home/cvsz/zeaz/.venv/bin/python /home/cvsz/zeaz/app.py
+WorkingDirectory=%h/zeaz
+EnvironmentFile=%h/zeaz/.env.production
+EnvironmentFile=-%h/zeaz/.env.payment
+EnvironmentFile=-%h/zeaz/.env.ai
+ExecStart=%h/zeaz/.venv/bin/python %h/zeaz/app.py
 Restart=always
 RestartSec=5
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=/home/cvsz/zeaz/data
+ReadWritePaths=%h/zeaz/data
 
 [Install]
 WantedBy=default.target

@@ -67,6 +67,7 @@ class DocumentApiTests(unittest.TestCase):
                 "mime_type": "application/pdf", "content_base64": base64.b64encode(b"not a pdf").decode(),
             })
         self.assertEqual(error.exception.code, 400)
+        error.exception.close()
 
     def test_frontend_document_renderer_contract(self):
         with urlopen(self.base + "/documents.html", timeout=3) as response:

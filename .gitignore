@@ -1,5 +1,9 @@
 output/*
 !output/.gitkeep
+dashboard/data/*.json
+.codex-namespace-backups/
+*.bak
+/qr.jpg
 data/orders.json
 data/settings.json
 data/*.sqlite3

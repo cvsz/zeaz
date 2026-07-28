@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ZEAZ Engineering Health</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<main>
+  <header class="masthead">
+    <div><p class="eyebrow">SINGLE SOURCE OF TRUTH / LIVE EVIDENCE</p><h1>Engineering Health</h1></div>
+    <div class="live" id="connection" role="status">CONNECTING</div>
+  </header>
+  <div class="meta"><span id="branch">Loading revision...</span><span id="working-tree"></span><span>Updated <time id="updated">--:--</time></span></div>
+  <section class="scores" id="scores" aria-label="Engineering scores"></section>
+  <div class="grid">
+    <section><h2>Repository Controls</h2><ul class="checks" id="checks"></ul></section>
+    <section><h2>Published Evidence</h2><div class="reports" id="reports"></div></section>
+  </div>
+  <section><h2>Latest Commits</h2><ul class="commits" id="commits"></ul></section>
+</main>
+<script src="/assets/app.js"></script>
+</body>
+</html>

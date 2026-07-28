@@ -30,6 +30,8 @@ from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
+from migrations.runner import apply_migrations
+
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
 DATA = Path(os.environ.get("DATA_DIR", ROOT / "data"))
@@ -37,6 +39,9 @@ DB_PATH = Path(os.environ.get("DATABASE_PATH", DATA / "moopiew.sqlite3"))
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "change-me-before-production")
 EMPLOYEE_KEY = os.environ.get("EMPLOYEE_KEY", "change-me-employee-key")
 KITCHEN_KEY = os.environ.get("KITCHEN_KEY", "change-me-kitchen-key")
+TRUST_CF_CONNECTING_IP = (
+    os.environ.get("TRUST_CF_CONNECTING_IP", "false").lower() == "true"
+)
 STORE_LOCK, RATE_LOCK = Lock(), Lock()
 RATE_BUCKETS: dict[tuple[str, str], list[float]] = {}
 RATE_WINDOW_SECONDS, RATE_LIMITS = 60, {"public": 120, "order": 12, "lookup": 20, "quote": 30, "rider": 8, "webhook": 60, "admin": 60, "staff": 90}
@@ -115,68 +120,8 @@ def db():
 
 def initialise_database() -> None:
     with db() as con:
-        con.executescript("""
-        PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
-        CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS menu_items (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', price INTEGER NOT NULL CHECK(price >= 0), available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS menu_display_order (menu_item_id TEXT PRIMARY KEY REFERENCES menu_items(id) ON DELETE CASCADE, position INTEGER NOT NULL CHECK(position >= 0));
-        CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, created_at TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('new','confirmed','ready','completed','cancelled')), customer_name TEXT NOT NULL, customer_phone TEXT NOT NULL, pickup_date TEXT NOT NULL, pickup_slot TEXT NOT NULL, total INTEGER NOT NULL, notes TEXT NOT NULL DEFAULT '', payment_method TEXT NOT NULL, payment_status TEXT NOT NULL DEFAULT 'pending');
-        CREATE TABLE IF NOT EXISTS order_items (id INTEGER PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, menu_item_id TEXT NOT NULL, name TEXT NOT NULL, quantity INTEGER NOT NULL CHECK(quantity > 0), unit_price INTEGER NOT NULL CHECK(unit_price >= 0));
-        CREATE TABLE IF NOT EXISTS order_history (id INTEGER PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, at TEXT NOT NULL, status TEXT NOT NULL, actor_role TEXT NOT NULL, note TEXT NOT NULL DEFAULT '');
-        CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY, at TEXT NOT NULL, actor_role TEXT NOT NULL, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, details TEXT NOT NULL DEFAULT '{}');
-        CREATE TABLE IF NOT EXISTS payment_attempts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, provider TEXT NOT NULL, provider_reference TEXT NOT NULL UNIQUE, provider_order_id TEXT UNIQUE, amount INTEGER NOT NULL CHECK(amount >= 0), status TEXT NOT NULL CHECK(status IN ('created','pending','paid','failed','expired','cancelled','refunded')), qr_image TEXT NOT NULL DEFAULT '', qr_type TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, confirmed_at TEXT NOT NULL DEFAULT '', provider_response TEXT NOT NULL DEFAULT '{}');
-        CREATE TABLE IF NOT EXISTS oauth_tokens (subject TEXT PRIMARY KEY, access_cipher TEXT NOT NULL, refresh_cipher TEXT NOT NULL DEFAULT '', owner_cipher TEXT NOT NULL, access_expires_at TEXT NOT NULL, refresh_expires_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS oauth_states (state TEXT PRIMARY KEY, expires_at TEXT NOT NULL, used_at TEXT NOT NULL DEFAULT '');
-        CREATE TABLE IF NOT EXISTS delivery_zones (id TEXT PRIMARY KEY, name TEXT NOT NULL, fee INTEGER NOT NULL CHECK(fee >= 0), minimum_order INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS riders (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS rider_applications (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL, vehicle_type TEXT NOT NULL, vehicle_plate TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')) DEFAULT 'pending', rider_id TEXT REFERENCES riders(id), created_at TEXT NOT NULL, reviewed_at TEXT NOT NULL DEFAULT '', reviewed_by TEXT NOT NULL DEFAULT '');
-        CREATE TABLE IF NOT EXISTS merchant_applications (id TEXT PRIMARY KEY, business_name TEXT NOT NULL, owner_name TEXT NOT NULL, phone TEXT NOT NULL, email TEXT NOT NULL DEFAULT '', address TEXT NOT NULL, category TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')) DEFAULT 'pending', created_at TEXT NOT NULL, reviewed_at TEXT NOT NULL DEFAULT '', reviewed_by TEXT NOT NULL DEFAULT '');
-        CREATE TABLE IF NOT EXISTS deliveries (order_id TEXT PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE, zone_id TEXT NOT NULL REFERENCES delivery_zones(id), recipient_name TEXT NOT NULL, recipient_phone TEXT NOT NULL, address TEXT NOT NULL, landmark TEXT NOT NULL DEFAULT '', rider_id TEXT REFERENCES riders(id), status TEXT NOT NULL CHECK(status IN ('queued','assigned','picked_up','on_the_way','delivered','failed','cancelled')) DEFAULT 'queued', tracking_code TEXT NOT NULL UNIQUE, assigned_at TEXT NOT NULL DEFAULT '', picked_up_at TEXT NOT NULL DEFAULT '', delivered_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS order_financials (order_id TEXT PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE, subtotal INTEGER NOT NULL, delivery_fee INTEGER NOT NULL DEFAULT 0, discount INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL, coupon_code TEXT NOT NULL DEFAULT '', points_earned INTEGER NOT NULL DEFAULT 0, points_redeemed INTEGER NOT NULL DEFAULT 0);
-        CREATE TABLE IF NOT EXISTS inventory_items (id TEXT PRIMARY KEY, name TEXT NOT NULL, unit TEXT NOT NULL, on_hand REAL NOT NULL DEFAULT 0, reorder_level REAL NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS menu_recipes (menu_item_id TEXT NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE, inventory_item_id TEXT NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE, quantity REAL NOT NULL CHECK(quantity > 0), PRIMARY KEY(menu_item_id,inventory_item_id));
-        CREATE TABLE IF NOT EXISTS inventory_movements (id TEXT PRIMARY KEY, inventory_item_id TEXT NOT NULL REFERENCES inventory_items(id), delta REAL NOT NULL, reason TEXT NOT NULL, order_id TEXT REFERENCES orders(id), note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, actor_role TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS customers (phone TEXT PRIMARY KEY, name TEXT NOT NULL, points_balance INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS loyalty_ledger (id TEXT PRIMARY KEY, customer_phone TEXT NOT NULL REFERENCES customers(phone), points_delta INTEGER NOT NULL, reason TEXT NOT NULL, order_id TEXT REFERENCES orders(id), created_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS coupons (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, kind TEXT NOT NULL CHECK(kind IN ('fixed','percent')), value INTEGER NOT NULL CHECK(value > 0), minimum_order INTEGER NOT NULL DEFAULT 0, maximum_uses INTEGER NOT NULL DEFAULT 0, used_count INTEGER NOT NULL DEFAULT 0, starts_at TEXT NOT NULL DEFAULT '', ends_at TEXT NOT NULL DEFAULT '', active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS coupon_redemptions (coupon_id TEXT NOT NULL REFERENCES coupons(id), order_id TEXT PRIMARY KEY REFERENCES orders(id), customer_phone TEXT NOT NULL, discount INTEGER NOT NULL, created_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS pos_receipts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL UNIQUE REFERENCES orders(id), receipt_number TEXT NOT NULL UNIQUE, customer_tax_name TEXT NOT NULL DEFAULT '', customer_tax_id TEXT NOT NULL DEFAULT '', subtotal INTEGER NOT NULL, discount INTEGER NOT NULL, delivery_fee INTEGER NOT NULL, total INTEGER NOT NULL, issued_at TEXT NOT NULL, issued_by TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS tax_invoices (receipt_id TEXT PRIMARY KEY REFERENCES pos_receipts(id), tax_invoice_number TEXT NOT NULL UNIQUE, seller_name TEXT NOT NULL, seller_tax_id TEXT NOT NULL, seller_address TEXT NOT NULL, seller_branch TEXT NOT NULL, buyer_name TEXT NOT NULL, buyer_tax_id TEXT NOT NULL DEFAULT '', buyer_address TEXT NOT NULL DEFAULT '', amount_before_vat INTEGER NOT NULL, vat_rate INTEGER NOT NULL, vat_amount INTEGER NOT NULL, total INTEGER NOT NULL, issued_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS providers (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, country TEXT NOT NULL DEFAULT 'TH', status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')), metadata TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS provider_services (id TEXT PRIMARY KEY, provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE, slug TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')), metadata TEXT NOT NULL DEFAULT '{}', UNIQUE(provider_id,slug));
-        CREATE TABLE IF NOT EXISTS merchant_types (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, metadata TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')));
-        CREATE TABLE IF NOT EXISTS vehicle_types (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, metadata TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')));
-        CREATE TABLE IF NOT EXISTS document_types (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, subject_type TEXT NOT NULL CHECK(subject_type IN ('rider','merchant','both')), allowed_mime_types TEXT NOT NULL DEFAULT '[]', max_size_bytes INTEGER NOT NULL DEFAULT 10485760, metadata TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')));
-        CREATE TABLE IF NOT EXISTS provider_document_requirements (id TEXT PRIMARY KEY, provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE, service_id TEXT REFERENCES provider_services(id) ON DELETE SET NULL, subject_type TEXT NOT NULL CHECK(subject_type IN ('rider','merchant')), merchant_type_id TEXT REFERENCES merchant_types(id) ON DELETE SET NULL, vehicle_type_id TEXT REFERENCES vehicle_types(id) ON DELETE SET NULL, document_type_id TEXT NOT NULL REFERENCES document_types(id) ON DELETE RESTRICT, country TEXT NOT NULL DEFAULT 'TH', effective_from TEXT NOT NULL, effective_to TEXT NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}', is_required INTEGER NOT NULL DEFAULT 0 CHECK(is_required IN (0,1)), is_optional INTEGER NOT NULL DEFAULT 0 CHECK(is_optional IN (0,1)), display_order INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS merchant_document_requirements (id TEXT PRIMARY KEY, merchant_type_id TEXT NOT NULL REFERENCES merchant_types(id) ON DELETE CASCADE, document_type_id TEXT NOT NULL REFERENCES document_types(id) ON DELETE RESTRICT, country TEXT NOT NULL DEFAULT 'TH', effective_from TEXT NOT NULL, effective_to TEXT NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}', is_required INTEGER NOT NULL DEFAULT 0 CHECK(is_required IN (0,1)), is_optional INTEGER NOT NULL DEFAULT 0 CHECK(is_optional IN (0,1)), display_order INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','inactive')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS uploaded_documents (id TEXT PRIMARY KEY, provider_id TEXT REFERENCES providers(id) ON DELETE SET NULL, subject_type TEXT NOT NULL CHECK(subject_type IN ('rider','merchant')), subject_id TEXT NOT NULL, requirement_id TEXT REFERENCES provider_document_requirements(id) ON DELETE SET NULL, original_filename TEXT NOT NULL, storage_path TEXT NOT NULL UNIQUE, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL CHECK(size_bytes > 0), sha256 TEXT NOT NULL, expires_at TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','expired','deleted')), metadata TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS document_verification (document_id TEXT PRIMARY KEY REFERENCES uploaded_documents(id) ON DELETE CASCADE, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','expired')), verified_by TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '', verified_at TEXT NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}');
-        CREATE TABLE IF NOT EXISTS verification_history (id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES uploaded_documents(id) ON DELETE CASCADE, status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','expired','deleted')), actor_role TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', metadata TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL);
-        CREATE INDEX IF NOT EXISTS idx_orders_pickup ON orders(pickup_date, pickup_slot);
-        CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
-        CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_logs(at DESC);
-        CREATE INDEX IF NOT EXISTS idx_payment_attempts_order ON payment_attempts(order_id, created_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_payment_attempts_provider_order ON payment_attempts(provider, provider_order_id);
-        CREATE INDEX IF NOT EXISTS idx_deliveries_status ON deliveries(status, updated_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_inventory_movements_item ON inventory_movements(inventory_item_id, created_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_provider_requirements_lookup ON provider_document_requirements(provider_id,subject_type,country,status,display_order);
-        CREATE INDEX IF NOT EXISTS idx_merchant_requirements_lookup ON merchant_document_requirements(merchant_type_id,country,status,display_order);
-        CREATE INDEX IF NOT EXISTS idx_uploaded_documents_subject ON uploaded_documents(subject_type,subject_id,status,created_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_verification_history_document ON verification_history(document_id,created_at DESC);
-        """)
-        payment_schema=con.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='payment_attempts'").fetchone()[0]
-        if "'refunded'" not in payment_schema:
-            con.execute("DROP INDEX IF EXISTS idx_payment_attempts_order")
-            con.execute("DROP INDEX IF EXISTS idx_payment_attempts_provider_order")
-            con.execute("ALTER TABLE payment_attempts RENAME TO payment_attempts_legacy")
-            con.execute("CREATE TABLE payment_attempts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, provider TEXT NOT NULL, provider_reference TEXT NOT NULL UNIQUE, provider_order_id TEXT UNIQUE, amount INTEGER NOT NULL CHECK(amount >= 0), status TEXT NOT NULL CHECK(status IN ('created','pending','paid','failed','expired','cancelled','refunded')), qr_image TEXT NOT NULL DEFAULT '', qr_type TEXT NOT NULL DEFAULT '', expires_at TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, confirmed_at TEXT NOT NULL DEFAULT '', provider_response TEXT NOT NULL DEFAULT '{}')")
-            con.execute("INSERT INTO payment_attempts SELECT * FROM payment_attempts_legacy")
-            con.execute("DROP TABLE payment_attempts_legacy")
-            con.execute("CREATE INDEX idx_payment_attempts_order ON payment_attempts(order_id, created_at DESC)")
-            con.execute("CREATE INDEX idx_payment_attempts_provider_order ON payment_attempts(provider, provider_order_id)")
+        apply_migrations(con)
         con.execute("INSERT OR IGNORE INTO menu_display_order(menu_item_id,position) SELECT id,CASE id WHEN 'classic' THEN 1 WHEN 'milk-tender' THEN 2 WHEN 'fatty' THEN 3 WHEN 'spicy' THEN 4 WHEN 'sticky-rice' THEN 5 END FROM menu_items WHERE id IN ('classic','milk-tender','fatty','spicy','sticky-rice')")
-        if "distance_km" not in {row[1] for row in con.execute("PRAGMA table_info(deliveries)")}:
-            con.execute("ALTER TABLE deliveries ADD COLUMN distance_km REAL NOT NULL DEFAULT 0")
         now=utcnow()
         con.execute("INSERT OR IGNORE INTO delivery_zones VALUES (?,?,?,?,?,?,?)", ("central", "พื้นที่จัดส่งหลัก", 30, 0, 1, now, now))
         seed_document_requirements(con)
@@ -976,7 +921,12 @@ class Handler(SimpleHTTPRequestHandler):
             if key and secrets.compare_digest(supplied, key): return role
         return None
     def client_key(self):
-        peer=self.client_address[0]; forwarded=self.headers.get("CF-Connecting-IP", "") if peer in {"127.0.0.1","::1"} else ""
+        peer=self.client_address[0]
+        forwarded = (
+            self.headers.get("CF-Connecting-IP", "")
+            if TRUST_CF_CONNECTING_IP and peer in {"127.0.0.1", "::1"}
+            else ""
+        )
         return forwarded if re.fullmatch(r"[0-9a-fA-F:.]{3,45}", forwarded) else peer
     def rate(self, bucket):
         now=time.monotonic(); key=(bucket,self.client_key())

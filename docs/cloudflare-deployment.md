@@ -39,15 +39,25 @@ Start the connector on the origin host with:
 ./scripts/cloudflare-tunnel.sh
 ```
 
-For a durable user service, copy `deploy/systemd/moopiew.service`,
-`deploy/systemd/moopiew-proxy.service`, and
-`deploy/systemd/moopiew-cloudflared.service` to `~/.config/systemd/user/`, then
-run `systemctl --user daemon-reload` and `systemctl --user enable --now
-moopiew.service moopiew-proxy.service moopiew-cloudflared.service`. Create
-`.env.production` from its example and set a unique `ADMIN_KEY` first. Keep
+For durable user services, copy `deploy/systemd/moopiew.service`,
+`deploy/systemd/moopiew-dashboard.service`, and
+`deploy/systemd/moopiew-cloudflared.service` to `~/.config/systemd/user/`.
+Install `deploy/systemd/moopiew-proxy-system@.service` under
+`/etc/systemd/system/`; this system template runs Caddy as the selected user
+with only the low-port bind capability. Then run:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now moopiew.service moopiew-dashboard.service moopiew-cloudflared.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now "moopiew-proxy-system@$USER.service"
+```
+
+Create `.env.production` from its example and set unique role keys first. Keep
 payment and Cloudflare credentials in separate ignored files. Verify all paths
 with `./scripts/production-check.sh`.
 
-Then verify `https://moopiew.zeaz.dev/api/menu`, `/api/ready`, and the customer
-storefront. A 530 response indicates that the proxied DNS name exists but
-Cloudflare cannot reach a healthy tunnel.
+Then verify `https://moopiew.zeaz.dev/api/menu`,
+`https://piewdash.zeaz.dev/api/health`, `/api/ready`, and the customer
+storefront. A 502 response indicates an unreachable origin; a 530 indicates
+that Cloudflare cannot reach a healthy tunnel.

@@ -3,7 +3,9 @@ set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 python3 -m py_compile "$ROOT/app.py"
-PYTHONPATH="$ROOT" python3 -m unittest discover -s "$ROOT/tests" -v
+if [[ "${SKIP_PYTHON_TESTS:-false}" != "true" ]]; then
+  PYTHONPATH="$ROOT" python3 -m unittest discover -s "$ROOT/tests" -v
+fi
 ROOT="$ROOT" python3 - <<'PY'
 import os
 from pathlib import Path
@@ -85,11 +87,7 @@ from app import RATE_BUCKETS
 RATE_BUCKETS.clear()
 print("CSP nonce and rate-limit regression checks passed.")
 PY
-node --check "$ROOT/web/app.js"
-node --check "$ROOT/web/admin.js"
-node --check "$ROOT/web/ops.js"
-node --check "$ROOT/web/menu-preview.js"
-node --check "$ROOT/web/api-monitor.js"
+git -C "$ROOT" ls-files -z '*.js' | xargs -0 -r -n1 node --check
 ROOT="$ROOT" python3 - <<'PY'
 import os
 from pathlib import Path

@@ -21,6 +21,16 @@ resource "cloudflare_dns_record" "moopiew" {
   comment = "Moopiew preorder via Cloudflare Tunnel"
 }
 
+resource "cloudflare_dns_record" "piewdash" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.piewdash_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "MooPiew engineering dashboard via Cloudflare Tunnel"
+}
+
 # This is deliberately opt-in: applying it without first importing a live
 # tunnel configuration could replace unrelated ingress rules.
 resource "cloudflare_zero_trust_tunnel_cloudflared_config" "moopiew" {
@@ -32,6 +42,7 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "moopiew" {
   config = {
     ingress = [
       { hostname = var.moopiew_hostname, service = var.moopiew_origin },
+      { hostname = var.piewdash_hostname, service = var.piewdash_origin },
       { service = "http_status:404" },
     ]
   }
