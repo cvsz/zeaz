@@ -1,3 +1,4 @@
+import ast
 import json
 import re
 import threading
@@ -14,6 +15,72 @@ import app
 
 OPENAPI = Path(__file__).resolve().parents[1] / "docs" / "openapi.yaml"
 HTTP_METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
+HANDLER_METHODS = {
+    "do_GET": "get",
+    "do_POST": "post",
+    "_do_PATCH": "patch",
+    "do_DELETE": "delete",
+}
+RUNTIME_PATTERN_TEMPLATES = {
+    r"(?:/api)?/providers/([a-z0-9-]+)": {
+        "/api/providers/{provider}",
+    },
+    r"(?:/api)?/providers/([a-z0-9-]+)/requirements(?:/(rider|merchant))?": {
+        "/api/providers/{provider}/requirements",
+        "/api/providers/{provider}/requirements/{subject}",
+    },
+    r"/api/tracking/(TRK-[A-F0-9]{32})/events": {
+        "/api/tracking/{trackingCode}/events",
+    },
+    r"/api/tracking/(TRK-[A-F0-9]{32})": {
+        "/api/tracking/{trackingCode}",
+    },
+    r"/api/admin/receipts/(RCT-[A-Z0-9-]+)/print": {
+        "/api/admin/receipts/{receiptId}/print",
+    },
+    r"/api/orders/(MPP-[A-Z0-9-]+)/payments/scb/qr": {
+        "/api/orders/{orderId}/payments/scb/qr",
+    },
+    r"/api/admin/orders/(MPP-[A-Z0-9-]+)/receipt": {
+        "/api/admin/orders/{orderId}/receipt",
+    },
+    r"/api/admin/receipts/(RCT-[A-Z0-9-]+)/tax-invoice": {
+        "/api/admin/receipts/{receiptId}/tax-invoice",
+    },
+    r"/api/admin/payments/scb/(PAY-SCB-[A-Z0-9-]+)/inquire": {
+        "/api/admin/payments/scb/{paymentId}/inquire",
+    },
+    r"/api/orders/MPP-[A-Z0-9-]+/cancel": {
+        "/api/orders/{orderId}/cancel",
+    },
+    r"/api/admin/document-requirements/([A-Za-z0-9_-]+)": {
+        "/api/admin/document-requirements/{requirementId}",
+    },
+    r"(?:/api)?/documents/(DOC-[A-F0-9]+)": {
+        "/api/documents/{documentId}",
+    },
+    r"/api/(admin|staff|kitchen)/orders/(MPP-[A-Z0-9-]+)": {
+        "/api/admin/orders/{orderId}",
+        "/api/staff/orders/{orderId}",
+        "/api/kitchen/orders/{orderId}",
+    },
+    r"/api/(admin|staff)/deliveries/(MPP-[A-Z0-9-]+)": {
+        "/api/admin/deliveries/{orderId}",
+        "/api/staff/deliveries/{orderId}",
+    },
+    r"/api/admin/riders/(RDR-[A-Z0-9-]+)": {
+        "/api/admin/riders/{riderId}",
+    },
+    r"/api/admin/rider-applications/(RAP-[A-Z0-9-]+)": {
+        "/api/admin/rider-applications/{applicationId}",
+    },
+    r"/api/admin/merchant-applications/(MAP-[A-Z0-9-]+)": {
+        "/api/admin/merchant-applications/{applicationId}",
+    },
+    r"/api/admin/menu/([a-z0-9-]+)": {
+        "/api/admin/menu/{menuId}",
+    },
+}
 PATH_VALUES = {
     "applicationId": "RAP-CONTRACT",
     "documentId": "DOC-AAAAAAAAAAAAAAAA",
@@ -58,6 +125,44 @@ def walk_references(document, value):
     elif isinstance(value, list):
         for child in value:
             walk_references(document, child)
+
+
+def runtime_operations():
+    source = Path(app.__file__).read_text(encoding="utf-8")
+    module = ast.parse(source)
+    handler = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.ClassDef) and node.name == "Handler"
+    )
+    operations = set()
+    unmapped = set()
+    for function in handler.body:
+        if not isinstance(function, ast.FunctionDef):
+            continue
+        method = HANDLER_METHODS.get(function.name)
+        if not method:
+            continue
+        for node in ast.walk(function):
+            if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                continue
+            value = node.value
+            if "/api" not in value and value != "/auth/scb/callback":
+                continue
+            if value in {"/api/", "/api/admin/"}:
+                continue
+            if value.startswith("/api/") or value == "/auth/scb/callback":
+                if not re.search(r"[()[\]|+?*\\]", value):
+                    operations.add((method, value))
+                    continue
+            templates = RUNTIME_PATTERN_TEMPLATES.get(value)
+            if templates:
+                operations.update((method, template) for template in templates)
+            else:
+                unmapped.add((method, value))
+    if unmapped:
+        raise AssertionError(f"Unmapped runtime API route patterns: {sorted(unmapped)}")
+    return operations
 
 
 class OpenApiContractTests(unittest.TestCase):
@@ -158,6 +263,15 @@ class OpenApiContractTests(unittest.TestCase):
                     compact = re.sub(r"\s+", "", payload)
                     self.assertNotEqual(compact, generic_not_found)
         self.assertEqual(self.server.handler_errors, [])
+
+    def test_runtime_and_openapi_operations_have_reverse_parity(self):
+        published = {
+            (method, path)
+            for path, path_item in self.contract["paths"].items()
+            for method in path_item
+            if method in HTTP_METHODS
+        }
+        self.assertEqual(runtime_operations(), published)
 
 
 if __name__ == "__main__":

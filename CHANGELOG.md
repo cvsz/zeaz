@@ -21,6 +21,14 @@
   preserved server diagnostics on failure.
 - Added dedicated Fernet encryption for onboarding document objects plus
   hash-verified legacy migration and dry-run-safe tombstone retention tooling.
+- Made provider document-policy versioning concurrency-safe with end-exclusive
+  UTC windows, read-only history, expired-upload rejection, audit coverage and
+  provider-specific integration matrices.
+- Added catalog/chat contract tests for every prioritized AI adapter and an
+  explicit runtime denylist for suspended or operationally disallowed
+  providers.
+- Added exact reverse parity between runtime handler routes and the canonical
+  OpenAPI operations, including reviewed mappings for regex routes.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,

@@ -181,7 +181,6 @@ def seed_document_requirements(con: sqlite3.Connection) -> None:
         for order,doc in enumerate(docs,1): req(f"{provider}-rider-{doc}",provider,"rider","rider",doc,1,0,order,rider_sources[provider])
     for order,doc in enumerate(["ror-yor-17-18","power-of-attorney","relationship-proof"],1):
         req(f"bolt-rider-optional-{doc}","bolt","rider","rider",doc,0,1,order+20,"https://bolt.eu/th-th/support/articles/4406002078610/")
-    con.execute("INSERT OR IGNORE INTO provider_document_requirements(id,provider_id,service_id,subject_type,country,effective_from,metadata,is_required,is_optional,display_order,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", ("lineman-rider-review","provider-lineman","lineman-rider","rider","TH","2024-01-01",json.dumps({"source":"https://lineman.line.me/rider/","source_confidence":"check_at_submission","note":"Public page describes registration but does not publish a stable document checklist."},ensure_ascii=False),0,1,1,now,now))
     for merchant_type,docs in {"individual":["national-id","bank-account"],"company":["company-certificate","vat-certificate","shareholder-list","director-id","business-bank-account"]}.items():
         for order,doc in enumerate(docs,1):
             req(f"grab-merchant-{merchant_type}-{doc}","grab","merchant","merchant",doc,1,0,order,"https://www.grab.com/th/merchant/",merchant_type_id=f"merchant-type-{merchant_type}")
@@ -207,7 +206,8 @@ def requirement_rows(con: sqlite3.Connection, provider_slug: str, subject: str, 
              LEFT JOIN provider_services s ON s.id=r.service_id JOIN document_types d ON d.id=r.document_type_id
              LEFT JOIN merchant_types mt ON mt.id=r.merchant_type_id LEFT JOIN vehicle_types vt ON vt.id=r.vehicle_type_id
              WHERE p.slug=? AND r.subject_type=? AND r.country=? AND r.status='active'
-               AND r.effective_from<=date('now') AND (r.effective_to='' OR r.effective_to>=date('now'))"""
+               AND datetime(r.effective_from)<=datetime('now')
+               AND (r.effective_to='' OR datetime(r.effective_to)>datetime('now'))"""
     if merchant_type: query += " AND (mt.slug=? OR r.merchant_type_id IS NULL)"; params.append(merchant_type)
     if vehicle_type: query += " AND (vt.slug=? OR r.vehicle_type_id IS NULL)"; params.append(vehicle_type)
     rows=[]
@@ -292,7 +292,20 @@ def ai_provider_keys() -> dict[str,str]:
     try: parsed=json.loads(raw)
     except json.JSONDecodeError: return {}
     if not isinstance(parsed,dict): return {}
-    return {name:value for name,value in parsed.items() if name in AI_PROVIDER_NAMES and isinstance(value,str) and value.strip() and not value.startswith("replace-with-")}
+    disabled={
+        name.strip().lower()
+        for name in env("AI_DISABLED_PROVIDERS").split(",")
+        if name.strip().lower() in AI_PROVIDER_NAMES
+    }
+    return {
+        name:value.strip()
+        for name,value in parsed.items()
+        if name in AI_PROVIDER_NAMES
+        and name not in disabled
+        and isinstance(value,str)
+        and value.strip()
+        and not value.startswith("replace-with-")
+    }
 
 def local_ai_base() -> str:
     base=env("LOCAL_AI_BASE_URL").rstrip("/")
@@ -999,7 +1012,17 @@ class Handler(SimpleHTTPRequestHandler):
         if not re.fullmatch(r"[a-z0-9-]{2,40}",provider) or subject not in {"rider","merchant"} or not re.fullmatch(r"[A-Za-z0-9_-]{2,100}",subject_id) or not filename or not isinstance(encoded,str): raise ValueError("ข้อมูลเอกสารไม่ถูกต้อง")
         with db(immediate=True) as con:
             prow=con.execute("SELECT id FROM providers WHERE slug=? AND status='active'",(provider,)).fetchone()
-            req=con.execute("SELECT r.*,d.allowed_mime_types,d.max_size_bytes FROM provider_document_requirements r JOIN providers p ON p.id=r.provider_id JOIN document_types d ON d.id=r.document_type_id WHERE r.id=? AND p.slug=? AND r.subject_type=? AND r.status='active'",(requirement_id,provider,subject)).fetchone()
+            req=con.execute(
+                """SELECT r.*,d.allowed_mime_types,d.max_size_bytes
+                   FROM provider_document_requirements r
+                   JOIN providers p ON p.id=r.provider_id
+                   JOIN document_types d ON d.id=r.document_type_id
+                   WHERE r.id=? AND p.slug=? AND r.subject_type=?
+                     AND r.status='active'
+                     AND datetime(r.effective_from)<=datetime('now')
+                     AND (r.effective_to='' OR datetime(r.effective_to)>datetime('now'))""",
+                (requirement_id,provider,subject),
+            ).fetchone()
             if not prow or not req: raise ValueError("ไม่พบ requirement ของเอกสาร")
             allowed=json.loads(req["allowed_mime_types"])
             if mime not in allowed: raise ValueError("ชนิดไฟล์นี้ไม่อยู่ในรายการที่อนุญาต")
@@ -1033,9 +1056,11 @@ class Handler(SimpleHTTPRequestHandler):
         except OSError: pass
         return self.json({"deleted":True,"id":document_id})
     def admin_document_requirements(self, form, requirement_id, role):
-        with db() as con:
+        with db(immediate=True) as con:
             row=con.execute("SELECT * FROM provider_document_requirements WHERE id=?",(requirement_id,)).fetchone()
             if not row:return self.json({"error":"ไม่พบ requirement"},404)
+            if row["effective_to"]:
+                raise ValueError("แก้ไข historical requirement ไม่ได้")
             required=parse_bool(form.get("is_required"),bool(row["is_required"])); optional=parse_bool(form.get("is_optional"),bool(row["is_optional"]))
             if required and optional: raise ValueError("requirement เป็น required และ optional พร้อมกันไม่ได้")
             try: order=int(form.get("display_order",row["display_order"]))
@@ -1048,10 +1073,22 @@ class Handler(SimpleHTTPRequestHandler):
             if supplied is not None:
                 if not isinstance(supplied,dict): raise ValueError("metadata ไม่ถูกต้อง")
                 metadata.update(supplied)
-            now_date=date.today().isoformat(); yesterday=(date.today()-timedelta(days=1)).isoformat(); new_id=f"{requirement_id}-v{secrets.token_hex(3).upper()}"
-            con.execute("UPDATE provider_document_requirements SET effective_to=?,updated_at=? WHERE id=? AND effective_to=''",(yesterday,utcnow(),requirement_id))
-            con.execute("INSERT INTO provider_document_requirements(id,provider_id,service_id,subject_type,merchant_type_id,vehicle_type_id,document_type_id,country,effective_from,effective_to,metadata,is_required,is_optional,display_order,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(new_id,row["provider_id"],row["service_id"],row["subject_type"],row["merchant_type_id"],row["vehicle_type_id"],row["document_type_id"],row["country"],now_date,"",json.dumps(metadata,ensure_ascii=False),int(required),int(optional),order,status,utcnow(),utcnow()))
-            audit(con,role,"version","provider_document_requirement",new_id,{"previous_id":requirement_id,"status":status,"is_required":required,"is_optional":optional,"display_order":order}); return self.json({"requirement_id":new_id,"previous_id":requirement_id,"effective_from":now_date},201)
+            try:
+                encoded_metadata=json.dumps(metadata,ensure_ascii=False,separators=(",",":"))
+            except (TypeError,ValueError):
+                raise ValueError("metadata ไม่ถูกต้อง")
+            if len(encoded_metadata.encode("utf-8"))>16_384:
+                raise ValueError("metadata มีขนาดใหญ่เกินไป")
+            now=utcnow(); new_id=f"{requirement_id}-v{secrets.token_hex(3).upper()}"
+            updated=con.execute(
+                "UPDATE provider_document_requirements SET effective_to=?,updated_at=? WHERE id=? AND effective_to=''",
+                (now,now,requirement_id),
+            )
+            if updated.rowcount != 1:
+                raise ValueError("requirement ถูกสร้างเวอร์ชันแล้ว")
+            con.execute("INSERT INTO provider_document_requirements(id,provider_id,service_id,subject_type,merchant_type_id,vehicle_type_id,document_type_id,country,effective_from,effective_to,metadata,is_required,is_optional,display_order,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(new_id,row["provider_id"],row["service_id"],row["subject_type"],row["merchant_type_id"],row["vehicle_type_id"],row["document_type_id"],row["country"],now,"",encoded_metadata,int(required),int(optional),order,status,now,now))
+            audit(con,role,"version","provider_document_requirement",new_id,{"previous_id":requirement_id,"status":status,"is_required":required,"is_optional":optional,"display_order":order})
+            return self.json({"requirement_id":new_id,"previous_id":requirement_id,"effective_from":now},201)
     def do_GET(self):
         parsed=urlparse(self.path); path, query=parsed.path, parse_qs(parsed.query)
         if path == "/auth/scb/callback":
@@ -1109,7 +1146,7 @@ class Handler(SimpleHTTPRequestHandler):
             with db() as con:
                 rows=[]
                 for row in con.execute("SELECT r.*,p.slug provider_slug,p.name provider_name,s.slug service_slug,d.slug document_slug,d.name document_name,mt.slug merchant_type_slug,vt.slug vehicle_type_slug FROM provider_document_requirements r JOIN providers p ON p.id=r.provider_id LEFT JOIN provider_services s ON s.id=r.service_id JOIN document_types d ON d.id=r.document_type_id LEFT JOIN merchant_types mt ON mt.id=r.merchant_type_id LEFT JOIN vehicle_types vt ON vt.id=r.vehicle_type_id ORDER BY p.name,r.subject_type,r.display_order,r.effective_from"):
-                    item=dict(row); item["metadata"]=json.loads(item["metadata"]); item["is_required"]=bool(item["is_required"]); item["is_optional"]=bool(item["is_optional"]); rows.append(item)
+                    item=dict(row); item["metadata"]=json.loads(item["metadata"]); item["is_required"]=bool(item["is_required"]); item["is_optional"]=bool(item["is_optional"]); item["is_current"]=not bool(item["effective_to"]); rows.append(item)
                 return self.json({"requirements":rows})
         tracking=re.fullmatch(r"/api/tracking/(TRK-[A-F0-9]{32})/events",path)
         if tracking:return self.stream_tracking(tracking.group(1))

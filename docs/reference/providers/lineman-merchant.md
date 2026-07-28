@@ -2,8 +2,8 @@
 
 LINE MAN's public rider page is not a merchant-document specification and a
 stable public merchant checklist was not found. The integration consequently
-uses database-driven requirements with a `check_at_submission` state instead
-of hardcoding document buttons.
+returns an empty database-driven requirement list instead of hardcoding or
+rendering synthetic document buttons.
 
 The merchant form supports individual, company, restaurant, cloud kitchen,
 cafe, retail and grocery types, plus identity, business/tax, bank, store,

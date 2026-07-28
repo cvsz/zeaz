@@ -10,11 +10,12 @@ Thailand.
 ## Information, documents and vehicle types
 
 The public page describes the registration flow and vehicle-owner consent but
-does not publish a stable, complete document checklist. The application must
-therefore show the current checklist returned by the provider/operations
-database and must not invent required documents. Vehicle type and ownership
-consent are structured fields; supported types and city availability must be
-confirmed in the current LINE MAN RIDER app.
+does not publish a stable, complete document checklist. The application
+therefore returns an empty requirement list until an operator records a
+provider-confirmed checklist. It must not use a synthetic "review-needed"
+document row because that would render a misleading upload control. Vehicle
+type and ownership consent are structured fields; supported types and city
+availability must be confirmed in the current LINE MAN RIDER app.
 
 ## Verification and renewal
 
@@ -25,8 +26,8 @@ versioned with an effective date rather than silently replacing history.
 
 ## Thailand notes and reference
 
-This adapter intentionally marks the public checklist as `check_at_submission`.
-It renders provider updates without requiring a frontend release.
+This adapter intentionally leaves the public checklist empty. It renders
+provider-confirmed updates without requiring a frontend release.
 
 - https://lineman.line.me/rider/
 - https://lineman.line.me/riderbkk/
