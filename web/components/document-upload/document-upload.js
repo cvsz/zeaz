@@ -34,6 +34,9 @@ export class UploadCard {
     this.input = this.element.querySelector('.document-input');
     this.element.querySelector('.choose').onclick = () => this.input.click();
     this.input.onchange = () => { const [file] = this.input.files; if (file) { this.file = file; this.render(); this.upload(); } };
+    this.element.ondragover = event => { event.preventDefault(); this.element.classList.add('drag-over'); };
+    this.element.ondragleave = () => this.element.classList.remove('drag-over');
+    this.element.ondrop = event => { event.preventDefault(); this.element.classList.remove('drag-over'); const [file] = event.dataTransfer.files; if (file) { this.file = file; this.render(); this.upload(); } };
     this.element.querySelector('.remove')?.addEventListener('click', () => this.remove());
   }
   async upload() {
