@@ -113,6 +113,12 @@ admin_paid_cancel_status="$(curl --silent --output "$TMP_DIR/admin-paid-cancel.j
   --data '{"status":"cancelled"}')"
 [[ "$admin_paid_cancel_status" == "400" ]]
 printf '%s' "$(cat "$TMP_DIR/admin-paid-cancel.json")" | "$PYTHON" -c 'import json,sys; assert "ชำระเงินแล้ว" in json.load(sys.stdin)["error"]'
+admin_paid_pending_status="$(curl --silent --output "$TMP_DIR/admin-paid-pending.json" --write-out '%{http_code}' --max-time 3 --request PATCH "$BASE_URL/api/admin/orders/$paid_order_id" \
+  --header 'Content-Type: application/json' \
+  --header "X-Admin-Key-B64: $admin_header" \
+  --data '{"payment_status":"pending"}')"
+[[ "$admin_paid_pending_status" == "400" ]]
+printf '%s' "$(cat "$TMP_DIR/admin-paid-pending.json")" | "$PYTHON" -c 'import json,sys; assert "ถอยกลับไม่ได้" in json.load(sys.stdin)["error"]'
 cancelled_complete_status="$(curl --silent --output "$TMP_DIR/cancelled-complete.json" --write-out '%{http_code}' --max-time 3 --request PATCH "$BASE_URL/api/admin/orders/$order_id" \
   --header 'Content-Type: application/json' \
   --header "X-Admin-Key-B64: $admin_header" \

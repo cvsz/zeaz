@@ -1378,6 +1378,10 @@ class Handler(SimpleHTTPRequestHandler):
             if status=="cancelled" and order["payment"]["status"]=="paid":raise ValueError("ออเดอร์นี้ชำระเงินแล้ว กรุณาดำเนินการคืนเงินก่อนยกเลิก")
             if status=="completed" and order["status"] in {"cancelled","completed"}:raise ValueError("ออเดอร์นี้ปิดแล้ว ไม่สามารถปิดซ้ำได้")
             if status=="completed" and order["payment"]["method"]=="scb_qr" and order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงิน SCB ก่อนปิดออเดอร์")
+            current_payment=order["payment"]["status"]
+            if payment and current_payment=="refunded" and payment!="refunded":raise ValueError("การชำระเงินที่คืนเงินแล้วไม่สามารถเปลี่ยนกลับได้")
+            if payment=="refunded" and current_payment!="paid":raise ValueError("ต้องยืนยันยอดชำระเงินก่อนบันทึกการคืนเงิน")
+            if payment=="pending" and current_payment in {"paid","refunded"}:raise ValueError("สถานะชำระเงินถอยกลับไม่ได้")
             transitions={"staff": {("new","confirmed"), ("ready","completed")}, "kitchen": {("confirmed","ready")}}
             if status and area in transitions and (order["status"], status) not in transitions[area]:
                 raise ValueError("ลำดับสถานะไม่ถูกต้อง")
