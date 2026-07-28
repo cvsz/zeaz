@@ -44,6 +44,9 @@
 - Required confirmed payment before order or delivery settlement and receipt
   issuance, added immutable receipt/tax snapshot coverage, and raised the
   enforced Python coverage floor from 48% to 50%.
+- Serialized rider and merchant reviews, blocked rider deactivation with active
+  deliveries, added concurrent mutation coverage, and raised the enforced
+  Python coverage floor from 50% to 52%.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,

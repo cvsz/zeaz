@@ -22,3 +22,9 @@ may atomically send `status=completed` with `payment_status=paid`; staff cannot
 change financial state. Receipts are immutable financial snapshots issued only
 after payment is confirmed, and repeated receipt or tax-invoice requests
 return the existing record rather than creating another document.
+
+Rider and merchant application reviews are serialized terminal mutations: one
+pending application can produce exactly one review and audit event. Concurrent
+merchant registrations for the same phone produce one pending application.
+Riders assigned to non-terminal deliveries cannot be deactivated until those
+deliveries are reassigned or closed.

@@ -88,11 +88,11 @@ paths:
   /api/admin/riders:
     post: {summary: Create rider record, security: [{adminKey: []}], responses: {'201': {description: Created}}}
   /api/admin/riders/{riderId}:
-    patch: {summary: Update rider activation or availability, security: [{adminKey: []}], parameters: [{name: riderId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Updated}}}
+    patch: {summary: Update rider activation or availability; active deliveries prevent deactivation, security: [{adminKey: []}], parameters: [{name: riderId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Updated}, '400': {description: Rider has an active delivery or mutation is invalid}}}
   /api/admin/rider-applications/{applicationId}:
-    patch: {summary: Approve or reject rider application, security: [{adminKey: []}], parameters: [{name: applicationId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Reviewed}}}
+    patch: {summary: Atomically approve or reject a pending rider application once, security: [{adminKey: []}], parameters: [{name: applicationId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Reviewed}, '400': {description: Application was already reviewed or decision is invalid}}}
   /api/admin/merchant-applications/{applicationId}:
-    patch: {summary: Approve or reject merchant application, security: [{adminKey: []}], parameters: [{name: applicationId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Reviewed}}}
+    patch: {summary: Atomically approve or reject a pending merchant application once, security: [{adminKey: []}], parameters: [{name: applicationId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Reviewed}, '400': {description: Application was already reviewed or decision is invalid}}}
   /api/admin/delivery-zones:
     post: {summary: Create delivery zone, security: [{adminKey: []}], responses: {'201': {description: Created}}}
   /api/admin/delivery-pricing:

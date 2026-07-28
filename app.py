@@ -1624,16 +1624,17 @@ class Handler(SimpleHTTPRequestHandler):
         self.json({"application":{"id":application["id"],"status":"pending"}},201)
     def update_rider(self,rider_id,form,role):
         if not any(key in form for key in ("active","available")):raise ValueError("ไม่มีข้อมูลไรเดอร์ที่ต้องอัปเดต")
-        with db() as con:
+        with db(immediate=True) as con:
             rider=con.execute("SELECT * FROM riders WHERE id=?",(rider_id,)).fetchone()
             if not rider:return self.json({"error":"ไม่พบไรเดอร์"},404)
             active=int(parse_bool(form.get("active"),bool(rider["active"])));available=int(parse_bool(form.get("available"),bool(rider["available"]))) if active else 0
+            if not active and con.execute("SELECT 1 FROM deliveries WHERE rider_id=? AND status NOT IN ('delivered','cancelled') LIMIT 1",(rider_id,)).fetchone():raise ValueError("ไรเดอร์ยังมีงานจัดส่งที่ต้องโอนย้ายหรือปิดก่อน")
             con.execute("UPDATE riders SET active=?,available=?,updated_at=? WHERE id=?",(active,available,utcnow(),rider_id));audit(con,role,"update","rider",rider_id,{"active":bool(active),"available":bool(available)})
             return self.json({"rider":dict(con.execute("SELECT * FROM riders WHERE id=?",(rider_id,)).fetchone())})
     def review_rider_application(self,application_id,form,role):
         decision=str(form.get("status","")).strip()
         if decision not in {"approved","rejected"}:raise ValueError("สถานะการสมัครไม่ถูกต้อง")
-        with db() as con:
+        with db(immediate=True) as con:
             application=con.execute("SELECT * FROM rider_applications WHERE id=?",(application_id,)).fetchone()
             if not application:return self.json({"error":"ไม่พบใบสมัครไรเดอร์"},404)
             if application["status"]!="pending":raise ValueError("ใบสมัครนี้ได้รับการพิจารณาแล้ว")
@@ -1646,7 +1647,7 @@ class Handler(SimpleHTTPRequestHandler):
         business_name=str(form.get("business_name","")).strip()[:160];owner_name=str(form.get("owner_name","")).strip()[:80];phone=re.sub(r"[^0-9+]","",str(form.get("phone", "")));email=str(form.get("email","")).strip()[:160];address=str(form.get("address","")).strip()[:500];category=str(form.get("category","")).strip()[:80];note=str(form.get("note","")).strip()[:300]
         if len(business_name)<2 or len(owner_name)<2 or not re.fullmatch(r"(?:\+66|0)\d{8,9}",phone) or len(address)<5 or len(category)<2:raise ValueError("กรุณากรอกข้อมูลสมัครร้านค้าให้ครบถ้วน")
         if email and not valid_email(email):raise ValueError("อีเมลไม่ถูกต้อง")
-        with db() as con:
+        with db(immediate=True) as con:
             pending=con.execute("SELECT 1 FROM merchant_applications WHERE phone=? AND status='pending'",(phone,)).fetchone()
             if pending:raise ValueError("มีใบสมัครร้านค้าที่รอตรวจสอบสำหรับเบอร์นี้แล้ว")
             application={"id":f"MAP-{secrets.token_hex(4).upper()}","business_name":business_name,"owner_name":owner_name,"phone":phone,"email":email,"address":address,"category":category,"note":note,"status":"pending","created_at":utcnow()}
@@ -1655,7 +1656,7 @@ class Handler(SimpleHTTPRequestHandler):
     def review_merchant_application(self,application_id,form,role):
         decision=str(form.get("status","")).strip()
         if decision not in {"approved","rejected"}:raise ValueError("สถานะการสมัครไม่ถูกต้อง")
-        with db() as con:
+        with db(immediate=True) as con:
             application=con.execute("SELECT * FROM merchant_applications WHERE id=?",(application_id,)).fetchone()
             if not application:return self.json({"error":"ไม่พบใบสมัครร้านค้า"},404)
             if application["status"]!="pending":raise ValueError("ใบสมัครนี้ได้รับการพิจารณาแล้ว")
