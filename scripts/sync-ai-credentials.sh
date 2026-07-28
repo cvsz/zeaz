@@ -19,21 +19,22 @@ const read = (text, key) => {
   const line = text.split(/\r?\n/).find((row) => row.startsWith(`${key}=`));
   return line ? line.slice(key.length + 1).trim().replace(/^['"]|['"]$/g, "") : "";
 };
+const first = (...candidates) => candidates.find(Boolean) || "";
 const values = {
-  gemini: read(source, "GEMINI_API_KEY"),
-  nvidia: read(source, "NVIDIA_NIM_API_KEY"),
-  zai: read(source, "ZAI_API_KEY"),
-  opencode: read(source, "OPENCODE_API_KEY"),
-  openrouter: read(source, "OPENROUTER_API_KEY"),
-  groq: read(source, "GROQ_API_KEY"),
+  gemini: first(read(target, "GEMINI_API_KEY"), read(target, "GOOGLE_API_KEY"), read(source, "GEMINI_API_KEY")),
+  nvidia: first(read(target, "NVIDIA_NIM_API_KEY"), read(source, "NVIDIA_NIM_API_KEY")),
+  zai: first(read(target, "ZAI_API_KEY"), read(source, "ZAI_API_KEY")),
+  opencode: first(read(target, "OPENCODE_API_KEY"), read(source, "OPENCODE_API_KEY")),
+  openrouter: first(read(target, "OPENROUTER_API_KEY"), read(source, "OPENROUTER_API_KEY")),
+  groq: first(read(target, "GROQ_API_KEY"), read(source, "GROQ_API_KEY")),
   // ModelArk calls use ARK_API_KEY. Keep BYTEPLUS_API_KEY as a legacy alias
   // for existing vaults during migration.
   byteplus: read(source, "ARK_API_KEY") || read(target, "ARK_API_KEY") || read(source, "BYTEPLUS_API_KEY"),
-  fireworks: read(source, "FIREWORKS_API_KEY"),
-  openai: read(source, "OPENAI_API_KEY"),
-  kimi: read(source, "KIMI_API_KEY"),
-  scaleway: read(source, "SCALEWAY_API_KEY"),
-  together: read(source, "TOGETHER_API_KEY"),
+  fireworks: first(read(target, "FIREWORKS_API_KEY"), read(source, "FIREWORKS_API_KEY")),
+  openai: first(read(target, "OPENAI_API_KEY"), read(source, "OPENAI_API_KEY")),
+  kimi: first(read(target, "KIMI_API_KEY"), read(target, "MOONSHOT_API_KEY"), read(source, "KIMI_API_KEY")),
+  scaleway: first(read(target, "SCALEWAY_API_KEY"), read(target, "SCW_SECRET_KEY"), read(source, "SCALEWAY_API_KEY")),
+  together: first(read(target, "TOGETHER_API_KEY"), read(source, "TOGETHER_API_KEY")),
 };
 if (Object.values(values).some((value) => !value)) throw new Error("A required AI provider key is missing.");
 let existing = {};

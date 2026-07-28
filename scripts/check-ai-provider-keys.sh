@@ -25,7 +25,7 @@ const readRuntime = (key) => {
   const line = runtime.split(/\r?\n/).find((row) => row.startsWith(`${key}=`));
   return line ? line.slice(key.length + 1).trim().replace(/^['"]|['"]$/g, "") : "";
 };
-const readKey = (key) => read(key) || readRuntime(key);
+const readKey = (key) => readRuntime(key) || read(key);
 const probes = [
   ["anthropic", "ANTHROPIC_API_KEY", "https://api.anthropic.com/v1/models", (key) => ({"x-api-key": key, "anthropic-version": "2023-06-01"})],
   ["byteplus", ["ARK_API_KEY", "BYTEPLUS_API_KEY"], "https://ark.ap-southeast.bytepluses.com/api/v3/models", (key) => ({authorization: `Bearer ${key}`})],
@@ -35,7 +35,7 @@ const probes = [
   ["gemini", "GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/models", (key) => ({"x-goog-api-key": key})],
   ["groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1/models", (key) => ({authorization: `Bearer ${key}`})],
   ["huggingface", "HF_TOKEN_API_KEY", "https://router.huggingface.co/v1/models", (key) => ({authorization: `Bearer ${key}`})],
-  ["kimi", "KIMI_API_KEY", "https://api.moonshot.ai/v1/models", (key) => ({authorization: `Bearer ${key}`})],
+  ["kimi", ["MOONSHOT_API_KEY", "KIMI_API_KEY"], "https://api.moonshot.ai/v1/models", (key) => ({authorization: `Bearer ${key}`})],
   ["mistral", "MISTRAL_API_KEY", "https://api.mistral.ai/v1/models", (key) => ({authorization: `Bearer ${key}`})],
   ["nvidia", "NVIDIA_NIM_API_KEY", "https://integrate.api.nvidia.com/v1/models", (key) => ({authorization: `Bearer ${key}`})],
   ["novita", "NOVITA_API_KEY", "https://api.novita.ai/v3/openai/models", (key) => ({authorization: `Bearer ${key}`})],
@@ -43,7 +43,7 @@ const probes = [
   ["opencode", "OPENCODE_API_KEY", "https://opencode.ai/zen/v1/models", (key) => ({authorization: `Bearer ${key}`})],
   ["openrouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1/models", (key) => ({authorization: `Bearer ${key}`})],
   ["sambanova", "SAMBANOVA_API_KEY", "https://api.sambanova.ai/v1/models", (key) => ({authorization: `Bearer ${key}`})],
-  ["scaleway", "SCALEWAY_API_KEY", "https://api.scaleway.ai/v1/models", (key) => ({authorization: `Bearer ${key}`})],
+  ["scaleway", ["SCW_SECRET_KEY", "SCALEWAY_API_KEY"], "https://api.scaleway.ai/v1/models", (key) => ({authorization: `Bearer ${key}`})],
   ["together", "TOGETHER_API_KEY", "https://api.together.xyz/v1/models", (key) => ({authorization: `Bearer ${key}`})],
   ["zai", "ZAI_API_KEY", "https://api.z.ai/api/paas/v4/models", (key) => ({authorization: `Bearer ${key}`})],
 ];
@@ -53,7 +53,7 @@ const request = (url, headers) => new Promise((resolve) => {
     res.on("data", (chunk) => { if (size < 1_000_000) { body += chunk; size += chunk.length; } });
     res.on("end", () => {
       let count = null;
-      try { const json = JSON.parse(body); const rows = Array.isArray(json.data) ? json.data : Array.isArray(json.models) ? json.models : null; count = rows ? rows.length : null; } catch {}
+      try { const json = JSON.parse(body); const rows = Array.isArray(json) ? json : Array.isArray(json.data) ? json.data : Array.isArray(json.models) ? json.models : null; count = rows ? rows.length : null; } catch {}
       resolve({status: res.statusCode || 0, models: count});
     });
   });

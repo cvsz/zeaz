@@ -52,6 +52,11 @@ For an operator refresh, run `./scripts/refresh-ai-catalog.sh`. It performs the
 credential sync, writes the credential-free health report, restarts the local
 service and runs the free-provider smoke checks in that order.
 
+During sync, provider-specific keys already present in ignored `.env.ai` take
+precedence over vault aliases. This includes `MOONSHOT_API_KEY` for Kimi and
+`SCW_SECRET_KEY` for Scaleway, so a provider's locally issued credential is not
+silently replaced by a generic vault value.
+
 `HF_TOKEN` stays only on the server. It is never returned by APIs, written to
 the database, included in browser JavaScript, or committed to Git.
 

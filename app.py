@@ -214,7 +214,7 @@ def ai_public_config() -> dict:
     keys=ai_provider_keys()
     return {"enabled":bool(keys) or hf_enabled(),"providers":{"gemini":bool(keys.get("gemini")),"nvidia":bool(keys.get("nvidia")),"zai":bool(keys.get("zai")),"opencode":bool(keys.get("opencode")),"openrouter":bool(keys.get("openrouter")),"groq":bool(keys.get("groq")),"byteplus":bool(keys.get("byteplus")),"fireworks":bool(keys.get("fireworks")),"openai":bool(keys.get("openai")),"kimi":bool(keys.get("kimi")),"scaleway":bool(keys.get("scaleway")),"together":bool(keys.get("together")),"huggingface":hf_enabled()},"catalog":"live","chat_only":True}
 
-def ai_http(endpoint: str, headers: dict[str,str], payload: dict | None = None) -> dict:
+def ai_http(endpoint: str, headers: dict[str,str], payload: dict | None = None, allow_list=False) -> dict | list:
     """Call a fixed provider endpoint without exposing credentials or acting as a proxy."""
     try:
         # Several provider gateways reject urllib's default user agent. Keep a
@@ -230,7 +230,7 @@ def ai_http(endpoint: str, headers: dict[str,str], payload: dict | None = None) 
     except (URLError,OSError) as error: raise ValueError("ไม่สามารถเชื่อมต่อ AI provider ได้") from error
     try: data=json.loads(raw.decode())
     except (UnicodeDecodeError,json.JSONDecodeError) as error: raise ValueError("AI provider ตอบกลับไม่ใช่ JSON") from error
-    if not isinstance(data,dict): raise ValueError("AI provider ตอบกลับไม่ถูกต้อง")
+    if not isinstance(data,dict) and not (allow_list and isinstance(data,list)): raise ValueError("AI provider ตอบกลับไม่ถูกต้อง")
     return data
 
 def gemini_models(token: str) -> list[dict]:
@@ -319,9 +319,10 @@ def byteplus_models(token: str) -> list[dict]:
 
 def openai_compatible_models(base: str, token: str, provider: str) -> list[dict]:
     """List models from a fixed OpenAI-compatible provider endpoint."""
-    data=ai_http(f"{base}/models",{"Authorization":f"Bearer {token}"})
+    data=ai_http(f"{base}/models",{"Authorization":f"Bearer {token}"},allow_list=True)
+    source=data if isinstance(data,list) else data.get("data",[])
     rows=[]
-    for model in data.get("data",[]):
+    for model in source:
         if not isinstance(model,dict) or not isinstance(model.get("id"),str) or not PROVIDER_MODEL_ID.fullmatch(model["id"]): continue
         rows.append({"id":f"{provider}:{model['id']}","provider":provider,"model":model["id"],"display_name":model.get("name",model["id"])})
     return rows
