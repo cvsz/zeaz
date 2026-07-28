@@ -29,7 +29,9 @@ workloads need a separate reviewed integration.
    `./scripts/sync-ai-credentials.sh` to copy only the supported AI keys into
    ignored `.env.ai` without printing them. Run `./scripts/ai-preflight.sh` to
    inspect the usable catalog, or add `--strict` to fail when any configured
-   provider is unavailable. Use `./scripts/huggingface-preflight.sh` only when
+   provider is unavailable. Add `--smoke` to make one short inference request
+   to each provider that has a live free model; responses are not printed or
+   saved. Use `./scripts/huggingface-preflight.sh` only when
    enabling Hugging Face chat inference. Restart the service, open
    `/ai.html`, enter the owner key and load the
    catalog.
