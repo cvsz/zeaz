@@ -510,6 +510,9 @@ def ai_chat(model_id: str, prompt: str, max_tokens=512, temperature=0.2) -> dict
         raise ValueError("AI provider ไม่รองรับ")
     free_providers={"local","github","cerebras","groq","huggingface"}
     candidates=[selected]+[item for item in catalog["models"] if item["id"] != model_id and (item.get("free") is True or item.get("free_tier") is True or item["provider"] in free_providers)]
+    try: fallback_limit=max(1,min(8,int(env("AI_FALLBACK_MAX_ATTEMPTS","3"))))
+    except ValueError: fallback_limit=3
+    candidates=candidates[:fallback_limit]
     failures=[]
     for item in candidates:
         try:
