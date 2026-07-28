@@ -16,3 +16,36 @@ Provider document-policy versions use end-exclusive UTC effective windows.
 `PATCH /api/admin/document-requirements/{requirementId}` closes the current
 version and creates one successor atomically; historical versions are
 read-only and cannot authorize new uploads.
+
+Order completion and delivery settlement require confirmed payment. An owner
+may atomically send `status=completed` with `payment_status=paid`; staff cannot
+change financial state. Receipts are immutable financial snapshots issued only
+after payment is confirmed, and repeated receipt or tax-invoice requests
+return the existing record rather than creating another document.
+
+Rider and merchant application reviews are serialized terminal mutations: one
+pending application can produce exactly one review and audit event. Concurrent
+merchant registrations for the same phone produce one pending application.
+Riders assigned to non-terminal deliveries cannot be deactivated until those
+deliveries are reassigned or closed.
+
+Inventory quantities, recipe quantities, delivery rates and coordinates must
+be finite numbers; `NaN` and positive or negative infinity are rejected before
+SQLite mutation. Inventory adjustments serialize across processes, require a
+non-empty reason and cannot produce negative stock. Settings requests must
+change at least one supported key, roll back fully on invalid values and record
+the exact changed keys in the audit event.
+
+Menu partial updates serialize their read-modify-write transaction so concurrent
+changes to different fields cannot overwrite each other; each audit event names
+the submitted fields. Coupon codes are strict 3-32 character identifiers.
+Optional campaign windows require timezone-aware RFC3339 timestamps and are
+stored in UTC. Coupon availability checks and usage increments run inside the
+serialized order transaction, so a finite `maximum_uses` cannot be exceeded by
+concurrent checkout requests.
+
+Successful mutation responses are emitted only after the enclosing SQLite
+transaction commits. A client that receives `200` or `201` can immediately read
+the committed menu, settings, rider, application, inventory, recipe, payment,
+document-policy or tax-invoice state; commit failures cannot be reported as
+success.

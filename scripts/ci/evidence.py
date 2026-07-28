@@ -175,7 +175,7 @@ def coverage() -> int:
             }
         )
     percent = round(covered * 100 / executable, 2) if executable else 0
-    threshold = float(os.environ.get("PYTHON_COVERAGE_MIN", "48"))
+    threshold = float(os.environ.get("PYTHON_COVERAGE_MIN", "56"))
     passed = result.wasSuccessful() and percent >= threshold
     test_metrics = {
         "testsRun": result.testsRun,

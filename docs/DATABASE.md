@@ -39,7 +39,22 @@ variables.
 Critical commerce mutations start with `BEGIN IMMEDIATE`, so slot-capacity,
 order-state, payment, delivery, receipt and inventory decisions serialize
 across independent application processes. The database also enforces one
-`order_completed` inventory movement per order and ingredient.
+`order_completed` inventory movement per order and ingredient. API validation
+rejects non-finite inventory and recipe quantities before persistence because
+SQLite can otherwise store infinity or translate `NaN` into `NULL`. Manual
+stock movements require an operator reason and preserve the balance, movement
+and audit record in one transaction.
+
+Menu partial updates also use `BEGIN IMMEDIATE` because each request reads the
+current row before writing a complete row. Coupon campaign timestamps are
+canonical UTC values. Coupon eligibility, order creation, redemption insertion
+and `used_count` increment share one immediate transaction, preserving campaign
+limits under concurrent checkout.
+
+HTTP mutation handlers build response payloads inside the transaction but write
+the success response only after the database context exits and commits. This
+commit-before-response boundary is required for read-after-write consistency
+and prevents a late commit failure from becoming a false API success.
 
 ## Backup and recovery
 

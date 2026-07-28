@@ -41,6 +41,21 @@
 - Added order identity, cancellation redemption, payment monotonicity,
   financial role isolation and inventory rollback integration coverage, and
   raised the enforced Python coverage floor from 45% to 48%.
+- Required confirmed payment before order or delivery settlement and receipt
+  issuance, added immutable receipt/tax snapshot coverage, and raised the
+  enforced Python coverage floor from 48% to 50%.
+- Serialized rider and merchant reviews, blocked rider deactivation with active
+  deliveries, added concurrent mutation coverage, and raised the enforced
+  Python coverage floor from 50% to 52%.
+- Rejected non-finite inventory, recipe, coordinate and delivery-rate values,
+  required reasons for stock adjustments, made settings audits mutation-aware,
+  and raised the enforced Python coverage floor from 52% to 53%.
+- Serialized menu partial updates, implemented timezone-aware coupon campaign
+  windows and concurrent usage-limit coverage, and raised the enforced Python
+  coverage floor from 53% to 56%.
+- Moved successful mutation responses after SQLite commit for policy, payment,
+  rider, application, inventory, recipe, menu, settings and tax-invoice paths,
+  eliminating stale read-after-write and false-success timing windows.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,

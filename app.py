@@ -321,6 +321,20 @@ def parse_bool(value, default=False) -> bool:
     if normalized in {"false","0","no","off",""}: return False
     raise ValueError("ค่าบูลีนไม่ถูกต้อง")
 
+def finite_float(value, error_message: str) -> float:
+    try: result=float(value)
+    except (TypeError,ValueError): raise ValueError(error_message)
+    if not math.isfinite(result): raise ValueError(error_message)
+    return result
+
+def optional_utc_timestamp(value, error_message: str) -> str:
+    raw=str(value or "").strip()
+    if not raw:return ""
+    try: parsed=datetime.fromisoformat(raw.replace("Z","+00:00"))
+    except ValueError:raise ValueError(error_message)
+    if parsed.tzinfo is None:raise ValueError(error_message)
+    return parsed.astimezone(timezone.utc).isoformat()
+
 def hf_enabled() -> bool:
     return env("HF_ENABLED", "false").lower() == "true" and bool(env("HF_TOKEN"))
 
@@ -955,8 +969,7 @@ def delivery_zones(con):
     return [dict(row) for row in con.execute("SELECT id,name,fee,minimum_order FROM delivery_zones WHERE active=1 ORDER BY fee,name")]
 
 def valid_coordinate(value, low, high):
-    try: value=float(value)
-    except (TypeError,ValueError): raise ValueError("พิกัดตำแหน่งไม่ถูกต้อง")
+    value=finite_float(value,"พิกัดตำแหน่งไม่ถูกต้อง")
     if not low<=value<=high: raise ValueError("พิกัดตำแหน่งไม่ถูกต้อง")
     return value
 
@@ -1138,7 +1151,8 @@ class Handler(SimpleHTTPRequestHandler):
                 raise ValueError("requirement ถูกสร้างเวอร์ชันแล้ว")
             con.execute("INSERT INTO provider_document_requirements(id,provider_id,service_id,subject_type,merchant_type_id,vehicle_type_id,document_type_id,country,effective_from,effective_to,metadata,is_required,is_optional,display_order,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(new_id,row["provider_id"],row["service_id"],row["subject_type"],row["merchant_type_id"],row["vehicle_type_id"],row["document_type_id"],row["country"],now,"",encoded_metadata,int(required),int(optional),order,status,now,now))
             audit(con,role,"version","provider_document_requirement",new_id,{"previous_id":requirement_id,"status":status,"is_required":required,"is_optional":optional,"display_order":order})
-            return self.json({"requirement_id":new_id,"previous_id":requirement_id,"effective_from":now},201)
+            response={"requirement_id":new_id,"previous_id":requirement_id,"effective_from":now}
+        return self.json(response,201)
     def do_GET(self):
         parsed=urlparse(self.path); path, query=parsed.path, parse_qs(parsed.query)
         if path == "/auth/scb/callback":
@@ -1579,7 +1593,8 @@ class Handler(SimpleHTTPRequestHandler):
                     con,current,response,role,"payment_inquiry_paid"
                 )
             elif not paid: con.execute("UPDATE payment_attempts SET updated_at=?,provider_response=? WHERE id=?",(utcnow(),json.dumps(response,ensure_ascii=False),payment_id));audit(con,role,"payment_inquiry_pending","payment_attempt",payment_id)
-            return self.json({"payment":payment_public(row_payment(con,payment_id)),"inquiry":"paid" if paid else "pending"})
+            result={"payment":payment_public(row_payment(con,payment_id)),"inquiry":"paid" if paid else "pending"}
+        return self.json(result)
     def lookup_order(self,form):
         oid=str(form.get("order_id","")).upper().strip(); phone=re.sub(r"[^0-9+]","",str(form.get("phone","")))
         with db() as con:
@@ -1624,16 +1639,18 @@ class Handler(SimpleHTTPRequestHandler):
         self.json({"application":{"id":application["id"],"status":"pending"}},201)
     def update_rider(self,rider_id,form,role):
         if not any(key in form for key in ("active","available")):raise ValueError("ไม่มีข้อมูลไรเดอร์ที่ต้องอัปเดต")
-        with db() as con:
+        with db(immediate=True) as con:
             rider=con.execute("SELECT * FROM riders WHERE id=?",(rider_id,)).fetchone()
             if not rider:return self.json({"error":"ไม่พบไรเดอร์"},404)
             active=int(parse_bool(form.get("active"),bool(rider["active"])));available=int(parse_bool(form.get("available"),bool(rider["available"]))) if active else 0
+            if not active and con.execute("SELECT 1 FROM deliveries WHERE rider_id=? AND status NOT IN ('delivered','cancelled') LIMIT 1",(rider_id,)).fetchone():raise ValueError("ไรเดอร์ยังมีงานจัดส่งที่ต้องโอนย้ายหรือปิดก่อน")
             con.execute("UPDATE riders SET active=?,available=?,updated_at=? WHERE id=?",(active,available,utcnow(),rider_id));audit(con,role,"update","rider",rider_id,{"active":bool(active),"available":bool(available)})
-            return self.json({"rider":dict(con.execute("SELECT * FROM riders WHERE id=?",(rider_id,)).fetchone())})
+            response={"rider":dict(con.execute("SELECT * FROM riders WHERE id=?",(rider_id,)).fetchone())}
+        return self.json(response)
     def review_rider_application(self,application_id,form,role):
         decision=str(form.get("status","")).strip()
         if decision not in {"approved","rejected"}:raise ValueError("สถานะการสมัครไม่ถูกต้อง")
-        with db() as con:
+        with db(immediate=True) as con:
             application=con.execute("SELECT * FROM rider_applications WHERE id=?",(application_id,)).fetchone()
             if not application:return self.json({"error":"ไม่พบใบสมัครไรเดอร์"},404)
             if application["status"]!="pending":raise ValueError("ใบสมัครนี้ได้รับการพิจารณาแล้ว")
@@ -1641,12 +1658,13 @@ class Handler(SimpleHTTPRequestHandler):
             if decision=="approved":
                 rider_id=f"RDR-{secrets.token_hex(3).upper()}"; now=utcnow();con.execute("INSERT INTO riders VALUES (?,?,?,?,?,?,?)",(rider_id,application["name"],application["phone"],1,1,now,now))
             con.execute("UPDATE rider_applications SET status=?,rider_id=?,reviewed_at=?,reviewed_by=? WHERE id=?",(decision,rider_id,utcnow(),role,application_id));audit(con,role,decision,"rider_application",application_id,{"rider_id":rider_id})
-            return self.json({"application":dict(con.execute("SELECT * FROM rider_applications WHERE id=?",(application_id,)).fetchone())})
+            response={"application":dict(con.execute("SELECT * FROM rider_applications WHERE id=?",(application_id,)).fetchone())}
+        return self.json(response)
     def register_merchant(self,form):
         business_name=str(form.get("business_name","")).strip()[:160];owner_name=str(form.get("owner_name","")).strip()[:80];phone=re.sub(r"[^0-9+]","",str(form.get("phone", "")));email=str(form.get("email","")).strip()[:160];address=str(form.get("address","")).strip()[:500];category=str(form.get("category","")).strip()[:80];note=str(form.get("note","")).strip()[:300]
         if len(business_name)<2 or len(owner_name)<2 or not re.fullmatch(r"(?:\+66|0)\d{8,9}",phone) or len(address)<5 or len(category)<2:raise ValueError("กรุณากรอกข้อมูลสมัครร้านค้าให้ครบถ้วน")
         if email and not valid_email(email):raise ValueError("อีเมลไม่ถูกต้อง")
-        with db() as con:
+        with db(immediate=True) as con:
             pending=con.execute("SELECT 1 FROM merchant_applications WHERE phone=? AND status='pending'",(phone,)).fetchone()
             if pending:raise ValueError("มีใบสมัครร้านค้าที่รอตรวจสอบสำหรับเบอร์นี้แล้ว")
             application={"id":f"MAP-{secrets.token_hex(4).upper()}","business_name":business_name,"owner_name":owner_name,"phone":phone,"email":email,"address":address,"category":category,"note":note,"status":"pending","created_at":utcnow()}
@@ -1655,12 +1673,13 @@ class Handler(SimpleHTTPRequestHandler):
     def review_merchant_application(self,application_id,form,role):
         decision=str(form.get("status","")).strip()
         if decision not in {"approved","rejected"}:raise ValueError("สถานะการสมัครไม่ถูกต้อง")
-        with db() as con:
+        with db(immediate=True) as con:
             application=con.execute("SELECT * FROM merchant_applications WHERE id=?",(application_id,)).fetchone()
             if not application:return self.json({"error":"ไม่พบใบสมัครร้านค้า"},404)
             if application["status"]!="pending":raise ValueError("ใบสมัครนี้ได้รับการพิจารณาแล้ว")
             con.execute("UPDATE merchant_applications SET status=?,reviewed_at=?,reviewed_by=? WHERE id=?",(decision,utcnow(),role,application_id));audit(con,role,decision,"merchant_application",application_id)
-            return self.json({"application":dict(con.execute("SELECT * FROM merchant_applications WHERE id=?",(application_id,)).fetchone())})
+            response={"application":dict(con.execute("SELECT * FROM merchant_applications WHERE id=?",(application_id,)).fetchone())}
+        return self.json(response)
     def create_delivery_zone(self,form,role):
         name=str(form.get("name","")).strip()[:80]
         try: fee,minimum=int(form.get("fee",0)),int(form.get("minimum_order",0))
@@ -1671,8 +1690,8 @@ class Handler(SimpleHTTPRequestHandler):
         self.json({"zone":zone},201)
     def create_inventory_item(self,form,role):
         name=str(form.get("name","")).strip()[:100]; unit=str(form.get("unit","")).strip()[:20]
-        try: on_hand,reorder=float(form.get("on_hand",0)),float(form.get("reorder_level",0))
-        except (ValueError,TypeError):raise ValueError("จำนวนสต็อกไม่ถูกต้อง")
+        on_hand=finite_float(form.get("on_hand",0),"จำนวนสต็อกไม่ถูกต้อง")
+        reorder=finite_float(form.get("reorder_level",0),"จำนวนสต็อกไม่ถูกต้อง")
         if len(name)<2 or not unit or on_hand<0 or reorder<0:raise ValueError("ข้อมูลวัตถุดิบไม่ถูกต้อง")
         item={"id":f"INV-{secrets.token_hex(3).upper()}","name":name,"unit":unit,"on_hand":on_hand,"reorder_level":reorder};now=utcnow()
         with db() as con:
@@ -1680,34 +1699,38 @@ class Handler(SimpleHTTPRequestHandler):
         self.json({"item":item},201)
     def adjust_inventory(self,form,role):
         iid=str(form.get("inventory_item_id","")).strip()
-        try: delta=float(form.get("delta",0))
-        except (ValueError,TypeError):raise ValueError("จำนวนปรับสต็อกไม่ถูกต้อง")
+        delta=finite_float(form.get("delta",0),"จำนวนปรับสต็อกไม่ถูกต้อง")
         reason=str(form.get("reason","adjustment")).strip()[:80]; note=str(form.get("note","")).strip()[:200]
-        if not iid or not delta:raise ValueError("กรุณาระบุรายการและจำนวนที่ต้องการปรับ")
+        if not iid or not delta or not reason:raise ValueError("กรุณาระบุรายการ จำนวน และเหตุผลที่ต้องการปรับ")
         with db(immediate=True) as con:
             item=con.execute("SELECT * FROM inventory_items WHERE id=?",(iid,)).fetchone()
             if not item:return self.json({"error":"ไม่พบวัตถุดิบ"},404)
             next_value=float(item["on_hand"])+delta
             if next_value<0:raise ValueError("สต็อกคงเหลือติดลบไม่ได้")
             now=utcnow();con.execute("UPDATE inventory_items SET on_hand=?,updated_at=? WHERE id=?",(next_value,now,iid));con.execute("INSERT INTO inventory_movements VALUES (?,?,?,?,?,?,?,?)",(f"MOV-{secrets.token_hex(4).upper()}",iid,delta,reason,None,note,now,role));audit(con,role,"adjust","inventory_item",iid,{"delta":delta,"reason":reason})
-            return self.json({"item":dict(con.execute("SELECT * FROM inventory_items WHERE id=?",(iid,)).fetchone())})
+            response={"item":dict(con.execute("SELECT * FROM inventory_items WHERE id=?",(iid,)).fetchone())}
+        return self.json(response)
     def set_menu_recipe(self,form,role):
         menu_item_id=str(form.get("menu_item_id","")).strip(); inventory_item_id=str(form.get("inventory_item_id","")).strip()
-        try: quantity=float(form.get("quantity",0))
-        except (ValueError,TypeError):raise ValueError("จำนวนในสูตรไม่ถูกต้อง")
+        quantity=finite_float(form.get("quantity",0),"จำนวนในสูตรไม่ถูกต้อง")
         if quantity<=0:raise ValueError("จำนวนในสูตรต้องมากกว่า 0")
         with db() as con:
             if not con.execute("SELECT 1 FROM menu_items WHERE id=?",(menu_item_id,)).fetchone() or not con.execute("SELECT 1 FROM inventory_items WHERE id=?",(inventory_item_id,)).fetchone():raise ValueError("ไม่พบเมนูหรือวัตถุดิบ")
             con.execute("INSERT INTO menu_recipes VALUES (?,?,?) ON CONFLICT(menu_item_id,inventory_item_id) DO UPDATE SET quantity=excluded.quantity",(menu_item_id,inventory_item_id,quantity));audit(con,role,"set_recipe","menu_item",menu_item_id,{"inventory_item_id":inventory_item_id,"quantity":quantity})
-            return self.json({"recipe":{"menu_item_id":menu_item_id,"inventory_item_id":inventory_item_id,"quantity":quantity}})
+            response={"recipe":{"menu_item_id":menu_item_id,"inventory_item_id":inventory_item_id,"quantity":quantity}}
+        return self.json(response)
     def create_coupon(self,form,role):
-        code=re.sub(r"[^A-Z0-9_-]","",str(form.get("code","")).upper())[:32]; kind=str(form.get("kind","fixed"))
+        code=str(form.get("code","")).strip().upper(); kind=str(form.get("kind","fixed"))
         try:value,minimum,maximum=int(form.get("value",0)),int(form.get("minimum_order",0)),int(form.get("maximum_uses",0))
         except (ValueError,TypeError):raise ValueError("ข้อมูลคูปองไม่ถูกต้อง")
-        if not 3<=len(code)<=32 or kind not in {"fixed","percent"} or value<=0 or minimum<0 or maximum<0 or (kind=="percent" and value>100):raise ValueError("ข้อมูลคูปองไม่ถูกต้อง")
-        coupon={"id":f"CPN-{secrets.token_hex(3).upper()}","code":code,"kind":kind,"value":value,"minimum_order":minimum,"maximum_uses":maximum};
+        starts_at=optional_utc_timestamp(form.get("starts_at"),"ช่วงเวลาคูปองไม่ถูกต้อง")
+        ends_at=optional_utc_timestamp(form.get("ends_at"),"ช่วงเวลาคูปองไม่ถูกต้อง")
+        if not re.fullmatch(r"[A-Z0-9_-]{3,32}",code) or kind not in {"fixed","percent"} or value<=0 or minimum<0 or maximum<0 or (kind=="percent" and value>100):raise ValueError("ข้อมูลคูปองไม่ถูกต้อง")
+        if starts_at and ends_at and starts_at>=ends_at:raise ValueError("เวลาสิ้นสุดคูปองต้องอยู่หลังเวลาเริ่มต้น")
+        if ends_at and ends_at<=utcnow():raise ValueError("เวลาสิ้นสุดคูปองต้องอยู่ในอนาคต")
+        coupon={"id":f"CPN-{secrets.token_hex(3).upper()}","code":code,"kind":kind,"value":value,"minimum_order":minimum,"maximum_uses":maximum,"starts_at":starts_at,"ends_at":ends_at};
         try:
-            with db() as con:con.execute("INSERT INTO coupons VALUES (?,?,?,?,?,?,?,?,?,?,?)",(coupon["id"],code,kind,value,minimum,maximum,0,"","",1,utcnow()));audit(con,role,"create","coupon",coupon["id"],coupon)
+            with db(immediate=True) as con:con.execute("INSERT INTO coupons VALUES (?,?,?,?,?,?,?,?,?,?,?)",(coupon["id"],code,kind,value,minimum,maximum,0,starts_at,ends_at,1,utcnow()));audit(con,role,"create","coupon",coupon["id"],coupon)
         except sqlite3.IntegrityError:raise ValueError("รหัสคูปองนี้มีอยู่แล้ว")
         self.json({"coupon":coupon},201)
     def update_delivery(self,oid,form,role,area):
@@ -1730,7 +1753,7 @@ class Handler(SimpleHTTPRequestHandler):
                     order=row_order(con,oid)
                     if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
                     if order["status"] in {"cancelled","completed"}:raise ValueError("ออเดอร์นี้ปิดแล้ว ไม่สามารถส่งสำเร็จซ้ำได้")
-                    if order["payment"]["method"]=="scb_qr" and order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงิน SCB ก่อนปิดงานจัดส่ง")
+                    if order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงินก่อนปิดงานจัดส่ง")
                 sql+=" WHERE order_id=?";params.append(oid);con.execute(sql,params)
                 if status=="delivered":
                     con.execute("UPDATE orders SET status='completed' WHERE id=?",(oid,)); con.execute("INSERT INTO order_history(order_id,at,status,actor_role,note) VALUES (?,?,?,?,?)",(oid,now,"completed",role,"delivery_delivered")); self.complete_order_effects(con,oid,order,role)
@@ -1743,6 +1766,7 @@ class Handler(SimpleHTTPRequestHandler):
             existing=con.execute("SELECT * FROM pos_receipts WHERE order_id=?",(oid,)).fetchone()
             if existing:return self.json({"receipt":dict(existing)})
             if order["status"]=="cancelled":raise ValueError("ออเดอร์ถูกยกเลิกแล้ว ไม่สามารถออกใบเสร็จได้")
+            if order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงินก่อนออกใบเสร็จ")
             finance=order["financial"]; now=utcnow(); receipt={"id":f"RCT-{secrets.token_hex(4).upper()}","receipt_number":f"MP-{datetime.now():%Y%m%d}-{secrets.token_hex(3).upper()}","order_id":oid,"customer_tax_name":str(form.get("customer_tax_name","")).strip()[:160],"customer_tax_id":re.sub(r"[^0-9]","",str(form.get("customer_tax_id", "")))[:13],"subtotal":finance["subtotal"],"discount":finance["discount"],"delivery_fee":finance["delivery_fee"],"total":finance["total"],"issued_at":now,"issued_by":role}
             con.execute("INSERT INTO pos_receipts VALUES (?,?,?,?,?,?,?,?,?,?,?)",tuple(receipt[key] for key in ("id","order_id","receipt_number","customer_tax_name","customer_tax_id","subtotal","discount","delivery_fee","total","issued_at","issued_by")));audit(con,role,"issue","pos_receipt",receipt["id"],{"order_id":oid})
         return self.json({"receipt":receipt},201)
@@ -1754,8 +1778,10 @@ class Handler(SimpleHTTPRequestHandler):
         self.json({"business_profile":profile})
     def update_delivery_pricing(self,form,role):
         try:
-            base_fee=int(form.get("base_fee",0));per_km_fee=float(form.get("per_km_fee",0));maximum_km=float(form.get("maximum_km",0))
+            base_fee=int(form.get("base_fee",0))
         except (ValueError,TypeError):raise ValueError("อัตราค่าส่งไม่ถูกต้อง")
+        per_km_fee=finite_float(form.get("per_km_fee",0),"อัตราค่าส่งไม่ถูกต้อง")
+        maximum_km=finite_float(form.get("maximum_km",0),"อัตราค่าส่งไม่ถูกต้อง")
         if base_fee<0 or per_km_fee<0 or not 0<maximum_km<=100:raise ValueError("อัตราค่าส่งไม่ถูกต้อง")
         mode=str(form.get("mode","distance")).strip().lower()
         if mode not in {"distance","zone"}: raise ValueError("โหมดค่าส่งไม่ถูกต้อง")
@@ -1767,14 +1793,17 @@ class Handler(SimpleHTTPRequestHandler):
             receipt=con.execute("SELECT * FROM pos_receipts WHERE id=?",(receipt_id,)).fetchone()
             if not receipt:return self.json({"error":"ไม่พบใบเสร็จ"},404)
             existing=con.execute("SELECT * FROM tax_invoices WHERE receipt_id=?",(receipt_id,)).fetchone()
-            if existing:return self.json({"tax_invoice":dict(existing)})
-            profile=config(con)["business_profile"]
-            if not profile.get("vat_registered") or len(profile.get("tax_id", ""))!=13 or not profile.get("legal_name") or not profile.get("address"):raise ValueError("กรุณาตั้งค่าข้อมูลผู้ขายจด VAT ให้ครบก่อนออกใบกำกับภาษี")
-            buyer_name=str(form.get("buyer_name",receipt["customer_tax_name"])).strip()[:160];buyer_tax_id=re.sub(r"[^0-9]","",str(form.get("buyer_tax_id",receipt["customer_tax_id"])))[:13];buyer_address=str(form.get("buyer_address","")).strip()[:500]
-            if not buyer_name:raise ValueError("กรุณาระบุชื่อผู้ซื้อสำหรับใบกำกับภาษี")
-            total=int(receipt["total"]); vat_rate=int(profile["vat_rate"]); before_vat=round(total*100/(100+vat_rate)); vat_amount=total-before_vat; today=datetime.now().strftime("%Y%m%d"); sequence=con.execute("SELECT COUNT(*) FROM tax_invoices WHERE tax_invoice_number LIKE ?",(f"TIV-{today}-%",)).fetchone()[0]+1
-            invoice={"receipt_id":receipt_id,"tax_invoice_number":f"TIV-{today}-{sequence:04d}","seller_name":profile["legal_name"],"seller_tax_id":profile["tax_id"],"seller_address":profile["address"],"seller_branch":profile["branch"],"buyer_name":buyer_name,"buyer_tax_id":buyer_tax_id,"buyer_address":buyer_address,"amount_before_vat":before_vat,"vat_rate":vat_rate,"vat_amount":vat_amount,"total":total,"issued_at":utcnow()}
-            con.execute("INSERT INTO tax_invoices VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",tuple(invoice.values()));audit(con,role,"issue","tax_invoice",invoice["tax_invoice_number"],{"receipt_id":receipt_id});return self.json({"tax_invoice":invoice},201)
+            created=not existing
+            if existing:invoice=dict(existing)
+            else:
+                profile=config(con)["business_profile"]
+                if not profile.get("vat_registered") or len(profile.get("tax_id", ""))!=13 or not profile.get("legal_name") or not profile.get("address"):raise ValueError("กรุณาตั้งค่าข้อมูลผู้ขายจด VAT ให้ครบก่อนออกใบกำกับภาษี")
+                buyer_name=str(form.get("buyer_name",receipt["customer_tax_name"])).strip()[:160];buyer_tax_id=re.sub(r"[^0-9]","",str(form.get("buyer_tax_id",receipt["customer_tax_id"])))[:13];buyer_address=str(form.get("buyer_address","")).strip()[:500]
+                if not buyer_name:raise ValueError("กรุณาระบุชื่อผู้ซื้อสำหรับใบกำกับภาษี")
+                total=int(receipt["total"]); vat_rate=int(profile["vat_rate"]); before_vat=round(total*100/(100+vat_rate)); vat_amount=total-before_vat; today=datetime.now().strftime("%Y%m%d"); sequence=con.execute("SELECT COUNT(*) FROM tax_invoices WHERE tax_invoice_number LIKE ?",(f"TIV-{today}-%",)).fetchone()[0]+1
+                invoice={"receipt_id":receipt_id,"tax_invoice_number":f"TIV-{today}-{sequence:04d}","seller_name":profile["legal_name"],"seller_tax_id":profile["tax_id"],"seller_address":profile["address"],"seller_branch":profile["branch"],"buyer_name":buyer_name,"buyer_tax_id":buyer_tax_id,"buyer_address":buyer_address,"amount_before_vat":before_vat,"vat_rate":vat_rate,"vat_amount":vat_amount,"total":total,"issued_at":utcnow()}
+                con.execute("INSERT INTO tax_invoices VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",tuple(invoice.values()));audit(con,role,"issue","tax_invoice",invoice["tax_invoice_number"],{"receipt_id":receipt_id})
+        return self.json({"tax_invoice":invoice},201 if created else 200)
     def print_receipt(self,con,receipt_id,conf):
         receipt=con.execute("SELECT * FROM pos_receipts WHERE id=?",(receipt_id,)).fetchone()
         if not receipt:return self.html("<h1>Receipt not found</h1>",404)
@@ -1794,11 +1823,11 @@ class Handler(SimpleHTTPRequestHandler):
             if status=="cancelled" and order["payment"]["status"]=="paid":raise ValueError("ออเดอร์นี้ชำระเงินแล้ว กรุณาดำเนินการคืนเงินก่อนยกเลิก")
             if status=="cancelled" and order["status"]=="completed":raise ValueError("ออเดอร์ที่เสร็จแล้วไม่สามารถยกเลิกได้")
             if status=="completed" and order["status"] in {"cancelled","completed"}:raise ValueError("ออเดอร์นี้ปิดแล้ว ไม่สามารถปิดซ้ำได้")
-            if status=="completed" and order["payment"]["method"]=="scb_qr" and order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงิน SCB ก่อนปิดออเดอร์")
             current_payment=order["payment"]["status"]
             if payment and current_payment=="refunded" and payment!="refunded":raise ValueError("การชำระเงินที่คืนเงินแล้วไม่สามารถเปลี่ยนกลับได้")
             if payment=="refunded" and current_payment!="paid":raise ValueError("ต้องยืนยันยอดชำระเงินก่อนบันทึกการคืนเงิน")
             if payment=="pending" and current_payment in {"paid","refunded"}:raise ValueError("สถานะชำระเงินถอยกลับไม่ได้")
+            if status=="completed" and (payment or current_payment)!="paid":raise ValueError("ต้องยืนยันการชำระเงินก่อนปิดออเดอร์")
             transitions={"staff": {("new","confirmed"), ("ready","completed")}, "kitchen": {("confirmed","ready")}}
             if status and area in transitions and (order["status"], status) not in transitions[area]:
                 raise ValueError("ลำดับสถานะไม่ถูกต้อง")
@@ -1836,7 +1865,10 @@ class Handler(SimpleHTTPRequestHandler):
         redemption=con.execute("SELECT coupon_id FROM coupon_redemptions WHERE order_id=?",(oid,)).fetchone()
         if redemption:con.execute("UPDATE coupons SET used_count=MAX(0,used_count-1) WHERE id=?",(redemption["coupon_id"],));con.execute("DELETE FROM coupon_redemptions WHERE order_id=?",(oid,))
     def update_menu_item(self,iid,form,role):
-        with db() as con:
+        supported=("name","description","price","available")
+        changed=[key for key in supported if key in form]
+        if not changed:raise ValueError("ไม่มีข้อมูลเมนูที่รองรับให้อัปเดต")
+        with db(immediate=True) as con:
             item=con.execute("SELECT * FROM menu_items WHERE id=?",(iid,)).fetchone()
             if not item:return self.json({"error":"ไม่พบเมนู"},404)
             name=str(form.get("name",item["name"])).strip()[:80];desc=str(form.get("description",item["description"])).strip()[:160]
@@ -1844,9 +1876,13 @@ class Handler(SimpleHTTPRequestHandler):
             except (TypeError,ValueError):raise ValueError("ราคาไม่ถูกต้อง")
             available=int(parse_bool(form.get("available"),bool(item["available"])))
             if len(name)<2 or not 0<=price<=10000:raise ValueError("ข้อมูลเมนูไม่ถูกต้อง")
-            con.execute("UPDATE menu_items SET name=?,description=?,price=?,available=?,updated_at=? WHERE id=?",(name,desc,price,available,utcnow(),iid));audit(con,role,"update","menu_item",iid)
-            return self.json({"item":{"id":iid,"name":name,"description":desc,"price":price,"available":bool(available)}})
+            con.execute("UPDATE menu_items SET name=?,description=?,price=?,available=?,updated_at=? WHERE id=?",(name,desc,price,available,utcnow(),iid));audit(con,role,"update","menu_item",iid,{"keys":changed})
+            response={"item":{"id":iid,"name":name,"description":desc,"price":price,"available":bool(available)}}
+        return self.json(response)
     def update_settings(self,form,role):
+        supported=("slot_capacity","advance_days")
+        changed=[key for key in supported if key in form]
+        if not changed:raise ValueError("ไม่มีการตั้งค่าที่รองรับให้อัปเดต")
         with db() as con:
             for key, maximum in (("slot_capacity",500),("advance_days",60)):
                 if key in form:
@@ -1854,8 +1890,9 @@ class Handler(SimpleHTTPRequestHandler):
                     except (TypeError,ValueError):raise ValueError("ค่าการตั้งค่าไม่ถูกต้อง")
                     if not 1<=value<=maximum:raise ValueError("ค่าการตั้งค่าไม่ถูกต้อง")
                     set_setting(con,key,value)
-            audit(con,role,"update","settings","store")
-            return self.json({"settings":config(con)})
+            audit(con,role,"update","settings","store",{"keys":changed})
+            response={"settings":config(con)}
+        return self.json(response)
 
 class BoundedHTTPServer(ThreadingHTTPServer):
     daemon_threads=True
