@@ -1,13 +1,22 @@
 # Create these labels in GitHub when repository administration is available.
-- name: "area: docs"
-  color: "0E8A16"
-  description: Documentation and templates
-- name: "area: generator"
+- name: "area: storefront"
   color: "1D76DB"
-  description: Scripts and generated output
-- name: "area: assets"
+  description: Customer menu, order and tracking experience
+- name: "area: delivery"
   color: "FBCA04"
-  description: Brand or printable assets
+  description: Delivery pricing, riders and fulfilment
+- name: "area: merchant"
+  color: "0E8A16"
+  description: Merchant onboarding and partner workflows
+- name: "area: operations"
+  color: "5319E7"
+  description: Owner console, inventory, receipts or reconciliation
+- name: "area: security"
+  color: "B60205"
+  description: Access control, privacy, secrets or payment safety
+- name: "area: docs"
+  color: "0052CC"
+  description: Documentation and API contract
 - name: "good first issue"
   color: "7057FF"
   description: Suitable for a first contribution

@@ -1,31 +1,45 @@
-# Moopiew platform architecture
+# MooPiew platform architecture
 
-## Runtime today
-
-The production runtime is deliberately small and deployable: a dependency-free
-Python HTTP service binds to loopback, Caddy reverse-proxies it on loopback, and
-Cloudflare Tunnel provides the public HTTPS boundary. SQLite is the operational
-database; WAL mode and database transactions protect concurrent order writes.
+## Runtime
 
 ```text
-Customer browser → Cloudflare Tunnel → Caddy :8080 → Python app :8000 → SQLite
-                                                    ↘ static web dashboards
+Customer / rider / merchant browser
+              │ HTTPS
+Cloudflare Tunnel → Caddy :8080 → Python service :8000 → SQLite
+                                      ├─ web/ customer and owner pages
+                                      └─ SSE delivery tracking
 ```
 
-## Platform contracts
+The Python service binds to loopback. Caddy and the tunnel are the only public
+path. SQLite runs with WAL and foreign keys; an order mutation is handled as a
+database transaction.
 
-- `web/` is the customer and operations interface.
-- `packages/` contains TypeScript types, design tokens, config, icons, UI and SDK
-  for future web/mobile services without coupling them to the current runtime.
-- `apps/web/` is a React/Vite migration shell. It consumes the same Python API
-  via `@moopiew/sdk`; it does not create a second order database or API. Its
-  Premium build is published by the current service at `/platform/`.
-- `docs/openapi.yaml` is the API contract; `/api/health` and `/api/ready` are
-  unauthenticated liveness/readiness probes.
-- `data/moopiew.sqlite3` is private service state; it is never committed.
+## Boundaries
 
-## Expansion boundary
+- `app.py` owns API validation, authentication, order transitions, audit writes
+  and schema migration.
+- `web/` is the served customer/owner UI. `/ops.html` is an owner console;
+  public registration pages have no owner credential.
+- `data/moopiew.sqlite3` is private operational state and is never committed.
+- `packages/` and `apps/web/` hold reusable TypeScript UI/SDK migration work;
+  they consume the same API and never create a second source of truth.
+- `docs/openapi.yaml` describes the supported HTTP surface. `/api/health` and
+  `/api/ready` are liveness/readiness probes.
 
-PostgreSQL, Redis, workers and container orchestration may be introduced when
-multi-node deployment is required. They must preserve the existing OpenAPI
-contract and role restrictions rather than bypassing the production service.
+## Delivery flow
+
+```text
+Quote → customer order → queued → assigned → picked_up → on_the_way → delivered
+                         │                         │
+                         └─ owner assigns active rider ─┘
+```
+
+The server calculates a distance fee from the configured store coordinates and
+pricing policy. The tracking API exposes only the minimum status information
+needed by the customer; delivery address and phone never appear in its payload.
+
+## Growth path
+
+Use PostgreSQL, a queue and worker services only when a multi-node deployment
+needs them. Preserve API contracts, auditability and role checks when replacing
+SQLite-backed components.

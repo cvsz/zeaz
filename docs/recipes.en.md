@@ -1,20 +1,22 @@
-# Operating recipes
+# MooPiew operating recipes
 
-## Opening checklist
+## Opening
 
-- Inspect premises, safety equipment and stock levels.
-- Confirm staff coverage, daily priorities and customer bookings/orders.
-- Prepare workstations and record any issue in the shift log.
+- Check food safety, charcoal/grill equipment, packaging and sellable stock.
+- Confirm menu availability, opening hours, delivery range and active riders.
+- Review outstanding orders, rider applications and merchant applications.
 
-## Service recipe
+## Order and delivery
 
-1. Greet, clarify the need and confirm price and timing.
-2. Produce or deliver to the documented standard.
-3. Check quality before hand-off; resolve issues promptly.
-4. Record sales, waste and customer feedback at close.
+1. Verify the order reference, items, fulfilment method and payment state.
+2. Prepare to the documented food standard and mark an order ready only when it
+   is ready for hand-off.
+3. For delivery, assign a verified active rider and update each actual status.
+4. For pickup, match the hand-off to the customer order reference.
+5. Complete once; record waste or inventory adjustments separately with a reason.
 
-## Closing checklist
+## Closing
 
-- Reconcile cash and digital payments.
-- Clean, secure stock and prepare replenishment order.
-- Log maintenance, incidents and tomorrow's priority.
+- Reconcile cash and approved digital payment records against completed orders.
+- Review failed/cancelled deliveries and customer recovery actions.
+- Count critical stock, clean/secure the site and back up the database.

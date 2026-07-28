@@ -1,5 +1,9 @@
-# Suggested milestones
+# Suggested GitHub milestones
 
-1. **v0.1 Foundation** — structure, bilingual templates and shell generator.
-2. **v0.2 Financial workbook** — XLSX output and configurable assumptions.
-3. **v0.3 Publishing** — PDF rendering, branded packs and release automation.
+1. **v1.0 Restaurant foundation** — customer orders, owner operations,
+   delivery, rider/merchant applications, inventory and receipts.
+2. **v1.1 Operational hardening** — role boundaries, backup recovery,
+   reconciliation and incident runbooks.
+3. **v1.2 Trusted payments** — approved SCB Sandbox-to-production rollout
+   behind feature gates.
+4. **v2.0 Partner scale** — scoped merchant portal, multi-store and settlement.

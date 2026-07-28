@@ -1,28 +1,46 @@
-# Business-in-a-Box Generator Framework roadmap
+# MooPiew roadmap
 
-## Purpose
+This roadmap describes the restaurant platform, not a promise that every
+payment or marketplace feature is already enabled. Dates are prioritisation
+guidance and must be reviewed against merchant, legal and operational approval.
 
-Turn one business configuration file into a portable starter kit: a business
-plan, operating recipes, marketing and brand guides, a financial workbook
-seed, and printable brand assets.
+## Delivered foundation
 
-## Delivery sequence
+- Customer ordering for pickup and distance-priced delivery.
+- Configurable menus, inventory recipes, coupons, loyalty, receipts and audit
+  history.
+- Owner operations, rider/merchant applications, rider management and delivery
+  tracking.
+- SQLite backups, Cloudflare Tunnel deployment, health checks and API docs.
+- SCB integration boundaries, Sandbox preflight and inquiry-first payment
+  safety; live SCB payment remains disabled by default.
 
-1. Foundation: repository structure, bilingual roadmap, project policies.
-2. Core content: business plan, recipes, marketing and brand templates in
-   English and Thai.
-3. Generator: configuration schema, templates and shell scripts.
-4. Automation: validation, packaging and release workflow.
-5. Polish: example assets and release-ready archives.
+## Next: operational hardening
+
+1. Complete store master data review, delivery-service levels and rider
+   verification checklist.
+2. Add role-specific authenticated rider workflows rather than sharing owner
+   operations access.
+3. Add export/reconciliation reports, retention controls and incident runbooks.
+4. Exercise backup restore, cancellation/refund and failed-delivery scenarios.
+
+## Next: trusted payments and partners
+
+1. Complete SCB Sandbox QR end-to-end using approved merchant credentials,
+   transaction inquiry and callback signature rules.
+2. Obtain production approval, rotate secrets and launch behind feature gates.
+3. Give approved merchants a scoped portal and multi-store configuration;
+   preserve owner approval and audit trails.
+
+## Later: scale
+
+- Multi-store catalogue, service areas, commissions and settlement reporting.
+- Native rider/customer apps backed by the same API contract.
+- Move to managed relational storage and workers only when load and recovery
+  requirements justify it.
 
 ## Definition of done
 
-`./scripts/generate.sh examples/cafe.yaml output/cafe` creates a complete,
-reviewable business kit without changing source templates. `./scripts/package.sh
-output/cafe` produces a ZIP suitable for hand-off.
-
-## Next enhancements
-
-- Add locale-specific tax and labour assumptions.
-- Generate XLSX workbooks from the financial CSV templates.
-- Add PDF rendering and a web-based configuration editor.
+A roadmap item is complete only when its owner, security boundary, test path,
+operational metric and rollback path are documented and verified in a
+non-production environment.

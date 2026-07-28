@@ -1,5 +1,9 @@
 # SCB application registration — MooPiew
 
+> **Status: held / feature-gated.** Do not enable SCB checkout in production
+> until the merchant has SCB approval and a successful Sandbox payment has been
+> verified by the corresponding Transaction Inquiry API.
+
 Use these values in the SCB developer/merchant application form.
 
 | Field | Value |
@@ -104,7 +108,7 @@ shared outside the approved secret store.
 
 ## Application implementation
 
-When `PAYMENTS_ENABLED=true` and `SCB_ENABLED=true`, the preorder API exposes
+When `PAYMENTS_ENABLED=true` and `SCB_ENABLED=true`, the ordering API exposes
 SCB QR as an opt-in payment method. It creates one persistent payment attempt
 per order, stores SCB's order/reference values and the base64 QR image, and
 returns that image only to the customer who proves the order phone number.

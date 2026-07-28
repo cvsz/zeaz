@@ -14,8 +14,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Create source archive
-        run: git archive --format=zip --output business-in-a-box-${{ github.ref_name }}.zip HEAD
+        run: git archive --format=zip --output moopiew-${{ github.ref_name }}.zip HEAD
       - uses: actions/upload-artifact@v4
         with:
-          name: business-in-a-box
-          path: business-in-a-box-*.zip
+          name: moopiew-source
+          path: moopiew-*.zip

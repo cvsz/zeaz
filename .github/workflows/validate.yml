@@ -1,4 +1,4 @@
-name: Validate framework
+name: Validate MooPiew
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 jobs:
-  shell-and-generation:
+  validation:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,7 +14,7 @@ jobs:
         run: bash -n scripts/*.sh
       - name: Check backend syntax
         run: python3 -m py_compile app.py
-      - name: Generate example kit
+      - name: Generate example business kit
         run: ./scripts/generate.sh examples/cafe.yaml /tmp/cafe-kit
-      - name: Package example kit
+      - name: Package example business kit
         run: ./scripts/package.sh /tmp/cafe-kit /tmp/cafe-kit.zip

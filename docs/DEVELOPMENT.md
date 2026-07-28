@@ -1,36 +1,38 @@
 # Development workflow
 
-## Run the current platform
+## Run locally
 
 ```bash
-ADMIN_KEY=owner EMPLOYEE_KEY=staff KITCHEN_KEY=kitchen ./scripts/start.sh
+ADMIN_KEY='local-owner-key' ./scripts/start.sh
 ```
 
-Use `/`, `/dashboard.html`, `/admin.html`, `/ops.html` and
-`/ops.html?role=kitchen`. Production uses `.env.production`; never commit it.
+Use `/` for the customer flow, `/ops.html` for owner operations,
+`/rider-register.html` for rider applications, and `/merchant-register.html`
+for merchant applications. Do not use production keys locally.
 
-## Checks
+## Verify a change
 
 ```bash
+python3 -m py_compile app.py
 ./scripts/migrate.sh
 ./scripts/health-check.sh
 ./scripts/ci/test.sh
 ```
 
-The repository is an npm workspace for reusable TypeScript packages. Run
-`npm install` once, then `npm run typecheck` to validate every shared package.
+For workflow changes, test at least one pickup and one delivery order, a rider
+application, a merchant application, and the owner approval path against a
+clean development database. Verify delivery pricing uses configured coordinates
+and that tracking output does not disclose a customer's address or phone.
 
-## Platform web release
+## TypeScript packages
 
-`apps/web/` is the Premium React presentation layer. It reads the same menu
-API as the Python app, so the API/database remain the single source of truth.
+The repository is an npm workspace for UI, icons, config, design tokens, types
+and SDK packages. Run `npm install` once, then `npm run typecheck`. The premium
+React shell at `apps/web/` uses the existing API and can be published to
+`web/platform/`; it must not add a separate order database.
 
-```bash
-npm run build
-mkdir -p web/platform
-cp -R apps/web/dist/. web/platform/
-```
+## Configuration hygiene
 
-The final files are served at `/platform/`; check both `/platform/` and
-`/api/menu` before release. Use `VITE_API_URL` only when running the React app
-on a different origin.
+Start from examples, keep populated `.env.production`, `.env.payment`,
+`.env.cloudflare`, certificate material and database files ignored, and use the
+owner console or a local master-data import for business-specific values.

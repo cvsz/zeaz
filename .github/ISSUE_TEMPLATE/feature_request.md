@@ -1,10 +1,20 @@
 ---
 name: Feature request
-about: Suggest an improvement to the generator
+about: Propose an improvement to MooPiew
+labels: enhancement
 ---
 
-## Problem
+## Problem to solve
 
-## Proposed solution
+## Proposed outcome
 
-## Alternatives considered
+## Users affected
+
+- [ ] Customer
+- [ ] Owner/operator
+- [ ] Rider
+- [ ] Merchant partner
+
+## Safety and operations
+
+Describe privacy, payment, fulfilment, data-retention or rollback impact.

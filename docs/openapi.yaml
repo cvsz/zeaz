@@ -1,37 +1,67 @@
 openapi: 3.1.0
 info:
-  title: Moo Piw Piw API
-  version: 1.0.0
-  description: Preorder and restaurant operations API. Protected endpoints require their role-specific API key header.
+  title: MooPiew API
+  version: 1.1.0
+  description: >-
+    Restaurant ordering, delivery and owner operations API. Public registration
+    endpoints accept only application data. Owner operations require X-Admin-Key.
+servers:
+  - url: https://moopiew.zeaz.dev
 paths:
   /api/health:
     get: {summary: Liveness probe, responses: {'200': {description: Service process is healthy}}}
   /api/ready:
     get: {summary: Readiness probe, responses: {'200': {description: Database is reachable}}}
   /api/status:
-    get: {summary: Public operational status without secrets, responses: {'200': {description: Service and dependency status}}}
+    get: {summary: Public operational status without secrets, responses: {'200': {description: Service status}}}
   /api/menu:
-    get: {summary: Get live storefront data including menu, pickup capacity, brand theme and navigation links (visual preview at /menu-preview.html), responses: {'200': {description: Live storefront payload}}}
+    get: {summary: Get live menu and storefront configuration, responses: {'200': {description: Storefront payload}}}
+  /api/delivery/quote:
+    post: {summary: Calculate a server-side delivery quote from configured store pricing, requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryQuoteRequest'}}}}, responses: {'200': {description: Quote}, '422': {description: Outside service range or invalid location}}}
   /api/orders:
-    post: {summary: Create preorder, responses: {'201': {description: Created}}}
+    post: {summary: Create pickup or delivery order, responses: {'201': {description: Created}, '422': {description: Invalid menu, delivery or pricing data}}}
   /api/order-lookup:
-    post: {summary: Look up an order using ID and phone, responses: {'200': {description: Found}}}
+    post: {summary: Look up an order using its ID and matching customer phone, responses: {'200': {description: Found}, '404': {description: Not found}}}
+  /api/tracking/{trackingCode}:
+    get: {summary: Get privacy-minimised delivery tracking status, parameters: [{name: trackingCode, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Tracking status}}}
+  /api/tracking/{trackingCode}/events:
+    get: {summary: Server-sent delivery status events, parameters: [{name: trackingCode, in: path, required: true, schema: {type: string}}], responses: {'200': {description: text/event-stream}}}
+  /api/riders/register:
+    post: {summary: Submit a rider application, responses: {'201': {description: Application received}}}
+  /api/merchants/register:
+    post: {summary: Submit a merchant application, responses: {'201': {description: Application received}}}
   /api/payments/scb/config:
-    get: {summary: Public SCB QR capability flag; never exposes credentials, responses: {'200': {description: Payment capability}}}
+    get: {summary: Public SCB capability flags only; never returns credentials, responses: {'200': {description: Capability}}}
   /api/orders/{orderId}/payments/scb/qr:
-    post: {summary: Create an SCB Mae Manee QR for an existing SCB QR order; matching customer phone required, parameters: [{name: orderId, in: path, required: true, schema: {type: string}}], responses: {'201': {description: QR payment attempt}}}
+    post: {summary: Create opt-in SCB QR payment attempt for an authorised order, parameters: [{name: orderId, in: path, required: true, schema: {type: string}}], responses: {'201': {description: QR attempt}, '503': {description: Payment feature disabled or unavailable}}}
   /api/scb/payment/confirm:
-    post: {summary: SCB payment-confirmation callback; payment is verified by a server-side SCB inquiry before state changes, responses: {'200': {description: Verified payment state}, '401': {description: Invalid optional callback signature}, '503': {description: SCB inquiry is unavailable}}}
-  /api/admin/payments/scb/{paymentId}/inquire:
-    post: {summary: Owner-only fallback SCB payment inquiry, security: [{adminKey: []}], parameters: [{name: paymentId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Payment status}}}
-  /api/admin/dashboard:
-    get: {summary: Owner dashboard, security: [{adminKey: []}], responses: {'200': {description: Dashboard}}}
-  /api/staff/dashboard:
-    get: {summary: Staff pickup queue, security: [{employeeKey: []}], responses: {'200': {description: Queue}}}
-  /api/kitchen/dashboard:
-    get: {summary: Kitchen pickup queue, security: [{kitchenKey: []}], responses: {'200': {description: Queue}}}
+    post: {summary: SCB callback trigger; server verifies provider inquiry before settlement, responses: {'200': {description: Verified state}, '401': {description: Invalid signature}}}
+  /api/admin/operations:
+    get: {summary: Owner operational aggregate, security: [{adminKey: []}], responses: {'200': {description: Operations payload}}}
+  /api/admin/menu:
+    get: {summary: Owner menu management data, security: [{adminKey: []}], responses: {'200': {description: Menu data}}}
+    post: {summary: Create menu item, security: [{adminKey: []}], responses: {'201': {description: Created}}}
+  /api/admin/delivery-pricing:
+    post: {summary: Update delivery fee policy and store coordinates, security: [{adminKey: []}], responses: {'200': {description: Updated}}}
+  /api/admin/delivery-zones:
+    post: {summary: Create delivery zone, security: [{adminKey: []}], responses: {'201': {description: Created}}}
+  /api/admin/rider-applications/{applicationId}:
+    patch: {summary: Approve or reject rider application, security: [{adminKey: []}], parameters: [{name: applicationId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Reviewed}}}
+  /api/admin/merchant-applications/{applicationId}:
+    patch: {summary: Approve or reject merchant application, security: [{adminKey: []}], parameters: [{name: applicationId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Reviewed}}}
+  /api/admin/riders/{riderId}:
+    patch: {summary: Update rider activation or availability, security: [{adminKey: []}], parameters: [{name: riderId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Updated}}}
+  /api/admin/orders/{orderId}/receipt:
+    post: {summary: Issue receipt for confirmed order, security: [{adminKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {type: string}}], responses: {'201': {description: Receipt}}}
 components:
   securitySchemes:
     adminKey: {type: apiKey, in: header, name: X-Admin-Key}
-    employeeKey: {type: apiKey, in: header, name: X-Employee-Key}
-    kitchenKey: {type: apiKey, in: header, name: X-Kitchen-Key}
+  schemas:
+    DeliveryQuoteRequest:
+      type: object
+      required: [subtotal, latitude, longitude]
+      properties:
+        zone_id: {type: string}
+        subtotal: {type: number, minimum: 0}
+        latitude: {type: number, minimum: -90, maximum: 90}
+        longitude: {type: number, minimum: -180, maximum: 180}

@@ -1,59 +1,69 @@
-# หมูปิ้ววว — Restaurant operations
+# MooPiew
 
-เว็บแอปสั่งหมูปิ้งล่วงหน้าและระบบปฏิบัติการร้านสำหรับธุรกิจขนาดเล็ก: ลูกค้าจองสินค้า,
-Staff ยืนยันและส่งมอบ, Kitchen ทำคิว และ Owner จัดการร้านจากคนละ dashboard.
+MooPiew is a Thai grilled-pork restaurant commerce and delivery platform. It
+provides a customer storefront, order lifecycle, distance-based delivery,
+rider and merchant onboarding, inventory, loyalty, receipts, and an owner
+operations console from one SQLite-backed service.
+
+Live service: [moopiew.zeaz.dev](https://moopiew.zeaz.dev/) · API menu:
+[`/api/menu`](https://moopiew.zeaz.dev/api/menu) · service status:
+[`/api/status`](https://moopiew.zeaz.dev/api/status).
+
+## What is available
+
+- Customer ordering for pickup or delivery, including delivery quotes and live
+  delivery tracking.
+- Public rider and merchant application forms; owner review, rider activation,
+  availability and delivery assignment.
+- Menu ordering, coupons, customer loyalty, inventory recipes and stock
+  movements.
+- Owner operations for business profile, menus, delivery pricing/zones,
+  applications, riders, orders, receipts and tax invoices.
+- Private SQLite data with audit history, backups, Cloudflare Tunnel deployment
+  and operational health checks.
+
+SCB payment support is intentionally disabled until approved credentials,
+certificate material and successful Sandbox verification are configured. See
+[the SCB guide](docs/scb-application.md); never commit payment credentials.
 
 ## Run locally
 
-ต้องใช้ Python 3.10 ขึ้นไป และต้องใช้ secret แยกกันทุกบทบาท:
-
 ```bash
-ADMIN_KEY='owner-secret' EMPLOYEE_KEY='staff-secret' KITCHEN_KEY='kitchen-secret' ./scripts/start.sh
+ADMIN_KEY='replace-with-a-strong-local-key' ./scripts/start.sh
 ```
 
-เปิด [http://127.0.0.1:8000](http://127.0.0.1:8000) เพื่อลูกค้าสั่งล่วงหน้า,
-`/dashboard.html` เป็นทางเข้ารวม: `/admin.html` สำหรับ Owner, `/ops.html` สำหรับ Staff และ `/ops.html?role=kitchen` สำหรับ Kitchen.
+Open `http://127.0.0.1:8000/` for customers and
+`http://127.0.0.1:8000/ops.html` for the owner console. Production values live
+only in ignored `.env.production` / `.env.payment` files.
 
-Premium React platform shell อยู่ที่ `/platform/` และใช้ API/database เดียวกับหน้า preorder ปัจจุบัน.
+## Main routes
 
-## Features
+| Audience | Route |
+| --- | --- |
+| Customer storefront | `/` |
+| Owner operations | `/ops.html` |
+| Rider registration | `/rider-register.html` |
+| Merchant registration | `/merchant-register.html` |
+| Delivery tracking | `/api/tracking/{trackingCode}` |
+| OpenAPI reference | `docs/openapi.yaml` |
 
-- SQLite database (`data/moopiew.sqlite3`) พร้อม WAL, foreign keys และ atomic transactions
-- import ข้อมูล `data/orders.json` และ `data/settings.json` เดิมอัตโนมัติครั้งแรก โดยไม่ลบต้นฉบับ
-- pickup capacity, customer order lookup/cancellation และ payment state
-- `AUTO_CONFIRM_ORDERS=true` ยืนยันการรับออเดอร์โดยอัตโนมัติ แต่ไม่ยืนยันว่าได้รับชำระเงิน
-- Owner dashboard: ยอดจอง เมนู ความจุ การชำระเงิน และ audit log
-- Staff dashboard: ยืนยันและส่งมอบออเดอร์
-- Kitchen dashboard: คิวที่ต้องเตรียมและเปลี่ยนเป็นพร้อมรับ
-- RBAC แยก `ADMIN_KEY`, `EMPLOYEE_KEY`, `KITCHEN_KEY`, rate limiting และ security headers
+Protected owner APIs require `X-Admin-Key`. Browser pages must not embed this
+key in source control, local storage, or a public URL.
 
-## API
+## Quality checks
 
-| Method | Endpoint | Access |
-| --- | --- | --- |
-| `GET` | `/api/menu` | Public |
-| `POST` | `/api/orders` | Public |
-| `POST` | `/api/order-lookup` | Public |
-| `POST` | `/api/orders/:id/cancel` | Public with matching phone |
-| `GET` | `/api/admin/dashboard` | `X-Admin-Key` |
-| `PATCH` | `/api/admin/orders/:id` | `X-Admin-Key` |
-| `GET` | `/api/staff/dashboard` | `X-Employee-Key` |
-| `PATCH` | `/api/staff/orders/:id` | `X-Employee-Key` |
-| `GET` | `/api/kitchen/dashboard` | `X-Kitchen-Key` |
-| `PATCH` | `/api/kitchen/orders/:id` | `X-Kitchen-Key` |
+```bash
+python3 -m py_compile app.py
+./scripts/migrate.sh
+./scripts/health-check.sh
+./scripts/ci/test.sh
+```
 
-รายละเอียด request/response อยู่ใน [OpenAPI contract](docs/openapi.yaml).
+Read [development](docs/DEVELOPMENT.md), [architecture](docs/ARCHITECTURE.md),
+[database operations](docs/DATABASE.md), [owner operations](docs/operations.md),
+[security controls](docs/security.th.md), and the bilingual roadmap
+([English](docs/roadmap.en.md) / [ไทย](docs/roadmap.th.md)) before deploying.
 
-## Operations and deployment
-
-อ่าน [คู่มือปฏิบัติการ](docs/operations.th.md) สำหรับสิทธิ์ การสำรอง และลำดับงานประจำวัน.
-ใช้ `./scripts/backup-database.sh` เพื่อสร้าง SQLite backup ที่ permission ปลอดภัย.
-
-Production binds the app to loopback and publishes it only through the Cloudflare Tunnel. Terraform,
-cloudflared and the reverse proxy instructions are in [Cloudflare deployment guide](docs/cloudflare-deployment.md).
-อ่าน [security controls](docs/security.th.md) ก่อนเปลี่ยน `HOST`, secrets หรือ systemd.
-
-## Repository extras
-
-โฟลเดอร์ `docs/`, `templates/`, `excel/`, และ `scripts/generate.sh` เก็บ Business-in-a-Box framework
-ที่นำกลับมาใช้กับธุรกิจอื่นได้ ส่วนแอปที่ใช้งานจริงอยู่ใน `app.py` และ `web/`.
+The reusable `templates/`, `excel/`, and generation scripts remain available
+for business-kit work, but they are not a replacement for MooPiew's live
+operational database.

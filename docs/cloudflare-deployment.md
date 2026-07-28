@@ -5,7 +5,7 @@ The project uses the same split of responsibilities as z-platform:
 1. Terraform owns the proxied DNS CNAME for `moopiew.zeaz.dev`.
 2. An existing Cloudflare Tunnel owns the public-to-private connection.
 3. `cloudflared` forwards that hostname to Caddy on `127.0.0.1:8080`.
-4. Caddy proxies to the preorder server on `127.0.0.1:8000`.
+4. Caddy proxies to the MooPiew service on `127.0.0.1:8000`.
 
 ## Required operator values
 
@@ -42,8 +42,10 @@ For a durable user service, copy `deploy/systemd/moopiew.service`,
 `deploy/systemd/moopiew-cloudflared.service` to `~/.config/systemd/user/`, then
 run `systemctl --user daemon-reload` and `systemctl --user enable --now
 moopiew.service moopiew-proxy.service moopiew-cloudflared.service`. Create
-`.env.production` from its example and set a unique `ADMIN_KEY` first. Verify all
-paths with `./scripts/production-check.sh`.
+`.env.production` from its example and set a unique `ADMIN_KEY` first. Keep
+payment and Cloudflare credentials in separate ignored files. Verify all paths
+with `./scripts/production-check.sh`.
 
-Then verify `https://moopiew.zeaz.dev/api/menu`. A 530 response indicates that
-the proxied DNS name exists but Cloudflare cannot reach a healthy tunnel.
+Then verify `https://moopiew.zeaz.dev/api/menu`, `/api/ready`, and the customer
+storefront. A 530 response indicates that the proxied DNS name exists but
+Cloudflare cannot reach a healthy tunnel.

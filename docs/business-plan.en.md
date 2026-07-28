@@ -1,32 +1,29 @@
-# Business plan template
+# MooPiew operating business plan
 
 ## Snapshot
 
-| Field | Decision |
+| Field | Current direction |
 | --- | --- |
-| Business name | `{{BUSINESS_NAME}}` |
-| Category | `{{CATEGORY}}` |
-| Location | `{{LOCATION}}` |
-| Target customer | `{{TARGET_CUSTOMER}}` |
-
-## Offer and value proposition
-
-Describe the customer problem, your core offer, price range and the reason a
-customer should choose you. Keep this to one page and test it with customers.
+| Brand | MooPiew / หมูปิ้ววว |
+| Offer | Charcoal-grilled pork, sticky rice and pickup/delivery ordering |
+| Customers | Nearby customers seeking a fast, dependable Thai meal |
+| Channel | Storefront, owner-managed delivery and approved merchant partners |
 
 ## Operating model
 
-Define opening hours, suppliers, equipment, staff roles, capacity and the
-daily quality checks needed to deliver consistently.
+Keep store master data, hours, service radius, menu availability and rider
+capacity current. Prices, fees and promotions must be managed from approved
+business data, never hard-coded into marketing artwork. Validate supplier,
+food-safety, tax, labour and delivery requirements with qualified local advice.
 
-## Economics
+## Economics and metrics
 
-Record start-up costs, monthly fixed costs, gross margin and break-even sales.
-Use `excel/financial-model.csv` as the initial worksheet structure; validate
-all local tax, licence and employment assumptions with a qualified adviser.
+Review daily gross sales, item margin, delivery contribution, cancellation
+rate, food waste, rider utilisation, repeat rate and cash/digital reconciliation.
+Use the financial workbook as a planning aid; it is not accounting or tax advice.
 
-## 90-day launch plan
+## First 90 days
 
-1. Validate demand with 10 customer conversations and a small paid test.
-2. Finalise suppliers, pricing, permits and operating checklist.
-3. Launch a limited offer, capture feedback and review weekly metrics.
+1. Validate product quality, peak-hour capacity and delivery radius.
+2. Measure repeat purchase and improve the smallest reliable service area first.
+3. Onboard partners only after merchant/rider review and clear settlement terms.

@@ -1,57 +1,56 @@
-# MooPiew operations
+# Owner operations
 
-`/ops.html` is the owner operations console. Enter the admin key there; it is
-sent only as an ASCII-safe Base64 request header and is never stored by the
-page.
+Open `/ops.html` with the `X-Admin-Key` configured for the service. The key is
+an owner secret: do not place it in a public client, URL, screenshot or Git.
 
-## Fulfilment
+## First-time setup
 
-- Customers choose **pickup** or **delivery** at checkout.
-- Delivery areas define a fixed fee and optional minimum order. The default
-  `central` area is 30 THB and should be replaced with the shop's actual zone.
-- Each delivery receives an opaque tracking code. An order lookup opens a
-  Server-Sent Events live tracking stream at
-  `/api/tracking/{tracking_code}/events`; its public payload intentionally
-  excludes the delivery address and phone number. The customer page requests a
-  browser notification permission once and can alert on live status changes.
-- Owners can add riders, assign a rider, and progress the state from queued to
-  picked up, on the way, and delivered. Marking delivered completes the order.
+1. Complete the business profile before issuing tax invoices.
+2. Configure the store coordinates, base fee, per-kilometre fee, maximum range
+   and delivery zones. The server calculates fees; do not rely on a browser
+   calculation.
+3. Set menu items and their display order, then create inventory items and
+   recipes where stock needs automatic deduction.
+4. Review rider and merchant applications. Approve only after verifying the
+   submitted contact and operational details; activate riders separately.
+5. Create coupons only with a documented campaign owner, limits and expiry.
 
-## Inventory and recipes
+Keep populated `templates/store-master-data.json` local. It may contain store
+coordinates, contacts or tax information and must not be committed.
 
-- Add ingredients and record adjustments in the operations console.
-- Set recipes with `POST /api/admin/inventory/recipes` using `menu_item_id`,
-  `inventory_item_id`, and `quantity`.
-- When an order is completed, recipe quantities are deducted once and stored
-  as immutable inventory movements. Review thresholds are available through
-`GET /api/admin/operations`.
+## Daily flow
 
-For onboarding, copy `templates/store-master-data.json`, fill in verified shop
-details, and use it as the source of truth while entering the same records in
-`/ops.html`. Do not commit the completed file because it can contain personal
-phone numbers and tax-registration information.
+1. Monitor new orders and verify their payment state according to the selected
+   payment method.
+2. For delivery, assign an active available rider and progress the status:
+   `queued` → `assigned` → `picked_up` → `on_the_way` → `delivered`.
+3. For pickup, prepare and hand over only after checking the order reference.
+4. Complete the order once. This performs the applicable loyalty and inventory
+   movements; avoid manually repeating those actions.
+5. Issue a receipt or VAT invoice only from the confirmed order/receipt record.
 
-## Customers, coupons, POS
+Cancellation is an exception path. Confirm the reason before cancelling because
+the platform restores eligible coupon/loyalty state only once.
 
-- A customer record is created from their phone number. Completed orders earn
-  one point per 25 THB after discount and delivery fee. Customers can redeem
-  points at checkout at 1 point = 1 THB; a cancelled order returns any
-  reserved points and coupon redemption atomically.
-- Coupons can be fixed THB discounts or percentages, with optional minimum
-  order and redemption limit. Validation and redemption happen atomically when
-  the order is created.
-- Issue an immutable receipt from the operations page or
-  `POST /api/admin/orders/{order_id}/receipt`. It stores totals, optional
-  customer tax details, issue time, and issuer. Set the seller legal name,
-  address, 13-digit tax ID and VAT registration in the operations page before
-  issuing a sequential tax invoice. The printable receipt is protected by the
-  admin key. Have an accountant validate the legal workflow, retention period,
-  and any e-Tax Invoice / e-Receipt submission obligations before production.
+## Delivery pricing and tracking
 
-## Database and backup
+Distance pricing is configurable: `ceil(base fee + per-km fee × calculated
+distance)`, subject to the configured range. A missing store coordinate or an
+out-of-range customer location must block delivery checkout rather than silently
+charging a guessed fee. Customer tracking uses a tracking code and server-sent
+updates; it exposes status, not private delivery details.
 
-The supported runtime is a single application instance using SQLite at
-`/home/cvsz/zeaz/data/moopiew.sqlite3`. Both `DATA_DIR` and `DATABASE_PATH`
-are explicit in `.env.production`; the systemd service permits writes only to
-that data directory. Back up the complete `data/` directory while the service
-is stopped, or use SQLite's online backup facility.
+## Payment controls
+
+Cash and transfer reconciliation remain an owner process. SCB QR/EASY features
+must stay disabled until SCB approval, Sandbox verification, mTLS material when
+required, and provider transaction inquiry are working. A QR scan, redirect or
+callback alone is never proof of payment.
+
+## End-of-day
+
+- Review completed, cancelled and failed orders; reconcile cash/digital totals.
+- Review rider assignments, unavailable riders and delivery failures.
+- Count high-value inventory and record an auditable adjustment when needed.
+- Run `./scripts/backup-database.sh` and confirm the backup is stored securely.
+- Review the audit log for unexpected owner changes.
