@@ -22,5 +22,16 @@ reverse proxy; it runs as the selected user with only
 `CAP_NET_BIND_SERVICE`. Public access must be protected with Cloudflare Access.
 
 Release archives are produced only after validation and container builds by
-`.github/workflows/release.yml` and include a SHA-256 manifest. Signing,
-provenance attestation, and image publication remain production-readiness gaps.
+`.github/workflows/release.yml`. Each release bundle includes npm and Python
+CycloneDX SBOMs plus a SHA-256 manifest, and GitHub signs a Sigstore-backed SLSA
+build-provenance attestation for every listed artifact. Verify a downloaded
+bundle before deployment:
+
+```bash
+sha256sum --check moopiew-<version>.sha256
+gh attestation verify moopiew-<version>.zip --repo cvsz/zeaz
+```
+
+Rollback by redeploying the previously verified source archive and restoring a
+compatible verified database backup when a migration was applied. Automated
+container image publication remains a production-readiness gap.

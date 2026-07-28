@@ -2,6 +2,13 @@
 
 ## 1.0.0 — 2026-07-28
 
+- Added the live engineering dashboard, CI evidence reports, Docker deployment,
+  Kubernetes manifests, and the `piewdash.zeaz.dev` Cloudflare route.
+- Consolidated SQLite schema ownership into checksummed migrations with
+  concurrency and legacy-upgrade regression coverage.
+- Added strict OpenAPI route validation, rendered Kubernetes schema validation,
+  Python/npm vulnerability audits, CycloneDX release SBOMs, and signed build
+  provenance.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,
