@@ -111,6 +111,15 @@ assert "Object.fromEntries(Object.entries(values).filter(([, value]) => value))"
 assert "A required AI provider key is missing" not in source
 print("Optional AI provider credential sync checks passed.")
 PY
+ROOT="$ROOT" python3 - <<'PY'
+import os
+from pathlib import Path
+
+caddy = (Path(os.environ["ROOT"]) / "deploy/caddy/Caddyfile").read_text(encoding="utf-8")
+assert "admin 127.0.0.1:2019" in caddy
+assert 'geolocation=(self)' in caddy
+print("Reverse proxy reload and geolocation policy checks passed.")
+PY
 if [[ -d "$ROOT/node_modules" ]]; then
   (cd "$ROOT" && npm run typecheck && npm run build)
   cmp --silent "$ROOT/apps/web/dist/index.html" "$ROOT/web/platform/index.html" || {
