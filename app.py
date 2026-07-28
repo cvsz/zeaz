@@ -1489,7 +1489,8 @@ class Handler(SimpleHTTPRequestHandler):
             if order["payment"]["status"] == "paid":raise ValueError("ออเดอร์นี้ชำระเงินแล้ว กรุณาติดต่อร้านเพื่อดำเนินการคืนเงิน")
             now=utcnow();self.reverse_order_redemptions(con,oid,order,phone,now)
             con.execute("UPDATE orders SET status='cancelled' WHERE id=?",(oid,));con.execute("UPDATE payment_attempts SET status='cancelled',updated_at=? WHERE order_id=? AND status IN ('created','pending')",(now,oid));con.execute("INSERT INTO order_history(order_id,at,status,actor_role) VALUES (?,?,?,?)",(oid,now,"cancelled","customer"));audit(con,"customer","cancel","order",oid)
-            return self.json({"order":public_order(row_order(con,oid))})
+            response={"order":public_order(row_order(con,oid))}
+        return self.json(response)
     def create_menu_item(self,form,role):
         name,description=str(form.get("name","")).strip(),str(form.get("description","")).strip()[:160]
         try:price=int(form.get("price",0))
@@ -1625,7 +1626,8 @@ class Handler(SimpleHTTPRequestHandler):
                 sql+=" WHERE order_id=?";params.append(oid);con.execute(sql,params)
                 if status=="delivered":
                     con.execute("UPDATE orders SET status='completed' WHERE id=?",(oid,)); con.execute("INSERT INTO order_history(order_id,at,status,actor_role,note) VALUES (?,?,?,?,?)",(oid,now,"completed",role,"delivery_delivered")); self.complete_order_effects(con,oid,order,role)
-            audit(con,role,"delivery_update","delivery",oid,{"status":status,"rider_id":rider_id});return self.json({"order":row_order(con,oid)})
+            audit(con,role,"delivery_update","delivery",oid,{"status":status,"rider_id":rider_id});response={"order":row_order(con,oid)}
+        return self.json(response)
     def issue_receipt(self,oid,form,role):
         with db(immediate=True) as con:
             order=row_order(con,oid)
@@ -1634,7 +1636,8 @@ class Handler(SimpleHTTPRequestHandler):
             if existing:return self.json({"receipt":dict(existing)})
             if order["status"]=="cancelled":raise ValueError("ออเดอร์ถูกยกเลิกแล้ว ไม่สามารถออกใบเสร็จได้")
             finance=order["financial"]; now=utcnow(); receipt={"id":f"RCT-{secrets.token_hex(4).upper()}","receipt_number":f"MP-{datetime.now():%Y%m%d}-{secrets.token_hex(3).upper()}","order_id":oid,"customer_tax_name":str(form.get("customer_tax_name","")).strip()[:160],"customer_tax_id":re.sub(r"[^0-9]","",str(form.get("customer_tax_id", "")))[:13],"subtotal":finance["subtotal"],"discount":finance["discount"],"delivery_fee":finance["delivery_fee"],"total":finance["total"],"issued_at":now,"issued_by":role}
-            con.execute("INSERT INTO pos_receipts VALUES (?,?,?,?,?,?,?,?,?,?,?)",tuple(receipt[key] for key in ("id","order_id","receipt_number","customer_tax_name","customer_tax_id","subtotal","discount","delivery_fee","total","issued_at","issued_by")));audit(con,role,"issue","pos_receipt",receipt["id"],{"order_id":oid});return self.json({"receipt":receipt},201)
+            con.execute("INSERT INTO pos_receipts VALUES (?,?,?,?,?,?,?,?,?,?,?)",tuple(receipt[key] for key in ("id","order_id","receipt_number","customer_tax_name","customer_tax_id","subtotal","discount","delivery_fee","total","issued_at","issued_by")));audit(con,role,"issue","pos_receipt",receipt["id"],{"order_id":oid})
+        return self.json({"receipt":receipt},201)
     def update_business_profile(self,form,role):
         profile={"legal_name":str(form.get("legal_name","")).strip()[:160],"tax_id":re.sub(r"[^0-9]","",str(form.get("tax_id","")))[:13],"address":str(form.get("address","")).strip()[:500],"branch":str(form.get("branch","สำนักงานใหญ่")).strip()[:80] or "สำนักงานใหญ่","vat_registered":parse_bool(form.get("vat_registered"),False),"vat_rate":7}
         if not profile["legal_name"] or not profile["address"]:raise ValueError("กรุณาระบุชื่อกิจการและที่อยู่")
@@ -1700,7 +1703,8 @@ class Handler(SimpleHTTPRequestHandler):
                 if order["payment"]["method"]=="scb_qr" and payment in {"paid","refunded"}:
                     con.execute("UPDATE payment_attempts SET status=?,confirmed_at=CASE WHEN ?='paid' THEN COALESCE(NULLIF(confirmed_at,''),?) ELSE confirmed_at END,updated_at=? WHERE order_id=? AND provider LIKE 'scb_%' AND status NOT IN ('cancelled','expired')",(payment,payment,now,now,oid))
                 audit(con,role,"payment_change","order",oid,{"to":payment})
-            return self.json({"order":row_order(con,oid)})
+            response={"order":row_order(con,oid)}
+        return self.json(response)
     def complete_order_effects(self,con,oid,order,role):
         """Award points and consume recipe stock once, only when the order closes."""
         exists=con.execute("SELECT 1 FROM loyalty_ledger WHERE order_id=? AND reason='order_completed'",(oid,)).fetchone()

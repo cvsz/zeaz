@@ -15,6 +15,8 @@
   unique order inventory consumption, and isolated backup restore drills.
 - Added tagged GHCR publication for application and dashboard images with OCI
   SBOMs, maximum BuildKit provenance, and GitHub digest attestations.
+- Hardened the isolated API smoke harness against port-allocation races and
+  preserved server diagnostics on failure.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,
