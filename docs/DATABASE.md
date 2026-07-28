@@ -56,6 +56,12 @@ the success response only after the database context exits and commits. This
 commit-before-response boundary is required for read-after-write consistency
 and prevents a late commit failure from becoming a false API success.
 
+Delivery assignment and rider availability share an immediate transaction.
+Only one delivery in `assigned`, `picked_up`, or `on_the_way` may reserve a
+rider through the API. Reassignment releases the previous rider; `delivered`,
+`failed`, and `cancelled` release the current rider before the successful
+response is emitted.
+
 ## Backup and recovery
 
 ```bash

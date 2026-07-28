@@ -92,6 +92,7 @@ DEFAULT_MENU = [
     {"id": "sticky-rice", "name": "ข้าวเหนียว", "description": "ห่อละกำลังดี", "price": 10, "available": True},
 ]
 DELIVERY_STATUSES = ("queued", "assigned", "picked_up", "on_the_way", "delivered", "failed", "cancelled")
+ACTIVE_DELIVERY_STATUSES = ("assigned", "picked_up", "on_the_way")
 
 def utcnow() -> str: return datetime.now(timezone.utc).isoformat()
 
@@ -1643,7 +1644,11 @@ class Handler(SimpleHTTPRequestHandler):
             rider=con.execute("SELECT * FROM riders WHERE id=?",(rider_id,)).fetchone()
             if not rider:return self.json({"error":"ไม่พบไรเดอร์"},404)
             active=int(parse_bool(form.get("active"),bool(rider["active"])));available=int(parse_bool(form.get("available"),bool(rider["available"]))) if active else 0
-            if not active and con.execute("SELECT 1 FROM deliveries WHERE rider_id=? AND status NOT IN ('delivered','cancelled') LIMIT 1",(rider_id,)).fetchone():raise ValueError("ไรเดอร์ยังมีงานจัดส่งที่ต้องโอนย้ายหรือปิดก่อน")
+            has_active_delivery=con.execute(
+                "SELECT 1 FROM deliveries WHERE rider_id=? AND status IN (?,?,?) LIMIT 1",
+                (rider_id,*ACTIVE_DELIVERY_STATUSES),
+            ).fetchone()
+            if has_active_delivery and (not active or available):raise ValueError("ไรเดอร์ยังมีงานจัดส่งที่ต้องโอนย้ายหรือปิดก่อน")
             con.execute("UPDATE riders SET active=?,available=?,updated_at=? WHERE id=?",(active,available,utcnow(),rider_id));audit(con,role,"update","rider",rider_id,{"active":bool(active),"available":bool(available)})
             response={"rider":dict(con.execute("SELECT * FROM riders WHERE id=?",(rider_id,)).fetchone())}
         return self.json(response)
@@ -1736,15 +1741,30 @@ class Handler(SimpleHTTPRequestHandler):
     def update_delivery(self,oid,form,role,area):
         status=str(form.get("status","")).strip(); rider_id=str(form.get("rider_id","")).strip()
         if status and status not in DELIVERY_STATUSES:raise ValueError("สถานะจัดส่งไม่ถูกต้อง")
+        if not status and not rider_id:raise ValueError("ไม่มีข้อมูลงานจัดส่งที่ต้องอัปเดต")
+        if status and rider_id:raise ValueError("กรุณามอบหมายไรเดอร์และอัปเดตสถานะแยกคำขอ")
+        if rider_id and area!="admin":raise ValueError("เฉพาะผู้ดูแลระบบที่มอบหมายไรเดอร์ได้")
         with STORE_LOCK,db(immediate=True) as con:
             delivery=con.execute("SELECT * FROM deliveries WHERE order_id=?",(oid,)).fetchone()
             if not delivery:return self.json({"error":"ไม่พบงานจัดส่ง"},404)
             transitions={"queued":{"assigned","cancelled"},"assigned":{"picked_up","cancelled"},"picked_up":{"on_the_way","failed"},"on_the_way":{"delivered","failed"},"failed":{"queued"},"delivered":set(),"cancelled":set()}
             if status and status != delivery["status"] and status not in transitions.get(delivery["status"],set()): raise ValueError("ลำดับสถานะจัดส่งไม่ถูกต้อง")
             if rider_id:
+                if delivery["status"] not in {"queued","assigned"}:raise ValueError("ไม่สามารถเปลี่ยนไรเดอร์หลังเริ่มจัดส่ง")
                 rider=con.execute("SELECT * FROM riders WHERE id=? AND active=1",(rider_id,)).fetchone()
                 if not rider:raise ValueError("ไม่พบไรเดอร์")
-                con.execute("UPDATE deliveries SET rider_id=?,status='assigned',assigned_at=?,updated_at=? WHERE order_id=?",(rider_id,utcnow(),utcnow(),oid)); status="assigned"
+                if rider_id!=delivery["rider_id"]:
+                    already_assigned=con.execute(
+                        "SELECT 1 FROM deliveries WHERE rider_id=? AND status IN (?,?,?) AND order_id<>? LIMIT 1",
+                        (rider_id,*ACTIVE_DELIVERY_STATUSES,oid),
+                    ).fetchone()
+                    if not rider["available"] or already_assigned:raise ValueError("ไรเดอร์ไม่พร้อมรับงาน")
+                    now=utcnow()
+                    if delivery["rider_id"]:
+                        con.execute("UPDATE riders SET available=1,updated_at=? WHERE id=?",(now,delivery["rider_id"]))
+                    con.execute("UPDATE riders SET available=0,updated_at=? WHERE id=?",(now,rider_id))
+                    con.execute("UPDATE deliveries SET rider_id=?,status='assigned',assigned_at=?,updated_at=? WHERE order_id=?",(rider_id,now,now,oid))
+                status="assigned"
             if status:
                 now=utcnow(); columns={"picked_up":"picked_up_at","delivered":"delivered_at"};sql="UPDATE deliveries SET status=?,updated_at=?";params=[status,now]
                 if status in columns:sql+=f",{columns[status]}=?";params.append(now)
@@ -1754,7 +1774,10 @@ class Handler(SimpleHTTPRequestHandler):
                     if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
                     if order["status"] in {"cancelled","completed"}:raise ValueError("ออเดอร์นี้ปิดแล้ว ไม่สามารถส่งสำเร็จซ้ำได้")
                     if order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงินก่อนปิดงานจัดส่ง")
+                if status in {"failed","cancelled"}:sql+=",rider_id=NULL"
                 sql+=" WHERE order_id=?";params.append(oid);con.execute(sql,params)
+                if status in {"delivered","failed","cancelled"} and delivery["rider_id"]:
+                    con.execute("UPDATE riders SET available=1,updated_at=? WHERE id=?",(now,delivery["rider_id"]))
                 if status=="delivered":
                     con.execute("UPDATE orders SET status='completed' WHERE id=?",(oid,)); con.execute("INSERT INTO order_history(order_id,at,status,actor_role,note) VALUES (?,?,?,?,?)",(oid,now,"completed",role,"delivery_delivered")); self.complete_order_effects(con,oid,order,role)
             audit(con,role,"delivery_update","delivery",oid,{"status":status,"rider_id":rider_id});response={"order":row_order(con,oid)}

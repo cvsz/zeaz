@@ -88,7 +88,7 @@ paths:
   /api/admin/riders:
     post: {summary: Create rider record, security: [{adminKey: []}], responses: {'201': {description: Created}}}
   /api/admin/riders/{riderId}:
-    patch: {summary: Update rider activation or availability; active deliveries prevent deactivation, security: [{adminKey: []}], parameters: [{name: riderId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Updated}, '400': {description: Rider has an active delivery or mutation is invalid}}}
+    patch: {summary: Update rider activation or availability; active deliveries prevent deactivation or manual availability, security: [{adminKey: []}], parameters: [{name: riderId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Updated}, '400': {description: Rider has an active delivery or mutation is invalid}}}
   /api/admin/rider-applications/{applicationId}:
     patch: {summary: Atomically approve or reject a pending rider application once, security: [{adminKey: []}], parameters: [{name: applicationId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Reviewed}, '400': {description: Application was already reviewed or decision is invalid}}}
   /api/admin/merchant-applications/{applicationId}:
@@ -98,9 +98,9 @@ paths:
   /api/admin/delivery-pricing:
     post: {summary: Update delivery fee policy and store coordinates with finite numeric values, security: [{adminKey: []}], responses: {'200': {description: Updated}, '400': {description: Invalid mode, coordinate or non-finite fee value}}}
   /api/admin/deliveries/{orderId}:
-    patch: {summary: Assign rider or update delivery status; delivered settlement requires confirmed payment, security: [{adminKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}, '400': {description: Invalid transition or payment is not confirmed}}}
+    patch: {summary: Atomically reserve or reassign one available rider, or update delivery status; assignment and status changes use separate requests, security: [{adminKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}, '400': {description: Rider unavailable, invalid transition, combined mutation or payment is not confirmed}}}
   /api/staff/deliveries/{orderId}:
-    patch: {summary: Update delivery status as staff; delivered settlement requires confirmed payment, security: [{employeeKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}, '400': {description: Invalid transition or payment is not confirmed}}}
+    patch: {summary: Update delivery status as staff; rider assignment is owner-only and delivered settlement requires confirmed payment, security: [{employeeKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}, '400': {description: Rider assignment, transition or settlement is invalid}}}
   /api/admin/inventory:
     post: {summary: Create inventory item with finite non-negative quantities, security: [{adminKey: []}], responses: {'201': {description: Created}, '400': {description: Invalid or non-finite inventory data}}}
   /api/admin/inventory/adjust:

@@ -56,6 +56,11 @@
 - Moved successful mutation responses after SQLite commit for policy, payment,
   rider, application, inventory, recipe, menu, settings and tax-invoice paths,
   eliminating stale read-after-write and false-success timing windows.
+- Enforced owner-only rider assignment, serialized rider reservation and
+  reassignment, prevented concurrent double-booking and restored availability
+  when delivery work terminates.
+- Removed cross-thread environment patching from the SCB OAuth atomic-consume
+  regression, eliminating nondeterministic credential fixture teardown in CI.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,

@@ -29,6 +29,12 @@ merchant registrations for the same phone produce one pending application.
 Riders assigned to non-terminal deliveries cannot be deactivated until those
 deliveries are reassigned or closed.
 
+Rider assignment is owner-only and serialized with availability changes. An
+available rider can hold at most one `assigned`, `picked_up`, or `on_the_way`
+delivery. Reassignment releases the previous rider, while `delivered`, `failed`,
+and `cancelled` release the current rider. Staff credentials may advance
+delivery status but cannot assign riders.
+
 Inventory quantities, recipe quantities, delivery rates and coordinates must
 be finite numbers; `NaN` and positive or negative infinity are rejected before
 SQLite mutation. Inventory adjustments serialize across processes, require a
