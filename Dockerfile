@@ -17,6 +17,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir --requirement requirements.txt
 COPY --chown=moopiew:moopiew app.py ./
 COPY --chown=moopiew:moopiew migrations ./migrations
+COPY --chown=moopiew:moopiew scripts/document-storage.py ./scripts/document-storage.py
 COPY --chown=moopiew:moopiew web ./web
 RUN mkdir -p /var/lib/moopiew && chown moopiew:moopiew /var/lib/moopiew
 

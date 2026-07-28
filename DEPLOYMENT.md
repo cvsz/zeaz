@@ -21,6 +21,12 @@ install `deploy/systemd/moopiew-proxy-system@.service` as the system-level
 reverse proxy; it runs as the selected user with only
 `CAP_NET_BIND_SERVICE`. Public access must be protected with Cloudflare Access.
 
+The application requires a dedicated `DOCUMENT_ENCRYPTION_KEY` before document
+onboarding is enabled. Run the hash-verified legacy migration and enable
+`moopiew-document-retention.timer` as documented in
+[`docs/operations.md`](docs/operations.md); never deploy a plaintext document
+directory.
+
 Release archives and GHCR images are produced only after validation and
 container builds by `.github/workflows/release.yml`. Each release bundle
 includes npm and Python CycloneDX SBOMs plus a SHA-256 manifest. The application

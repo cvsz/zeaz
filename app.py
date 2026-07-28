@@ -223,6 +223,22 @@ def document_public(row):
     item.pop("storage_path",None)
     return item
 
+def document_cipher() -> Fernet:
+    key=env("DOCUMENT_ENCRYPTION_KEY")
+    if not key:raise ValueError("ยังไม่ได้ตั้งค่า DOCUMENT_ENCRYPTION_KEY")
+    try:return Fernet(key.encode())
+    except (TypeError,ValueError) as error:raise ValueError("DOCUMENT_ENCRYPTION_KEY ไม่ถูกต้อง") from error
+
+def store_document(doc_id: str, raw: bytes) -> Path:
+    root=DATA/"documents";root.mkdir(mode=0o700,parents=True,exist_ok=True)
+    path=root/f"{doc_id}.fernet";tmp=root/f".{doc_id}.{secrets.token_hex(4)}.tmp"
+    try:
+        tmp.write_bytes(document_cipher().encrypt(raw));os.chmod(tmp,0o600);os.replace(tmp,path)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    return path
+
 def set_setting(con, key, value): con.execute("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, json.dumps(value, ensure_ascii=False)))
 def audit(con, role, action, entity_type, entity_id, details=None): con.execute("INSERT INTO audit_logs(at,actor_role,action,entity_type,entity_id,details) VALUES (?,?,?,?,?,?)", (utcnow(), role, action, entity_type, entity_id, json.dumps(details or {}, ensure_ascii=False)))
 
@@ -991,14 +1007,11 @@ class Handler(SimpleHTTPRequestHandler):
             except (ValueError,TypeError): raise ValueError("ไฟล์เอกสารต้องเป็น base64 ที่ถูกต้อง")
             if not raw or len(raw)>min(int(req["max_size_bytes"]),10*1024*1024): raise ValueError("ขนาดไฟล์ไม่ถูกต้อง")
             if (mime=="application/pdf" and not raw.startswith(b"%PDF")) or (mime=="image/png" and not raw.startswith(b"\x89PNG\r\n\x1a\n")) or (mime=="image/jpeg" and not raw.startswith(b"\xff\xd8\xff")): raise ValueError("เนื้อไฟล์ไม่ตรงกับชนิดไฟล์")
-            doc_id=f"DOC-{secrets.token_hex(8).upper()}"; suffix=Path(filename).suffix.lower()[:10] or ".bin"; root=DATA/"documents"; root.mkdir(mode=0o700,parents=True,exist_ok=True); path=root/f"{doc_id}{suffix}"; tmp=root/f".{doc_id}.tmp"; digest=hashlib.sha256(raw).hexdigest()
-            try:
-                tmp.write_bytes(raw); os.chmod(tmp,0o600); os.replace(tmp,path)
-            except OSError as error:
-                try: tmp.unlink(missing_ok=True)
-                except OSError: pass
-                raise ValueError("ไม่สามารถจัดเก็บเอกสารได้") from error
-            now=utcnow(); con.execute("INSERT INTO uploaded_documents(id,provider_id,subject_type,subject_id,requirement_id,original_filename,storage_path,mime_type,size_bytes,sha256,status,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(doc_id,prow["id"],subject,subject_id,requirement_id,filename,str(path),mime,len(raw),digest,"pending",json.dumps({"uploaded_by":role}),now,now)); con.execute("INSERT INTO document_verification(document_id,status) VALUES (?,?)",(doc_id,"pending")); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",doc_id,"pending",role,"",json.dumps({}),now)); audit(con,role,"upload","document",doc_id,{"provider":provider,"subject_type":subject,"requirement_id":requirement_id,"size_bytes":len(raw),"mime_type":mime})
+            doc_id=f"DOC-{secrets.token_hex(8).upper()}";digest=hashlib.sha256(raw).hexdigest()
+            try:path=store_document(doc_id,raw)
+            except (OSError,ValueError) as error:raise ValueError("ไม่สามารถจัดเก็บเอกสารแบบเข้ารหัสได้") from error
+            metadata={"uploaded_by":role,"storage_encryption":"fernet-v1"}
+            now=utcnow(); con.execute("INSERT INTO uploaded_documents(id,provider_id,subject_type,subject_id,requirement_id,original_filename,storage_path,mime_type,size_bytes,sha256,status,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(doc_id,prow["id"],subject,subject_id,requirement_id,filename,str(path),mime,len(raw),digest,"pending",json.dumps(metadata),now,now)); con.execute("INSERT INTO document_verification(document_id,status) VALUES (?,?)",(doc_id,"pending")); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",doc_id,"pending",role,"",json.dumps({}),now)); audit(con,role,"upload","document",doc_id,{"provider":provider,"subject_type":subject,"requirement_id":requirement_id,"size_bytes":len(raw),"mime_type":mime,"storage_encryption":"fernet-v1"})
             row=con.execute("SELECT * FROM uploaded_documents WHERE id=?",(doc_id,)).fetchone()
             response={"document":document_public(row)}
         return self.json(response,201)

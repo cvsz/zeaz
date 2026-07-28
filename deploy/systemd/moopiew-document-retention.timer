@@ -1,0 +1,11 @@
+[Unit]
+Description=Run MooPiew document retention daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=30m
+Unit=moopiew-document-retention.service
+
+[Install]
+WantedBy=timers.target

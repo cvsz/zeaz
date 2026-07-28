@@ -7,8 +7,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from unittest.mock import patch
 
 import app
+from cryptography.fernet import Fernet
 
 
 class DocumentApiTests(unittest.TestCase):
@@ -19,6 +21,11 @@ class DocumentApiTests(unittest.TestCase):
         app.ADMIN_KEY = "test-admin"
         app.EMPLOYEE_KEY = "test-employee"
         app.KITCHEN_KEY = "test-kitchen"
+        self.document_key = Fernet.generate_key().decode()
+        self.environment = patch.dict(
+            "os.environ", {"DOCUMENT_ENCRYPTION_KEY": self.document_key}
+        )
+        self.environment.start()
         app.initialise_database()
         self.server = app.BoundedHTTPServer(("127.0.0.1", 0), app.Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -29,6 +36,7 @@ class DocumentApiTests(unittest.TestCase):
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=2)
+        self.environment.stop()
         self.tmp.cleanup()
 
     def request(self, path, method="GET", payload=None):
@@ -52,6 +60,15 @@ class DocumentApiTests(unittest.TestCase):
         })
         self.assertEqual(status, 201)
         document_id = result["document"]["id"]
+        with app.db() as connection:
+            stored = connection.execute(
+                "SELECT storage_path,metadata FROM uploaded_documents WHERE id=?",
+                (document_id,),
+            ).fetchone()
+        encrypted = Path(stored["storage_path"]).read_bytes()
+        self.assertNotIn(b"valid", encrypted)
+        self.assertEqual(Fernet(self.document_key.encode()).decrypt(encrypted), b"\x89PNG\r\n\x1a\nvalid")
+        self.assertEqual(json.loads(stored["metadata"])["storage_encryption"], "fernet-v1")
         status, result = self.request(f"/api/documents/{document_id}", "PATCH", {"status": "approved", "reason": "checked"})
         self.assertEqual(status, 200)
         self.assertEqual(result["document"]["status"], "approved")

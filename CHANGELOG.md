@@ -17,6 +17,8 @@
   SBOMs, maximum BuildKit provenance, and GitHub digest attestations.
 - Hardened the isolated API smoke harness against port-allocation races and
   preserved server diagnostics on failure.
+- Added dedicated Fernet encryption for onboarding document objects plus
+  hash-verified legacy migration and dry-run-safe tombstone retention tooling.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,

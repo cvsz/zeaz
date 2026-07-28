@@ -44,6 +44,15 @@ set +a
 for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_ZONE_ID CLOUDFLARE_TUNNEL_ID CLOUDFLARE_TUNNEL_TOKEN; do
   [[ -n "${!key:-}" ]] || { echo "Missing $key" >&2; exit 1; }
 done
+python3 - <<'PY'
+import os
+from cryptography.fernet import Fernet
+
+try:
+    Fernet(os.environ["DOCUMENT_ENCRYPTION_KEY"].encode())
+except (KeyError, TypeError, ValueError) as error:
+    raise SystemExit("DOCUMENT_ENCRYPTION_KEY must be a valid dedicated Fernet key") from error
+PY
 python3 -m py_compile "$ROOT/app.py"
 check_url() {
   local url="$1" attempts=0

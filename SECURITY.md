@@ -8,6 +8,9 @@ valid signature when SCB is enabled. The authorization-code flow validates
 atomically consumed, expiring callback state. Optional PKCE uses an S256
 challenge and an encrypted one-time verifier; keep it disabled until the
 approved SCB product contract and Sandbox UAT confirm the token field.
+Onboarding documents are stored only as Fernet ciphertext using the dedicated
+`DOCUMENT_ENCRYPTION_KEY`; plaintext migration verifies the recorded SHA-256
+before replacement. Do not reuse payment, admin, or backup keys.
 
 CI runs CodeQL, Python runtime and full npm dependency audits,
 parameterized-SQL regression coverage, and CSP/security-header checks. Current
