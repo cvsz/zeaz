@@ -202,6 +202,14 @@ def active_payment(con, order_id: str) -> dict | None:
     return dict(row) if row else None
 
 def env(name: str, default="") -> str: return os.environ.get(name, default).strip()
+def parse_bool(value, default=False) -> bool:
+    if value is None: return default
+    if isinstance(value,bool): return value
+    if isinstance(value,(int,float)): return value != 0
+    normalized=str(value).strip().lower()
+    if normalized in {"true","1","yes","on"}: return True
+    if normalized in {"false","0","no","off",""}: return False
+    raise ValueError("ค่าบูลีนไม่ถูกต้อง")
 
 def hf_enabled() -> bool:
     return env("HF_ENABLED", "false").lower() == "true" and bool(env("HF_TOKEN"))
@@ -1293,7 +1301,7 @@ class Handler(SimpleHTTPRequestHandler):
         with db() as con:
             rider=con.execute("SELECT * FROM riders WHERE id=?",(rider_id,)).fetchone()
             if not rider:return self.json({"error":"ไม่พบไรเดอร์"},404)
-            active=int(bool(form.get("active",bool(rider["active"]))));available=int(bool(form.get("available",bool(rider["available"])))) if active else 0
+            active=int(parse_bool(form.get("active"),bool(rider["active"])));available=int(parse_bool(form.get("available"),bool(rider["available"]))) if active else 0
             con.execute("UPDATE riders SET active=?,available=?,updated_at=? WHERE id=?",(active,available,utcnow(),rider_id));audit(con,role,"update","rider",rider_id,{"active":bool(active),"available":bool(available)})
             return self.json({"rider":dict(con.execute("SELECT * FROM riders WHERE id=?",(rider_id,)).fetchone())})
     def review_rider_application(self,application_id,form,role):
@@ -1411,7 +1419,7 @@ class Handler(SimpleHTTPRequestHandler):
             finance=order["financial"]; now=utcnow(); receipt={"id":f"RCT-{secrets.token_hex(4).upper()}","receipt_number":f"MP-{datetime.now():%Y%m%d}-{secrets.token_hex(3).upper()}","order_id":oid,"customer_tax_name":str(form.get("customer_tax_name","")).strip()[:160],"customer_tax_id":re.sub(r"[^0-9]","",str(form.get("customer_tax_id", "")))[:13],"subtotal":finance["subtotal"],"discount":finance["discount"],"delivery_fee":finance["delivery_fee"],"total":finance["total"],"issued_at":now,"issued_by":role}
             con.execute("INSERT INTO pos_receipts VALUES (?,?,?,?,?,?,?,?,?,?,?)",tuple(receipt[key] for key in ("id","order_id","receipt_number","customer_tax_name","customer_tax_id","subtotal","discount","delivery_fee","total","issued_at","issued_by")));audit(con,role,"issue","pos_receipt",receipt["id"],{"order_id":oid});return self.json({"receipt":receipt},201)
     def update_business_profile(self,form,role):
-        profile={"legal_name":str(form.get("legal_name","")).strip()[:160],"tax_id":re.sub(r"[^0-9]","",str(form.get("tax_id","")))[:13],"address":str(form.get("address","")).strip()[:500],"branch":str(form.get("branch","สำนักงานใหญ่")).strip()[:80] or "สำนักงานใหญ่","vat_registered":bool(form.get("vat_registered",False)),"vat_rate":7}
+        profile={"legal_name":str(form.get("legal_name","")).strip()[:160],"tax_id":re.sub(r"[^0-9]","",str(form.get("tax_id","")))[:13],"address":str(form.get("address","")).strip()[:500],"branch":str(form.get("branch","สำนักงานใหญ่")).strip()[:80] or "สำนักงานใหญ่","vat_registered":parse_bool(form.get("vat_registered"),False),"vat_rate":7}
         if not profile["legal_name"] or not profile["address"]:raise ValueError("กรุณาระบุชื่อกิจการและที่อยู่")
         if profile["vat_registered"] and len(profile["tax_id"])!=13:raise ValueError("เลขประจำตัวผู้เสียภาษีต้องมี 13 หลัก")
         with db() as con:set_setting(con,"business_profile",profile);audit(con,role,"update","business_profile","store",{"vat_registered":profile["vat_registered"]})
@@ -1503,7 +1511,7 @@ class Handler(SimpleHTTPRequestHandler):
             name=str(form.get("name",item["name"])).strip()[:80];desc=str(form.get("description",item["description"])).strip()[:160]
             try:price=int(form.get("price",item["price"]))
             except (TypeError,ValueError):raise ValueError("ราคาไม่ถูกต้อง")
-            available=int(bool(form.get("available",bool(item["available"]))))
+            available=int(parse_bool(form.get("available"),bool(item["available"])))
             if len(name)<2 or not 0<=price<=10000:raise ValueError("ข้อมูลเมนูไม่ถูกต้อง")
             con.execute("UPDATE menu_items SET name=?,description=?,price=?,available=?,updated_at=? WHERE id=?",(name,desc,price,available,utcnow(),iid));audit(con,role,"update","menu_item",iid)
             return self.json({"item":{"id":iid,"name":name,"description":desc,"price":price,"available":bool(available)}})

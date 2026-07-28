@@ -36,6 +36,12 @@ class AiFallbackTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 app.local_ai_base()
 
+    def test_boolean_form_values_are_not_truthy_strings(self):
+        self.assertFalse(app.parse_bool("false", True))
+        self.assertTrue(app.parse_bool("true", False))
+        with self.assertRaises(ValueError):
+            app.parse_bool("sometimes")
+
 
 if __name__ == "__main__":
     unittest.main()
