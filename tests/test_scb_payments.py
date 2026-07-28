@@ -205,6 +205,77 @@ class ScbPaymentLifecycleTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(result["inquiry"], "already_paid")
 
+    def test_callback_rejects_missing_and_unknown_provider_order(self):
+        secret = "webhook-secret"
+        for payload, expected_status in (
+            ({"data": {}}, 400),
+            ({"data": {"orderId": "UNKNOWN"}}, 404),
+        ):
+            raw = json.dumps(payload, separators=(",", ":")).encode()
+            digest = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+            with self.subTest(payload=payload), patch.dict(
+                os.environ, {"SCB_WEBHOOK_SECRET": secret}, clear=False
+            ):
+                status, _ = self.request(
+                    "/api/scb/payment/confirm",
+                    payload,
+                    {"X-SCB-Signature": f"sha256={digest}"},
+                )
+            self.assertEqual(status, expected_status)
+
+    def test_callback_provider_failure_preserves_payment_state(self):
+        self.seed_payment()
+        status, result, inquiry = self.callback(
+            ({"data": {"paymentStatus": "PAID"}}, True)
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(result["status"], "paid")
+        inquiry.assert_called_once()
+
+        with app.db() as connection:
+            connection.execute(
+                """UPDATE payment_attempts
+                   SET status='pending',confirmed_at='',provider_response='{}'
+                   WHERE id='PAY-SCB-TEST'"""
+            )
+            connection.execute(
+                """UPDATE orders SET payment_status='pending'
+                   WHERE id='MPP-PAYMENT'"""
+            )
+        payload = {"data": {"orderId": "SCB-ORDER-1"}}
+        raw = json.dumps(payload, separators=(",", ":")).encode()
+        secret = "webhook-secret"
+        digest = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+        with patch.dict(
+            os.environ, {"SCB_WEBHOOK_SECRET": secret}, clear=False
+        ), patch.object(
+            app, "scb_inquire_payment", side_effect=ValueError("provider unavailable")
+        ):
+            status, result = self.request(
+                "/api/scb/payment/confirm",
+                payload,
+                {"X-SCB-Signature": f"sha256={digest}"},
+            )
+        self.assertEqual(status, 503)
+        self.assertEqual(result["error"], "provider unavailable")
+        payment, order, _ = self.payment_state()
+        self.assertEqual(payment["status"], "pending")
+        self.assertEqual(order["payment_status"], "pending")
+
+    def test_admin_inquiry_rejects_employee_role(self):
+        self.seed_payment()
+        original_admin = app.ADMIN_KEY
+        app.ADMIN_KEY = ""
+        try:
+            status, _ = self.request(
+                "/api/admin/payments/scb/PAY-SCB-TEST/inquire",
+                {},
+                {"X-Employee-Key": "test-employee"},
+            )
+        finally:
+            app.ADMIN_KEY = original_admin
+        self.assertEqual(status, 401)
+
 
 if __name__ == "__main__":
     unittest.main()

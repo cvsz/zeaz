@@ -40,11 +40,36 @@ class DocumentApiTests(unittest.TestCase):
         self.environment.stop()
         self.tmp.cleanup()
 
-    def request(self, path, method="GET", payload=None):
+    def request(self, path, method="GET", payload=None, headers=None):
         body = json.dumps(payload).encode() if payload is not None else None
-        request = Request(self.base + path, data=body, method=method, headers={"X-Admin-Key": "test-admin", "Content-Type": "application/json"})
+        request = Request(
+            self.base + path,
+            data=body,
+            method=method,
+            headers={
+                "X-Admin-Key": "test-admin",
+                "Content-Type": "application/json",
+                **(headers or {}),
+            },
+        )
         with urlopen(request, timeout=3) as response:
             return response.status, json.loads(response.read())
+
+    def upload(self):
+        png = base64.b64encode(b"\x89PNG\r\n\x1a\nvalid").decode()
+        return self.request(
+            "/api/documents/upload",
+            "POST",
+            {
+                "provider": "grab",
+                "subject_type": "rider",
+                "subject_id": "RDR-TEST",
+                "requirement_id": "grab-rider-national-id",
+                "filename": "id.png",
+                "mime_type": "image/png",
+                "content_base64": png,
+            },
+        )
 
     def test_provider_requirements_are_data_driven(self):
         status, result = self.request("/api/providers/grab/requirements/rider")
@@ -220,12 +245,7 @@ class DocumentApiTests(unittest.TestCase):
         self.assertEqual(current, 1)
 
     def test_upload_verify_and_history(self):
-        png = base64.b64encode(b"\x89PNG\r\n\x1a\nvalid").decode()
-        status, result = self.request("/api/documents/upload", "POST", {
-            "provider": "grab", "subject_type": "rider", "subject_id": "RDR-TEST",
-            "requirement_id": "grab-rider-national-id", "filename": "id.png",
-            "mime_type": "image/png", "content_base64": png,
-        })
+        status, result = self.upload()
         self.assertEqual(status, 201)
         document_id = result["document"]["id"]
         with app.db() as connection:
@@ -243,6 +263,103 @@ class DocumentApiTests(unittest.TestCase):
         status, result = self.request("/api/documents/history?document_id=" + document_id)
         self.assertEqual(status, 200)
         self.assertEqual(len(result["history"]), 2)
+
+    def test_document_routes_enforce_admin_role(self):
+        original_admin = app.ADMIN_KEY
+        app.ADMIN_KEY = ""
+        try:
+            for method, path, payload in (
+                ("GET", "/api/documents/status", None),
+                (
+                    "POST",
+                    "/api/documents/upload",
+                    {
+                        "provider": "grab",
+                        "subject_type": "rider",
+                        "subject_id": "RDR-TEST",
+                        "requirement_id": "grab-rider-national-id",
+                        "filename": "id.png",
+                        "mime_type": "image/png",
+                        "content_base64": base64.b64encode(
+                            b"\x89PNG\r\n\x1a\nvalid"
+                        ).decode(),
+                    },
+                ),
+                ("PATCH", "/api/documents/DOC-AAAAAAAAAAAAAAAA", {"status": "approved"}),
+                ("DELETE", "/api/documents/DOC-AAAAAAAAAAAAAAAA", None),
+            ):
+                with self.subTest(method=method, path=path):
+                    with self.assertRaises(HTTPError) as error:
+                        self.request(
+                            path,
+                            method,
+                            payload,
+                            {"X-Employee-Key": "test-employee"},
+                        )
+                    self.assertEqual(error.exception.code, 401)
+                    error.exception.close()
+        finally:
+            app.ADMIN_KEY = original_admin
+
+    def test_delete_removes_ciphertext_and_is_idempotently_not_found(self):
+        _, result = self.upload()
+        document_id = result["document"]["id"]
+        with app.db() as connection:
+            stored_path = Path(
+                connection.execute(
+                    "SELECT storage_path FROM uploaded_documents WHERE id=?",
+                    (document_id,),
+                ).fetchone()["storage_path"]
+            )
+        self.assertTrue(stored_path.is_file())
+
+        status, result = self.request(f"/api/documents/{document_id}", "DELETE")
+        self.assertEqual(status, 200)
+        self.assertEqual(result, {"deleted": True, "id": document_id})
+        self.assertFalse(stored_path.exists())
+
+        _, listed = self.request("/api/documents/status?subject_id=RDR-TEST")
+        self.assertEqual(listed["documents"], [])
+        _, history = self.request(
+            f"/api/documents/history?document_id={document_id}"
+        )
+        self.assertEqual(history["history"][0]["status"], "deleted")
+
+        with self.assertRaises(HTTPError) as repeated:
+            self.request(f"/api/documents/{document_id}", "DELETE")
+        self.assertEqual(repeated.exception.code, 404)
+        repeated.exception.close()
+
+    def test_upload_rejects_invalid_base64_and_missing_encryption_key(self):
+        payload = {
+            "provider": "grab",
+            "subject_type": "rider",
+            "subject_id": "RDR-TEST",
+            "requirement_id": "grab-rider-national-id",
+            "filename": "id.png",
+            "mime_type": "image/png",
+            "content_base64": "not/base64!",
+        }
+        with self.assertRaises(HTTPError) as malformed:
+            self.request("/api/documents/upload", "POST", payload)
+        self.assertEqual(malformed.exception.code, 400)
+        malformed.exception.close()
+
+        payload["content_base64"] = base64.b64encode(
+            b"\x89PNG\r\n\x1a\nvalid"
+        ).decode()
+        with patch.dict("os.environ", {"DOCUMENT_ENCRYPTION_KEY": ""}):
+            with self.assertRaises(HTTPError) as unavailable:
+                self.request("/api/documents/upload", "POST", payload)
+        self.assertEqual(unavailable.exception.code, 400)
+        unavailable.exception.close()
+        with app.db() as connection:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM uploaded_documents"
+                ).fetchone()[0],
+                0,
+            )
 
     def test_upload_rejects_mismatched_mime(self):
         with self.assertRaises(HTTPError) as error:

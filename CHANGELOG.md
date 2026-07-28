@@ -35,6 +35,9 @@
 - Added an encrypted, lockfile-enabled Cloudflare R2 Terraform backend contract
   with fail-closed migration, local backup/checksum, address parity and remote
   state verification controls.
+- Added HTTP-level authorization, secure document deletion, malformed upload
+  and SCB callback failure coverage, and raised the enforced Python coverage
+  floor from 40% to 45%.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,
