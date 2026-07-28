@@ -5,7 +5,8 @@
 - `./scripts/production-check.sh` — pass with retry policy
 - `npm audit --omit=dev --audit-level=high` — no findings
 - `.venv/bin/python -m pip check` — pass
-- `python3 -m unittest discover -s tests -p 'test_*.py'` — 2 passed (AI fallback/local endpoint regression)
+- `python3 -m unittest discover -s tests -p 'test_*.py'` — 3 passed (AI fallback/local endpoint/boolean regression)
+- `npm run lint` — pass (Python compile, shell syntax, diff whitespace)
 - Provider-side pytest — 521 passed (audit observation)
 
 The browser admin-monitor path is covered by the static asset and API smoke gates.
