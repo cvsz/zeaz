@@ -718,7 +718,7 @@ class Handler(SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("X-Frame-Options", "DENY"); self.send_header("Referrer-Policy", "strict-origin-when-cross-origin"); self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)")
         self.send_header("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
-        if urlparse(self.path).path in {"/admin.html", "/admin.js", "/ops.html", "/ops.js"}: self.send_header("Cache-Control", "no-store, max-age=0")
+        if urlparse(self.path).path in {"/admin.html", "/admin.js", "/ops.html", "/ops.js", "/api-monitor.html", "/api-monitor.js", "/api-monitor.css"}: self.send_header("Cache-Control", "no-store, max-age=0")
         super().end_headers()
     def json(self, payload, status=200):
         encoded=json.dumps(payload, ensure_ascii=False).encode(); self.send_response(status); self.send_header("Content-Type", "application/json; charset=utf-8"); self.send_header("Content-Length", str(len(encoded))); self.send_header("Cache-Control", "no-store"); self.end_headers(); self.wfile.write(encoded)

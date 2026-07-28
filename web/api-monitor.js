@@ -8,6 +8,7 @@ const protectedEndpoints=[
   ['AI catalog configuration','/api/admin/ai/config'],['Live AI model catalog','/api/admin/ai/models'],
 ];
 const $=(selector)=>document.querySelector(selector);
+let refreshing=false;
 
 async function check(name,url,adminKey=''){
   const started=performance.now();
@@ -30,13 +31,19 @@ function row(result){
 }
 function renderRows(target,results){const root=$(target);root.replaceChildren(...results.map(row));}
 async function render(includeAdmin=false){
+  if(refreshing)return;
+  refreshing=true;
+  const refreshButton=$('#refresh'),adminButton=$('#check-admin');refreshButton.disabled=true;
+  if(includeAdmin){adminButton.disabled=true;adminButton.textContent='กำลังตรวจ…';}
+  try{
   const overall=$('#overall');overall.className='overall';overall.querySelector('b').textContent='กำลังตรวจสอบ';
   const publicResults=await Promise.all(publicEndpoints.map(([name,url])=>check(name,url)));renderRows('#checks',publicResults);
   const allOk=publicResults.every(result=>result.ok);overall.classList.add(allOk?'ok':'bad');overall.querySelector('b').textContent=allOk?'Public API ทำงานปกติ':'พบ Public API ที่ต้องตรวจสอบ';
   overall.querySelector('small').textContent=allOk?`${publicResults.length} endpoint ตอบกลับสำเร็จ`:'ดูรายการด้านล่างเพื่อวินิจฉัย';$('#public-count').textContent=`${publicResults.filter(r=>r.ok).length}/${publicResults.length} ผ่าน`;
   const key=$('#admin-key').value.trim();
   if(includeAdmin&&key){const results=await Promise.all(protectedEndpoints.map(([name,url])=>check(name,url,key)));renderRows('#protected-checks',results);$('#admin-note').textContent=results.every(r=>r.ok)?'ตรวจ endpoint ผู้ดูแลสำเร็จ':'ไม่สามารถยืนยัน Admin key หรือ provider ได้';}
-  else {renderRows('#protected-checks',protectedEndpoints.map(([name,url])=>({name,url,ok:false,protected:true,status:401,ms:0,detail:'กรอก Admin key เพื่อทดสอบ'})));$('#admin-note').textContent='เว้นว่างไว้ได้ — ระบบจะตรวจเฉพาะ public API';}
+  else {renderRows('#protected-checks',protectedEndpoints.map(([name,url])=>({name,url,ok:false,protected:true,status:401,ms:0,detail:'กรอก Admin key เพื่อทดสอบ'})));$('#admin-note').textContent=includeAdmin?'กรุณากรอก Admin key ก่อนตรวจสอบ':'เว้นว่างไว้ได้ — ระบบจะตรวจเฉพาะ public API';}
   $('#updated').textContent=`อัปเดต ${new Date().toLocaleString('th-TH')} · รีเฟรชอัตโนมัติทุก 30 วินาที`;
+  }finally{refreshing=false;refreshButton.disabled=false;adminButton.disabled=false;adminButton.textContent='ตรวจส่วนผู้ดูแล';}
 }
 $('#refresh').onclick=()=>render();$('#check-admin').onclick=()=>render(true);render();setInterval(()=>render(),30000);
