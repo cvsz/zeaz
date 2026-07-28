@@ -34,7 +34,11 @@ export TF_VAR_piewdash_origin="${PIEWDASH_ORIGIN:-http://127.0.0.1:8082}"
 export TF_VAR_piewdash_access_allowed_emails="$PIEWDASH_ACCESS_ALLOWED_EMAILS"
 
 "$TF_BIN" -chdir="$STACK" fmt -check -recursive
-"$TF_BIN" -chdir="$STACK" init
+if [[ "${TERRAFORM_BACKEND_TYPE:-local}" == "r2" ]]; then
+  "$ROOT/scripts/cloudflare-state.sh" init
+else
+  "$TF_BIN" -chdir="$STACK" init
+fi
 "$TF_BIN" -chdir="$STACK" validate
 "$TF_BIN" -chdir="$STACK" plan -out=tfplan
 "$TF_BIN" -chdir="$STACK" show -no-color tfplan

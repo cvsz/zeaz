@@ -32,3 +32,14 @@ metadata.
 
 The production single-host URL is `https://piewdash.zeaz.dev/`; its local
 origin is `http://127.0.0.1:8082`.
+
+## Terraform state
+
+Cloudflare state migration and verification are owned by
+`scripts/cloudflare-state.sh` and
+`infrastructure/terraform/cloudflare/backend.r2.tf.example`. The current
+backend mode and write authorization live only in `.env.cloudflare`; the
+script installs ignored `backend.tf` from that canonical template only for R2
+operations. A local backend is not collaborative production state;
+`ROADMAP.md` remains open until an encrypted R2 backend migration and
+lock-backed plan have both succeeded.
