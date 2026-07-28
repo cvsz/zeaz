@@ -63,6 +63,10 @@ OPENCODE_API_BASE = "https://opencode.ai/zen/v1"
 GROQ_API_BASE = "https://api.groq.com/openai/v1"
 BYTEPLUS_API_BASE = "https://ark.ap-southeast.bytepluses.com/api/v3"
 FIREWORKS_API_BASE = "https://api.fireworks.ai/inference/v1"
+OPENAI_API_BASE = "https://api.openai.com/v1"
+KIMI_API_BASE = "https://api.moonshot.ai/v1"
+SCALEWAY_API_BASE = "https://api.scaleway.ai/v1"
+TOGETHER_API_BASE = "https://api.together.xyz/v1"
 AI_SYSTEM_PROMPT = "You are MooPiew's operator assistant. Do not request or reveal secrets, payment credentials, or customer personal data. Answer concisely in the language used by the operator."
 DEFAULT_SETTINGS = {
     "store_name": "หมูปิ้ววว", "slot_capacity": 80, "advance_days": 14,
@@ -204,11 +208,11 @@ def ai_provider_keys() -> dict[str,str]:
     try: parsed=json.loads(raw)
     except json.JSONDecodeError: return {}
     if not isinstance(parsed,dict): return {}
-    return {name:value for name,value in parsed.items() if name in {"gemini","nvidia","zai","openrouter","opencode","groq","byteplus","fireworks"} and isinstance(value,str) and value.strip()}
+    return {name:value for name,value in parsed.items() if name in {"gemini","nvidia","zai","openrouter","opencode","groq","byteplus","fireworks","openai","kimi","scaleway","together"} and isinstance(value,str) and value.strip()}
 
 def ai_public_config() -> dict:
     keys=ai_provider_keys()
-    return {"enabled":bool(keys) or hf_enabled(),"providers":{"gemini":bool(keys.get("gemini")),"nvidia":bool(keys.get("nvidia")),"zai":bool(keys.get("zai")),"opencode":bool(keys.get("opencode")),"openrouter":bool(keys.get("openrouter")),"groq":bool(keys.get("groq")),"byteplus":bool(keys.get("byteplus")),"fireworks":bool(keys.get("fireworks")),"huggingface":hf_enabled()},"catalog":"live","chat_only":True}
+    return {"enabled":bool(keys) or hf_enabled(),"providers":{"gemini":bool(keys.get("gemini")),"nvidia":bool(keys.get("nvidia")),"zai":bool(keys.get("zai")),"opencode":bool(keys.get("opencode")),"openrouter":bool(keys.get("openrouter")),"groq":bool(keys.get("groq")),"byteplus":bool(keys.get("byteplus")),"fireworks":bool(keys.get("fireworks")),"openai":bool(keys.get("openai")),"kimi":bool(keys.get("kimi")),"scaleway":bool(keys.get("scaleway")),"together":bool(keys.get("together")),"huggingface":hf_enabled()},"catalog":"live","chat_only":True}
 
 def ai_http(endpoint: str, headers: dict[str,str], payload: dict | None = None) -> dict:
     """Call a fixed provider endpoint without exposing credentials or acting as a proxy."""
@@ -313,14 +317,20 @@ def byteplus_models(token: str) -> list[dict]:
         rows.append({"id":f"byteplus:{model['id']}","provider":"byteplus","model":model["id"],"display_name":model.get("name",model["id"])})
     return rows
 
-def fireworks_models(token: str) -> list[dict]:
-    """List models available to the configured Fireworks account."""
-    data=ai_http(f"{FIREWORKS_API_BASE}/models",{"Authorization":f"Bearer {token}"})
+def openai_compatible_models(base: str, token: str, provider: str) -> list[dict]:
+    """List models from a fixed OpenAI-compatible provider endpoint."""
+    data=ai_http(f"{base}/models",{"Authorization":f"Bearer {token}"})
     rows=[]
     for model in data.get("data",[]):
         if not isinstance(model,dict) or not isinstance(model.get("id"),str) or not PROVIDER_MODEL_ID.fullmatch(model["id"]): continue
-        rows.append({"id":f"fireworks:{model['id']}","provider":"fireworks","model":model["id"],"display_name":model.get("name",model["id"])})
+        rows.append({"id":f"{provider}:{model['id']}","provider":provider,"model":model["id"],"display_name":model.get("name",model["id"])})
     return rows
+
+def fireworks_models(token: str) -> list[dict]: return openai_compatible_models(FIREWORKS_API_BASE,token,"fireworks")
+def openai_models(token: str) -> list[dict]: return openai_compatible_models(OPENAI_API_BASE,token,"openai")
+def kimi_models(token: str) -> list[dict]: return openai_compatible_models(KIMI_API_BASE,token,"kimi")
+def scaleway_models(token: str) -> list[dict]: return openai_compatible_models(SCALEWAY_API_BASE,token,"scaleway")
+def together_models(token: str) -> list[dict]: return openai_compatible_models(TOGETHER_API_BASE,token,"together")
 
 def ai_catalog() -> dict:
     """Return every live chat model the configured provider keys can enumerate."""
@@ -329,7 +339,7 @@ def ai_catalog() -> dict:
         cached=AI_MODEL_CACHE.get("catalog",{})
         if isinstance(cached,dict) and cached and float(AI_MODEL_CACHE.get("expires",0)) > now: return cached
         keys=ai_provider_keys(); providers={}; models=[]
-        for name, loader in (("gemini",gemini_models),("nvidia",nvidia_models),("zai",zai_models),("opencode",opencode_models),("openrouter",openrouter_models),("groq",groq_models),("byteplus",byteplus_models),("fireworks",fireworks_models)):
+        for name, loader in (("gemini",gemini_models),("nvidia",nvidia_models),("zai",zai_models),("opencode",opencode_models),("openrouter",openrouter_models),("groq",groq_models),("byteplus",byteplus_models),("fireworks",fireworks_models),("openai",openai_models),("kimi",kimi_models),("scaleway",scaleway_models),("together",together_models)):
             if not keys.get(name): providers[name]={"enabled":False,"models":0}; continue
             try:
                 listed=loader(keys[name]); models.extend(listed); providers[name]={"enabled":True,"models":len(listed)}
@@ -387,6 +397,10 @@ def ai_chat(model_id: str, prompt: str, max_tokens=512, temperature=0.2) -> dict
     elif provider=="groq": text=openai_compatible_chat(GROQ_API_BASE,keys["groq"],model,prompt.strip(),tokens,temp,"Groq")
     elif provider=="byteplus": text=openai_compatible_chat(BYTEPLUS_API_BASE,keys["byteplus"],model,prompt.strip(),tokens,temp,"BytePlus")
     elif provider=="fireworks": text=openai_compatible_chat(FIREWORKS_API_BASE,keys["fireworks"],model,prompt.strip(),tokens,temp,"Fireworks")
+    elif provider=="openai": text=openai_compatible_chat(OPENAI_API_BASE,keys["openai"],model,prompt.strip(),tokens,temp,"OpenAI")
+    elif provider=="kimi": text=openai_compatible_chat(KIMI_API_BASE,keys["kimi"],model,prompt.strip(),tokens,temp,"Kimi")
+    elif provider=="scaleway": text=openai_compatible_chat(SCALEWAY_API_BASE,keys["scaleway"],model,prompt.strip(),tokens,temp,"Scaleway")
+    elif provider=="together": text=openai_compatible_chat(TOGETHER_API_BASE,keys["together"],model,prompt.strip(),tokens,temp,"Together AI")
     elif provider=="huggingface": text=hf_chat(model,prompt.strip(),tokens,temp)["content"]
     else: raise ValueError("AI provider ไม่รองรับ")
     return {"id":model_id,"provider":provider,"model":model,"content":text}

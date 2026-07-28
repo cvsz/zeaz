@@ -30,6 +30,10 @@ const values = {
   // for existing vaults during migration.
   byteplus: read(source, "ARK_API_KEY") || read(target, "ARK_API_KEY") || read(source, "BYTEPLUS_API_KEY"),
   fireworks: read(source, "FIREWORKS_API_KEY"),
+  openai: read(source, "OPENAI_API_KEY"),
+  kimi: read(source, "KIMI_API_KEY"),
+  scaleway: read(source, "SCALEWAY_API_KEY"),
+  together: read(source, "TOGETHER_API_KEY"),
 };
 if (Object.values(values).some((value) => !value)) throw new Error("A required AI provider key is missing.");
 let existing = {};
