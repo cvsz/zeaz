@@ -762,7 +762,7 @@ def scb_authorize() -> str:
         challenge=base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
         query_values.update(code_challenge=challenge,code_challenge_method="S256")
     verifier_cipher=scb_cipher().encrypt(verifier.encode()).decode() if verifier else ""
-    with db() as con:
+    with db(immediate=True) as con:
         con.execute("DELETE FROM oauth_states WHERE expires_at < ? OR used_at != ''",(utcnow(),))
         con.execute("INSERT INTO oauth_states(state,expires_at,verifier_cipher) VALUES (?,?,?)",(state,(datetime.now(timezone.utc)+timedelta(minutes=10)).isoformat(),verifier_cipher))
     query=parse_qs(parsed.query,keep_blank_values=True)
@@ -773,7 +773,7 @@ def scb_authorize() -> str:
 def scb_consume_oauth_state(state: str) -> str | None:
     if not re.fullmatch(r"[A-Za-z0-9_-]{32,128}",state):return None
     now=utcnow()
-    with db() as con:
+    with db(immediate=True) as con:
         row=con.execute(
             """UPDATE oauth_states SET used_at=?
             WHERE state=? AND used_at='' AND expires_at>=?
@@ -981,7 +981,7 @@ class Handler(SimpleHTTPRequestHandler):
     def upload_document(self, form, role):
         provider=str(form.get("provider","")).strip().lower(); subject=str(form.get("subject_type","")).strip().lower(); subject_id=str(form.get("subject_id","")).strip(); requirement_id=str(form.get("requirement_id","")).strip(); filename=os.path.basename(str(form.get("filename","")))[:180]; mime=str(form.get("mime_type","")).strip().lower(); encoded=form.get("content_base64","")
         if not re.fullmatch(r"[a-z0-9-]{2,40}",provider) or subject not in {"rider","merchant"} or not re.fullmatch(r"[A-Za-z0-9_-]{2,100}",subject_id) or not filename or not isinstance(encoded,str): raise ValueError("ข้อมูลเอกสารไม่ถูกต้อง")
-        with db() as con:
+        with db(immediate=True) as con:
             prow=con.execute("SELECT id FROM providers WHERE slug=? AND status='active'",(provider,)).fetchone()
             req=con.execute("SELECT r.*,d.allowed_mime_types,d.max_size_bytes FROM provider_document_requirements r JOIN providers p ON p.id=r.provider_id JOIN document_types d ON d.id=r.document_type_id WHERE r.id=? AND p.slug=? AND r.subject_type=? AND r.status='active'",(requirement_id,provider,subject)).fetchone()
             if not prow or not req: raise ValueError("ไม่พบ requirement ของเอกสาร")
@@ -1000,21 +1000,25 @@ class Handler(SimpleHTTPRequestHandler):
                 raise ValueError("ไม่สามารถจัดเก็บเอกสารได้") from error
             now=utcnow(); con.execute("INSERT INTO uploaded_documents(id,provider_id,subject_type,subject_id,requirement_id,original_filename,storage_path,mime_type,size_bytes,sha256,status,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(doc_id,prow["id"],subject,subject_id,requirement_id,filename,str(path),mime,len(raw),digest,"pending",json.dumps({"uploaded_by":role}),now,now)); con.execute("INSERT INTO document_verification(document_id,status) VALUES (?,?)",(doc_id,"pending")); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",doc_id,"pending",role,"",json.dumps({}),now)); audit(con,role,"upload","document",doc_id,{"provider":provider,"subject_type":subject,"requirement_id":requirement_id,"size_bytes":len(raw),"mime_type":mime})
             row=con.execute("SELECT * FROM uploaded_documents WHERE id=?",(doc_id,)).fetchone()
-            return self.json({"document":document_public(row)},201)
+            response={"document":document_public(row)}
+        return self.json(response,201)
     def update_document(self, document_id, form, role):
         status=str(form.get("status","")).strip().lower(); reason=str(form.get("reason","")).strip()[:500]
         if status not in {"pending","approved","rejected","expired"}: raise ValueError("สถานะเอกสารไม่ถูกต้อง")
-        with db() as con:
+        with db(immediate=True) as con:
             row=con.execute("SELECT * FROM uploaded_documents WHERE id=? AND status!='deleted'",(document_id,)).fetchone()
             if not row:return self.json({"error":"ไม่พบเอกสาร"},404)
-            now=utcnow(); con.execute("UPDATE uploaded_documents SET status=?,updated_at=? WHERE id=?",(status,now,document_id)); con.execute("UPDATE document_verification SET status=?,verified_by=?,reason=?,verified_at=?,metadata=? WHERE document_id=?",(status,role,reason,now,json.dumps({}),document_id)); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",document_id,status,role,reason,json.dumps({}),now)); audit(con,role,"verify","document",document_id,{"status":status}); return self.json({"document":document_public(con.execute("SELECT * FROM uploaded_documents WHERE id=?",(document_id,)).fetchone())})
+            now=utcnow(); con.execute("UPDATE uploaded_documents SET status=?,updated_at=? WHERE id=?",(status,now,document_id)); con.execute("UPDATE document_verification SET status=?,verified_by=?,reason=?,verified_at=?,metadata=? WHERE document_id=?",(status,role,reason,now,json.dumps({}),document_id)); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",document_id,status,role,reason,json.dumps({}),now)); audit(con,role,"verify","document",document_id,{"status":status}); response={"document":document_public(con.execute("SELECT * FROM uploaded_documents WHERE id=?",(document_id,)).fetchone())}
+        return self.json(response)
     def delete_document(self, document_id, role):
-        with db() as con:
+        with db(immediate=True) as con:
             row=con.execute("SELECT * FROM uploaded_documents WHERE id=? AND status!='deleted'",(document_id,)).fetchone()
             if not row:return self.json({"error":"ไม่พบเอกสาร"},404)
-            try: Path(row["storage_path"]).unlink(missing_ok=True)
-            except OSError: pass
-            now=utcnow(); con.execute("UPDATE uploaded_documents SET status='deleted',updated_at=? WHERE id=?",(now,document_id)); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",document_id,"deleted",role,"ลบเอกสาร",json.dumps({}),now)); audit(con,role,"delete","document",document_id); return self.json({"deleted":True,"id":document_id})
+            storage_path=Path(row["storage_path"])
+            now=utcnow(); con.execute("UPDATE uploaded_documents SET status='deleted',updated_at=? WHERE id=?",(now,document_id)); con.execute("INSERT INTO verification_history VALUES (?,?,?,?,?,?,?)",(f"VER-{secrets.token_hex(8).upper()}",document_id,"deleted",role,"ลบเอกสาร",json.dumps({}),now)); audit(con,role,"delete","document",document_id)
+        try: storage_path.unlink(missing_ok=True)
+        except OSError: pass
+        return self.json({"deleted":True,"id":document_id})
     def admin_document_requirements(self, form, requirement_id, role):
         with db() as con:
             row=con.execute("SELECT * FROM provider_document_requirements WHERE id=?",(requirement_id,)).fetchone()
