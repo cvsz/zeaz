@@ -26,6 +26,7 @@ const values = {
   opencode: read(source, "OPENCODE_API_KEY"),
   openrouter: read(source, "OPENROUTER_API_KEY"),
   groq: read(source, "GROQ_API_KEY"),
+  byteplus: read(source, "BYTEPLUS_API_KEY"),
 };
 if (Object.values(values).some((value) => !value)) throw new Error("A required AI provider key is missing.");
 let existing = {};
