@@ -25,6 +25,12 @@ Auth provides independent origin enforcement using credentials stored only in
 the mode-`0600` ignored `.env.dashboard` file. The Caddy systemd unit must not
 use `--environ`, which would write those credentials to the service journal.
 
+SCB callback claims never settle an order by themselves; the server performs a
+provider inquiry first. A provider-confirmed payment received after an order
+was cancelled is recorded as a paid payment attempt without reopening the
+order, and emits `payment_received_cancelled_order` with
+`requires_reconciliation=true` for operator refund/reconciliation.
+
 Forwarded client IP headers are ignored by default. Enable
 `TRUST_CF_CONNECTING_IP` only when direct application access is prevented and
 the loopback proxy chain is the sole caller; otherwise local header spoofing can

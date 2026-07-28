@@ -261,6 +261,56 @@ def active_payment(con, order_id: str) -> dict | None:
         except ValueError: return None
     return payment
 
+def record_verified_scb_payment(
+    con: sqlite3.Connection,
+    payment: dict,
+    response: dict,
+    actor_role: str,
+    confirmed_action: str,
+    audit_details: dict | None = None,
+) -> None:
+    """Persist provider truth while keeping a cancelled order cancelled."""
+    if payment["status"] not in {"created","pending"}:
+        return
+    order=con.execute(
+        "SELECT status FROM orders WHERE id=?",
+        (payment["order_id"],),
+    ).fetchone()
+    if not order:
+        raise ValueError("ไม่พบออเดอร์ของ payment attempt")
+    now=utcnow()
+    updated=con.execute(
+        """UPDATE payment_attempts
+           SET status='paid',confirmed_at=?,updated_at=?,provider_response=?
+           WHERE id=? AND status IN ('created','pending')""",
+        (now,now,json.dumps(response,ensure_ascii=False),payment["id"]),
+    )
+    if updated.rowcount != 1:
+        return
+    details={"order_id":payment["order_id"],**(audit_details or {})}
+    if order["status"]=="cancelled":
+        audit(
+            con,
+            actor_role,
+            "payment_received_cancelled_order",
+            "payment_attempt",
+            payment["id"],
+            {**details,"requires_reconciliation":True},
+        )
+        return
+    con.execute(
+        "UPDATE orders SET payment_status='paid' WHERE id=? AND status!='cancelled'",
+        (payment["order_id"],),
+    )
+    audit(
+        con,
+        actor_role,
+        confirmed_action,
+        "payment_attempt",
+        payment["id"],
+        details,
+    )
+
 def env(name: str, default="") -> str: return os.environ.get(name, default).strip()
 def parse_bool(value, default=False) -> bool:
     if value is None: return default
@@ -1503,9 +1553,17 @@ class Handler(SimpleHTTPRequestHandler):
         with STORE_LOCK,db(immediate=True) as con:
             current=row_payment(con,payment["id"])
             if paid and current["status"] in {"created","pending"}:
-                order=con.execute("SELECT status FROM orders WHERE id=?",(current["order_id"],)).fetchone()
-                if order and order["status"]!="cancelled":
-                    now=utcnow(); con.execute("UPDATE payment_attempts SET status='paid',confirmed_at=?,updated_at=?,provider_response=? WHERE id=? AND status IN ('created','pending')",(now,now,json.dumps(response,ensure_ascii=False),current["id"])); con.execute("UPDATE orders SET payment_status='paid' WHERE id=? AND status!='cancelled'",(current["order_id"],)); audit(con,"scb_webhook","payment_confirmed","payment_attempt",current["id"],{"order_id":current["order_id"],"provider_order_id":provider_order,"signature_verified":True})
+                record_verified_scb_payment(
+                    con,
+                    current,
+                    response,
+                    "scb_webhook",
+                    "payment_confirmed",
+                    {
+                        "provider_order_id":provider_order,
+                        "signature_verified":True,
+                    },
+                )
             elif not paid: con.execute("UPDATE payment_attempts SET updated_at=?,provider_response=? WHERE id=?",(utcnow(),json.dumps(response,ensure_ascii=False),current["id"]));audit(con,"scb_webhook","payment_callback_pending","payment_attempt",current["id"],{"provider_order_id":provider_order})
         self.json({"status":"paid" if paid else "pending"})
     def inquire_scb_payment(self,payment_id,role):
@@ -1517,9 +1575,9 @@ class Handler(SimpleHTTPRequestHandler):
         with STORE_LOCK,db(immediate=True) as con:
             current=row_payment(con,payment_id)
             if paid and current["status"] in {"created","pending"}:
-                order=con.execute("SELECT status FROM orders WHERE id=?",(current["order_id"],)).fetchone()
-                if order and order["status"]!="cancelled":
-                    now=utcnow(); con.execute("UPDATE payment_attempts SET status='paid',confirmed_at=?,updated_at=?,provider_response=? WHERE id=? AND status IN ('created','pending')",(now,now,json.dumps(response,ensure_ascii=False),payment_id)); con.execute("UPDATE orders SET payment_status='paid' WHERE id=? AND status!='cancelled'",(current["order_id"],)); audit(con,role,"payment_inquiry_paid","payment_attempt",payment_id,{"order_id":current["order_id"]})
+                record_verified_scb_payment(
+                    con,current,response,role,"payment_inquiry_paid"
+                )
             elif not paid: con.execute("UPDATE payment_attempts SET updated_at=?,provider_response=? WHERE id=?",(utcnow(),json.dumps(response,ensure_ascii=False),payment_id));audit(con,role,"payment_inquiry_pending","payment_attempt",payment_id)
             return self.json({"payment":payment_public(row_payment(con,payment_id)),"inquiry":"paid" if paid else "pending"})
     def lookup_order(self,form):

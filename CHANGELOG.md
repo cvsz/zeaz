@@ -29,6 +29,9 @@
   providers.
 - Added exact reverse parity between runtime handler routes and the canonical
   OpenAPI operations, including reviewed mappings for regex routes.
+- Preserved provider-confirmed SCB payments received after cancellation as
+  paid attempts with an explicit reconciliation audit event, while keeping the
+  cancelled order closed.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,
