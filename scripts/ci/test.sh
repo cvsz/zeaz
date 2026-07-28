@@ -44,5 +44,25 @@ node --check "$ROOT/web/admin.js"
 node --check "$ROOT/web/ops.js"
 node --check "$ROOT/web/menu-preview.js"
 node --check "$ROOT/web/api-monitor.js"
-if [[ -d "$ROOT/node_modules" ]]; then (cd "$ROOT" && npm run typecheck); fi
+if [[ -d "$ROOT/node_modules" ]]; then
+  (cd "$ROOT" && npm run typecheck && npm run build)
+  cmp --silent "$ROOT/apps/web/dist/index.html" "$ROOT/web/platform/index.html" || {
+    echo "web/platform is not synchronized with apps/web/dist; publish the current build before committing." >&2
+    exit 1
+  }
+  ROOT="$ROOT" python3 - <<'PY'
+import os
+import re
+from pathlib import Path
+
+root=Path(os.environ["ROOT"])
+index=(root / "apps/web/dist/index.html").read_text()
+assets=re.findall(r'''/(?:platform/)?assets/([^"']+)''', index)
+assert assets, "No built platform assets found"
+for asset in assets:
+    assert (root / "apps/web/dist/assets" / asset).is_file(), asset
+    assert (root / "web/platform/assets" / asset).is_file(), asset
+print("Platform build publication checks passed.")
+PY
+fi
 echo "Platform checks passed."
