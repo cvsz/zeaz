@@ -22,7 +22,11 @@ jobs:
           python3 -m pip install --requirement requirements.txt
           npm ci
       - name: Check shell syntax
-        run: bash -n scripts/*.sh
+        run: find scripts assets/asset-generator -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+      - name: Audit dependencies
+        run: |
+          npm audit --omit=dev --audit-level=high
+          python3 -m pip check
       - name: Run platform checks
         run: ./scripts/ci/test.sh
       - name: Run isolated API smoke checks
