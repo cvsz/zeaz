@@ -32,6 +32,8 @@ certificate material and successful Sandbox verification are configured. See
 ## Run locally
 
 ```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
 ADMIN_KEY='replace-with-a-strong-local-key' ./scripts/start.sh
 ```
 
@@ -57,7 +59,7 @@ key in source control, local storage, or a public URL.
 ## Quality checks
 
 ```bash
-python3 -m py_compile app.py
+.venv/bin/python -m py_compile app.py
 ./scripts/migrate.sh
 ./scripts/health-check.sh
 ./scripts/ci/test.sh

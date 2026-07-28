@@ -22,6 +22,8 @@ The API token and tunnel token are distinct secrets. Never commit either one.
 ## Provision safely
 
 ```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
 ./scripts/start.sh
 ./scripts/cloudflare-plan.sh
 ```

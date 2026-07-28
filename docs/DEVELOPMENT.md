@@ -3,6 +3,8 @@
 ## Run locally
 
 ```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
 ADMIN_KEY='local-owner-key' ./scripts/start.sh
 ```
 
@@ -13,7 +15,7 @@ for merchant applications. Do not use production keys locally.
 ## Verify a change
 
 ```bash
-python3 -m py_compile app.py
+.venv/bin/python -m py_compile app.py
 ./scripts/migrate.sh
 ./scripts/health-check.sh
 ./scripts/ci/test.sh
