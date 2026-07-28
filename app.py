@@ -199,7 +199,15 @@ def row_payment(con, payment_id: str) -> dict | None:
 
 def active_payment(con, order_id: str) -> dict | None:
     row = con.execute("SELECT * FROM payment_attempts WHERE order_id=? AND provider='scb_maemanee' AND status IN ('created','pending') ORDER BY created_at DESC LIMIT 1", (order_id,)).fetchone()
-    return dict(row) if row else None
+    if not row: return None
+    payment=dict(row)
+    if payment["expires_at"]:
+        try:
+            if datetime.fromisoformat(payment["expires_at"]) <= datetime.now(timezone.utc):
+                con.execute("UPDATE payment_attempts SET status='expired',updated_at=? WHERE id=? AND status IN ('created','pending')",(utcnow(),payment["id"]))
+                return None
+        except ValueError: return None
+    return payment
 
 def env(name: str, default="") -> str: return os.environ.get(name, default).strip()
 def parse_bool(value, default=False) -> bool:
@@ -718,7 +726,10 @@ def scb_create_qr(order: dict) -> dict:
     response,_=scb_http(endpoint,payload,{"authorization":f"Bearer {token}","resourceOwnerId":owner})
     data=response.get("data",{}) if isinstance(response,dict) else {}; tag30=data.get("tag30",{}) if isinstance(data,dict) else {}; result=tag30.get("result",{}) if isinstance(tag30,dict) else {}
     if response.get("status",{}).get("code") not in (1000,"1000") or result.get("status") != "SUCCESS" or not isinstance(tag30.get("qrImage"),str): raise ValueError(result.get("moreInfo") or response.get("status",{}).get("description") or "SCB สร้าง QR ไม่สำเร็จ")
-    return {"id":f"PAY-SCB-{secrets.token_hex(6).upper()}","provider":"scb_maemanee","provider_reference":reference,"provider_order_id":str(data.get("orderId", "")),"amount":order["total"],"status":"pending","qr_image":tag30["qrImage"],"qr_type":"T30","expires_at":"","created_at":utcnow(),"updated_at":utcnow(),"confirmed_at":"","provider_response":json.dumps({"orderId":data.get("orderId"),"tag30":{"ref1":tag30.get("ref1"),"ref2":tag30.get("ref2"),"ref3":tag30.get("ref3")}},ensure_ascii=False)}
+    expiry=tag30.get("expiryDateTime") or data.get("expiryDateTime")
+    try: expires_at=datetime.fromisoformat(str(expiry).replace("Z","+00:00")).astimezone(timezone.utc).isoformat() if expiry else (datetime.now(timezone.utc)+timedelta(seconds=max(60,int(env("SCB_QR_TTL_SECONDS","900"))))).isoformat()
+    except ValueError: expires_at=(datetime.now(timezone.utc)+timedelta(seconds=900)).isoformat()
+    return {"id":f"PAY-SCB-{secrets.token_hex(6).upper()}","provider":"scb_maemanee","provider_reference":reference,"provider_order_id":str(data.get("orderId", "")),"amount":order["total"],"status":"pending","qr_image":tag30["qrImage"],"qr_type":"T30","expires_at":expires_at,"created_at":utcnow(),"updated_at":utcnow(),"confirmed_at":"","provider_response":json.dumps({"orderId":data.get("orderId"),"tag30":{"ref1":tag30.get("ref1"),"ref2":tag30.get("ref2"),"ref3":tag30.get("ref3")}},ensure_ascii=False)}
 
 def scb_inquiry_response(payment: dict, token: str, owner: str) -> dict:
     """Call only the SCB inquiry API belonging to this stored payment product."""
