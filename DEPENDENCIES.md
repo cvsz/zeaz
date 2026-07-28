@@ -8,6 +8,8 @@ Dependency declarations are authoritative in:
   `package-lock.json`
 - Terraform: `infrastructure/terraform/cloudflare/.terraform.lock.hcl`
 - Container runtime: `dashboard/Dockerfile`
+- Kubernetes validation: pinned Kustomize and kubeconform versions and release
+  checksums in `scripts/ci/install-kubernetes-tools.sh`
 
 PyYAML is validation-only: it parses the OpenAPI contract so CI can reject
 invalid YAML, broken local references, incomplete protected-route security

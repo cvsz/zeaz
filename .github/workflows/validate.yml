@@ -48,6 +48,10 @@ jobs:
           docker build --build-arg VCS_REF="${GITHUB_SHA}" -t zeaz/moopiew:ci .
           docker build --build-arg VCS_REF="${GITHUB_SHA}" -f dashboard/Dockerfile -t zeaz/dashboard:ci .
           docker image inspect --format '{{.Id}}' zeaz/moopiew:ci zeaz/dashboard:ci > /tmp/zeaz-image-ids
+      - name: Validate rendered Kubernetes manifests
+        run: |
+          ./scripts/ci/install-kubernetes-tools.sh
+          ./scripts/ci/validate-kubernetes.sh
       - name: Validate deployment controls
         run: python3 scripts/ci/evidence.py infrastructure
       - name: Validate performance budgets

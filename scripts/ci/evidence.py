@@ -207,6 +207,19 @@ def infrastructure() -> int:
             for identifier in image_ids
         )
     )
+    schema_evidence = Path(
+        os.environ.get(
+            "KUBERNETES_SCHEMA_EVIDENCE_FILE",
+            "/tmp/zeaz-kubernetes-schema.sha256",
+        )
+    )
+    try:
+        schema_digest = schema_evidence.read_text(encoding="utf-8").strip()
+    except OSError:
+        schema_digest = ""
+    schema_validated = len(schema_digest) == 64 and all(
+        character in "0123456789abcdef" for character in schema_digest
+    )
     policies = {
         "singleReplicaSQLite": "replicas: 1" in manifests and "type: Recreate" in manifests,
         "numericNonRootIdentity": manifests.count("runAsUser: 10001") >= 2
@@ -227,6 +240,7 @@ def infrastructure() -> int:
         "noLatestImages": ":latest" not in manifests,
         "noInlineSecret": "\nkind: Secret\n" not in f"\n{manifests}\n",
         "imagesBuilt": images_built,
+        "kubernetesSchemaValidated": schema_validated,
     }
     status = "pass" if not missing and all(policies.values()) else "fail"
     write_report(

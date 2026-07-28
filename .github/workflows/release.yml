@@ -39,6 +39,8 @@ jobs:
           docker build --build-arg VCS_REF="${GITHUB_SHA}" -t zeaz/moopiew:release .
           docker build --build-arg VCS_REF="${GITHUB_SHA}" -f dashboard/Dockerfile -t zeaz/dashboard:release .
           docker image inspect --format '{{.Id}}' zeaz/moopiew:release zeaz/dashboard:release > /tmp/zeaz-image-ids
+          ./scripts/ci/install-kubernetes-tools.sh
+          ./scripts/ci/validate-kubernetes.sh
           python3 scripts/ci/evidence.py performance
           python3 scripts/ci/evidence.py infrastructure
       - name: Create source archive

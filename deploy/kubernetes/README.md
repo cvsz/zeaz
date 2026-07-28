@@ -16,6 +16,14 @@ kubectl apply -k deploy/kubernetes
 kubectl -n moopiew rollout status deployment/moopiew
 ```
 
+Validate the fully rendered manifests against strict Kubernetes schemas before
+applying them:
+
+```bash
+./scripts/ci/install-kubernetes-tools.sh
+./scripts/ci/validate-kubernetes.sh
+```
+
 Set immutable image digests and replace `moopiew.example.invalid` before
 production; also replace `dashboard.example.invalid` and provision both TLS
 secrets. The dashboard ingress requires the external basic-auth secret and
