@@ -21,6 +21,7 @@ const read = (key) => {
 };
 const probes = [
   ["anthropic", "ANTHROPIC_API_KEY", "https://api.anthropic.com/v1/models", (key) => ({"x-api-key": key, "anthropic-version": "2023-06-01"})],
+  ["byteplus", "BYTEPLUS_API_KEY", "https://ark.ap-southeast.bytepluses.com/api/v3/models", (key) => ({authorization: `Bearer ${key}`})],
   ["cerebras", "CEREBRAS_API_KEY", "https://api.cerebras.ai/v1/models", (key) => ({authorization: `Bearer ${key}`})],
   ["deepseek", "DEEPSEEK_API_KEY", "https://api.deepseek.com/models", (key) => ({authorization: `Bearer ${key}`})],
   ["fireworks", "FIREWORKS_API_KEY", "https://api.fireworks.ai/inference/v1/models", (key) => ({authorization: `Bearer ${key}`})],

@@ -39,6 +39,11 @@ for every supported key found in the provider vault and writes a
 credential-free health report to `output/ai-provider-health.json`. It does not
 copy a key, print a key, or store provider response bodies.
 
+BytePlus ModelArk keys are scoped to their region and project. The checker uses
+the official Southeast Asia data-plane endpoint and deliberately leaves a
+failing BytePlus key out of the runtime catalog until that endpoint authorizes
+it; this prevents a mismatched regional key from being presented as usable.
+
 `HF_TOKEN` stays only on the server. It is never returned by APIs, written to
 the database, included in browser JavaScript, or committed to Git.
 
