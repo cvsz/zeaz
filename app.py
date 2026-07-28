@@ -1130,12 +1130,14 @@ class Handler(SimpleHTTPRequestHandler):
             if payment not in PAYMENT_METHODS or (payment=="scb_qr" and not scb_active()):raise ValueError("วิธีชำระเงินไม่ถูกต้อง")
             if not isinstance(requested,list):raise ValueError("รายการสั่งไม่ถูกต้อง")
             by_id={item["id"]:item for item in conf["menu"] if item["available"]}; lines=[]; total=0
+            seen=set()
             for line in requested:
                 if not isinstance(line,dict):raise ValueError("รายการสั่งไม่ถูกต้อง")
-                item=by_id.get(str(line.get("id","")))
+                item_id=str(line.get("id","")).strip(); item=by_id.get(item_id)
                 try: quantity=int(line.get("quantity",0))
                 except (TypeError,ValueError):raise ValueError("รายการสั่งไม่ถูกต้อง")
-                if item and 0<quantity<=100:lines.append((item,quantity));total+=item["price"]*quantity
+                if not item or item_id in seen or not 0<quantity<=100: raise ValueError("รายการสั่งมีเมนูหรือจำนวนไม่ถูกต้อง")
+                seen.add(item_id); lines.append((item,quantity)); total+=item["price"]*quantity
             if not lines:raise ValueError("กรุณาเลือกอย่างน้อย 1 รายการ")
             if fulfillment=="pickup":
                 remaining=next(slot["remaining"] for slot in slots_for(pickup_date,all_orders(con),conf) if slot["time"]==pickup_slot)
