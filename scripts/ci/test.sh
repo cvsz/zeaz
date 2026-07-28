@@ -23,6 +23,27 @@ print("OpenAPI published-route coverage checks passed.")
 PY
 ROOT="$ROOT" python3 - <<'PY'
 import os
+import re
+from pathlib import Path
+
+root = Path(os.environ["ROOT"])
+web = root / "web"
+reference = re.compile(r'''(?:src|href)=["'](/[^"'#?]+)["']''')
+for page in web.glob("*.html"):
+    for target in reference.findall(page.read_text(encoding="utf-8")):
+        if target.startswith("/api/") or target.startswith("/auth/"):
+            continue
+        relative = target.removeprefix("/")
+        candidate = web / relative
+        if target == "/":
+            candidate = web / "index.html"
+        elif target.endswith("/"):
+            candidate /= "index.html"
+        assert candidate.is_file(), f"{page.relative_to(root)} references missing {target}"
+print("Static page asset-reference checks passed.")
+PY
+ROOT="$ROOT" python3 - <<'PY'
+import os
 import sys
 from http.server import BaseHTTPRequestHandler
 from email.message import Message
