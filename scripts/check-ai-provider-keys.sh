@@ -6,19 +6,26 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE="${1:-/home/cvsz/zeaz-provider/.env.provider}"
 REPORT="$ROOT/output/ai-provider-health.json"
+RUNTIME_ENV="${2:-$ROOT/.env.ai}"
 
 [[ -f "$SOURCE" ]] || { echo "Credential source not found." >&2; exit 1; }
 command -v node >/dev/null 2>&1 || { echo "Node.js is required." >&2; exit 1; }
 mkdir -p "$(dirname "$REPORT")"
 
-SOURCE="$SOURCE" REPORT="$REPORT" node <<'NODE'
+SOURCE="$SOURCE" REPORT="$REPORT" RUNTIME_ENV="$RUNTIME_ENV" node <<'NODE'
 const fs = require("fs");
 const https = require("https");
 const source = fs.readFileSync(process.env.SOURCE, "utf8");
+const runtime = fs.existsSync(process.env.RUNTIME_ENV) ? fs.readFileSync(process.env.RUNTIME_ENV, "utf8") : "";
 const read = (key) => {
   const line = source.split(/\r?\n/).find((row) => row.startsWith(`${key}=`));
   return line ? line.slice(key.length + 1).trim().replace(/^['"]|['"]$/g, "") : "";
 };
+const readRuntime = (key) => {
+  const line = runtime.split(/\r?\n/).find((row) => row.startsWith(`${key}=`));
+  return line ? line.slice(key.length + 1).trim().replace(/^['"]|['"]$/g, "") : "";
+};
+const readKey = (key) => read(key) || readRuntime(key);
 const probes = [
   ["anthropic", "ANTHROPIC_API_KEY", "https://api.anthropic.com/v1/models", (key) => ({"x-api-key": key, "anthropic-version": "2023-06-01"})],
   ["byteplus", ["ARK_API_KEY", "BYTEPLUS_API_KEY"], "https://ark.ap-southeast.bytepluses.com/api/v3/models", (key) => ({authorization: `Bearer ${key}`})],
@@ -58,8 +65,8 @@ const request = (url, headers) => new Promise((resolve) => {
   const results = [];
   for (const [provider, variable, url, makeHeaders] of probes) {
     const variables = Array.isArray(variable) ? variable : [variable];
-    const selected = variables.find((name) => read(name));
-    const key = selected ? read(selected) : "";
+    const selected = variables.find((name) => readKey(name));
+    const key = selected ? readKey(selected) : "";
     if (!key) { results.push({provider, variable: variables.join("|"), configured: false, live: false, status: null, models: null}); continue; }
     const response = await request(url, makeHeaders(key));
     results.push({provider, variable: selected, configured: true, live: response.status >= 200 && response.status < 300, status: response.status || null, models: response.models});

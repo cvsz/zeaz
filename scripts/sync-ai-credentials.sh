@@ -28,7 +28,7 @@ const values = {
   groq: read(source, "GROQ_API_KEY"),
   // ModelArk calls use ARK_API_KEY. Keep BYTEPLUS_API_KEY as a legacy alias
   // for existing vaults during migration.
-  byteplus: read(source, "ARK_API_KEY") || read(source, "BYTEPLUS_API_KEY"),
+  byteplus: read(source, "ARK_API_KEY") || read(target, "ARK_API_KEY") || read(source, "BYTEPLUS_API_KEY"),
 };
 if (Object.values(values).some((value) => !value)) throw new Error("A required AI provider key is missing.");
 let existing = {};
