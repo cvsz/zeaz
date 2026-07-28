@@ -23,16 +23,24 @@ for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_ZONE_ID CLOUDFL
   [[ -n "${!key:-}" ]] || { echo "Missing $key" >&2; exit 1; }
 done
 python3 -m py_compile "$ROOT/app.py"
-curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:${PORT:-8000}/api/health" >/dev/null || {
+check_url() {
+  local url="$1" attempts=0
+  while (( attempts < 10 )); do
+    curl --fail --silent --show-error --max-time 10 "$url" >/dev/null && return 0
+    attempts=$((attempts + 1)); sleep 1
+  done
+  return 1
+}
+check_url "http://127.0.0.1:${PORT:-8000}/api/health" || {
   echo "Local health endpoint failed" >&2; exit 1;
 }
-curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:${PORT:-8000}/api/menu" >/dev/null || {
+check_url "http://127.0.0.1:${PORT:-8000}/api/menu" || {
   echo "Local app health check failed; start moopiew.service first" >&2; exit 1;
 }
-curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:8080/api/menu" >/dev/null || {
+check_url "http://127.0.0.1:8080/api/menu" || {
   echo "Local proxy health check failed; start moopiew-proxy.service first" >&2; exit 1;
 }
-curl --fail --silent --show-error --max-time 20 "https://${MOOPIEW_HOSTNAME:-moopiew.zeaz.dev}/api/menu" >/dev/null || {
+check_url "https://${MOOPIEW_HOSTNAME:-moopiew.zeaz.dev}/api/menu" || {
   echo "Public tunnel health check failed" >&2; exit 1;
 }
 echo "Production checks passed."
