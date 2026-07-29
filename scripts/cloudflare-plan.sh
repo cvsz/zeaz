@@ -5,7 +5,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${CLOUDFLARE_ENV_FILE:-$ROOT/.env.cloudflare}"
 STACK="$ROOT/infrastructure/terraform/cloudflare"
 
-[[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE; copy .env.cloudflare.example first." >&2; exit 1; }
+[[ -f "$ENV_FILE" && ! -L "$ENV_FILE" ]] || {
+  echo "Cloudflare environment must be a regular file: $ENV_FILE" >&2
+  exit 1
+}
+mode="$(stat -c '%a' "$ENV_FILE")"
+(( (8#$mode & 8#077) == 0 )) || {
+  echo "Cloudflare environment must not be group/world accessible: $ENV_FILE" >&2
+  exit 1
+}
 set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"

@@ -1,10 +1,10 @@
-# Test Report (2026-07-28)
+# Test Report (2026-07-29)
 
 The canonical machine-readable results are `dashboard/data/*.json`, regenerated
 by `scripts/ci/evidence.py` and uploaded by `.github/workflows/validate.yml`.
 At this revision:
 
-- `python3 scripts/ci/evidence.py coverage` — 114 tests passed; 58.80% measured
+- `python3 scripts/ci/evidence.py coverage` — 116 tests passed; 58.94% measured
   Python line coverage with a 56% minimum gate; `app.py` measured 58.82%.
 - `npm run validate` — lint, TypeScript type checking, workspace build and
   Python tests passed.

@@ -60,10 +60,11 @@ after_addresses="$(mktemp "$STACK/.state-after.XXXXXX.txt")"
 backend_template="$STACK/backend.r2.tf.example"
 backend_file="$STACK/backend.tf"
 backend_created=false
+backend_initialized=false
 cleanup() {
   status=$?
   rm -f "$backend_config" "$remote_state" "$before_addresses" "$after_addresses"
-  if (( status != 0 )) && [[ "$backend_created" == "true" ]]; then
+  if (( status != 0 )) && [[ "$backend_created" == "true" && "$backend_initialized" != "true" ]]; then
     rm -f "$backend_file"
   fi
   return "$status"
@@ -94,31 +95,58 @@ if [[ "$COMMAND" == "migrate" ]]; then
     exit 1
   }
   local_state="$STACK/terraform.tfstate"
-  [[ -s "$local_state" ]] || {
+  [[ -f "$local_state" && ! -L "$local_state" && -s "$local_state" ]] || {
     echo "Local Terraform state is missing; refusing an empty migration" >&2
     exit 1
   }
-  "$TF_BIN" -chdir="$STACK" state list > "$before_addresses"
+  state_mode="$(stat -c '%a' "$local_state")"
+  (( (8#$state_mode & 8#077) == 0 )) || {
+    echo "Local Terraform state must not be group/world accessible" >&2
+    exit 1
+  }
+  python3 - "$local_state" <<'PY'
+import json
+import pathlib
+import sys
+
+state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+if not isinstance(state, dict) or state.get("version") != 4:
+    raise SystemExit("Local Terraform state is not a version 4 state object")
+if not isinstance(state.get("lineage"), str) or not state["lineage"]:
+    raise SystemExit("Local Terraform state has no lineage")
+if not isinstance(state.get("resources"), list) or not state["resources"]:
+    raise SystemExit("Local Terraform state has no managed resources")
+PY
+  "$TF_BIN" -chdir="$STACK" state list -state="$local_state" > "$before_addresses"
   [[ -s "$before_addresses" ]] || {
     echo "Local Terraform state has no managed resources" >&2
     exit 1
   }
-  mkdir -p "$BACKUP_DIR"
-  backup="$BACKUP_DIR/cloudflare-state-$(date -u +%Y%m%dT%H%M%SZ).tfstate"
+  [[ ! -L "$BACKUP_DIR" ]] || {
+    echo "Cloudflare state backup directory must not be a symlink" >&2
+    exit 1
+  }
+  install -d -m 700 "$BACKUP_DIR"
+  backup="$(mktemp "$BACKUP_DIR/cloudflare-state-$(date -u +%Y%m%dT%H%M%SZ).XXXXXX.tfstate")"
   install -m 600 "$local_state" "$backup"
-  sha256sum "$backup" > "$backup.sha256"
+  (
+    cd "$BACKUP_DIR"
+    sha256sum "$(basename "$backup")" > "$(basename "$backup").sha256"
+  )
   chmod 600 "$backup.sha256"
   install_backend
   "$TF_BIN" -chdir="$STACK" init -migrate-state -force-copy \
     -backend-config="$backend_config"
+  backend_initialized=true
 else
   install_backend
   "$TF_BIN" -chdir="$STACK" init -reconfigure \
     -backend-config="$backend_config"
+  backend_initialized=true
 fi
 
 "$TF_BIN" -chdir="$STACK" state pull > "$remote_state"
-python3 - "$remote_state" <<'PY'
+python3 - "$remote_state" "${backup:-}" <<'PY'
 import json
 import pathlib
 import sys
@@ -128,6 +156,10 @@ if not isinstance(state, dict) or state.get("version") != 4:
     raise SystemExit("Remote Terraform state is not a version 4 state object")
 if not isinstance(state.get("resources"), list) or not state["resources"]:
     raise SystemExit("Remote Terraform state has no managed resources")
+if sys.argv[2]:
+    local = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+    if state.get("lineage") != local.get("lineage"):
+        raise SystemExit("Remote Terraform state lineage differs from the local backup")
 PY
 "$TF_BIN" -chdir="$STACK" state list > "$after_addresses"
 [[ -s "$after_addresses" ]] || {

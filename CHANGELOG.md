@@ -35,6 +35,9 @@
 - Added an encrypted, lockfile-enabled Cloudflare R2 Terraform backend contract
   with fail-closed migration, local backup/checksum, address parity and remote
   state verification controls.
+- Hardened Cloudflare state migration with restrictive local-state and backup
+  permissions, unique backup custody, lineage verification, and recovery-safe
+  retention of an initialized remote backend after verification failure.
 - Added HTTP-level authorization, secure document deletion, malformed upload
   and SCB callback failure coverage, and raised the enforced Python coverage
   floor from 40% to 45%.

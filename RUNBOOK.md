@@ -16,5 +16,26 @@
 3. Treat missing reports as unavailable evidence, not a successful control.
 4. Restart the dashboard only after preserving its logs.
 
+## Terraform state migration failure
+
+1. Stop every Terraform writer and preserve `.terraform/`, ignored
+   `backend.tf`, the local state, and the newest
+   `output/backups/cloudflare-state-*.tfstate{,.sha256}` without modification.
+2. Verify the backup from its directory with
+   `sha256sum --check <backup-name>.sha256`; reject a checksum or permission
+   mismatch.
+3. If `backend.tf` exists after the command failed, assume R2 may already be
+   authoritative. Do not delete it, reinitialize the local backend, apply, or
+   push state.
+4. Run `./scripts/cloudflare-state.sh verify` with the same mode-`0600`
+   `.env.cloudflare`, then compare remote state lineage and managed addresses
+   with the verified backup.
+5. If verification cannot establish one authoritative state, make both state
+   copies immutable, record their serial, lineage, checksum, and writer
+   timeline, and require a reviewed recovery decision before any mutation.
+6. Use `terraform state push` only against an explicitly reviewed recovery
+   backend after a no-change import and plan review. Never force-unlock without
+   first identifying the lock owner and current writer.
+
 Security incidents follow [`SECURITY.md`](SECURITY.md). Deployment and rollback
 procedures are in [`DEPLOYMENT.md`](DEPLOYMENT.md).
