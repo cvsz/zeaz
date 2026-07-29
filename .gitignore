@@ -47,3 +47,8 @@ infrastructure/terraform/cloudflare/.state-*.txt
 tools/bin/
 *.zip
 .DS_Store
+*.pem
+.venv/
+**/.venv/
+.next/
+**/.next/
