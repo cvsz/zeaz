@@ -43,3 +43,11 @@ script installs ignored `backend.tf` from that canonical template only for R2
 operations. A local backend is not collaborative production state;
 `ROADMAP.md` remains open until an encrypted R2 backend migration and
 lock-backed plan have both succeeded.
+
+Migration requires a mode-`0600` version-4 local state with a nonempty lineage
+and managed resource set. It creates a mode-`0700` backup directory containing
+a unique mode-`0600` state copy and checksum, then verifies remote lineage and
+resource-address parity. If backend initialization succeeds but verification
+fails, `backend.tf` intentionally remains installed: stop Terraform writers
+and use the recovery procedure in [`RUNBOOK.md`](RUNBOOK.md) before changing
+backend authority.

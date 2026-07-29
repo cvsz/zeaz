@@ -31,16 +31,19 @@ individual operator email addresses.
 
 `backend.r2.tf.example` is the canonical encrypted S3-compatible R2 backend
 with an S3 lockfile. The state script installs it as ignored `backend.tf` only
-in R2 mode and removes a newly installed copy if initialization fails. Bucket,
-endpoint and S3 credentials are partial configuration supplied only from the
-mode-`0600` ignored `.env.cloudflare`; credentials are never written to
-Terraform source or command-line backend arguments.
+in R2 mode. A newly installed copy is removed only if initialization itself
+fails; after initialization succeeds it remains in place even if subsequent
+verification fails, because the remote backend may already be authoritative.
+Bucket, endpoint and S3 credentials are partial configuration supplied only
+from the mode-`0600` ignored `.env.cloudflare`; credentials are never written
+to Terraform source or command-line backend arguments.
 
 Keep `TERRAFORM_BACKEND_TYPE=local` and `ALLOW_R2_WRITE=false` until a private,
 dedicated R2 bucket and a bucket-scoped Object Read & Write access pair exist.
 Then take an independent copy of the current local state and migrate:
 
 ```bash
+chmod 600 infrastructure/terraform/cloudflare/terraform.tfstate
 TERRAFORM_BACKEND_TYPE=r2
 ALLOW_R2_WRITE=true
 TERRAFORM_STATE_BUCKET=replace-with-private-state-bucket
@@ -52,13 +55,20 @@ CLOUDFLARE_ACCESS_SECRET_KEY=replace-with-bucket-scoped-secret
 ./scripts/cloudflare-plan.sh
 ```
 
-Migration refuses an empty local state, stores a mode-`0600` backup plus
-SHA-256 under ignored `output/backups/`, and requires the exact managed
-resource-address set before and after migration. Preserve that backup outside
-the origin host. To recover, first stop all Terraform writers, verify the
-backup checksum, switch explicitly to a reviewed empty recovery backend, and
-use `terraform state push` only after a no-change import/plan review. Never
-disable `use_lockfile` to bypass a lock; investigate the current writer first.
+Migration refuses a symlink, group/world-accessible state, an empty resource
+set, or a state without a version-4 lineage. It stores a uniquely named
+mode-`0600` backup and basename-only SHA-256 manifest in a mode-`0700` ignored
+`output/backups/` directory. Verification requires the remote lineage and exact
+managed resource-address set to match the local backup. Preserve the backup
+and checksum together outside the origin host.
+
+If migration initialization succeeds but verification fails, stop all
+Terraform writers and leave `backend.tf` in place. Treat R2 as potentially
+authoritative, run `./scripts/cloudflare-state.sh verify`, inspect the remote
+lineage and resource addresses, and follow the recovery procedure in
+[`RUNBOOK.md`](../../../RUNBOOK.md). Do not silently return to the local state.
+Never disable `use_lockfile` to bypass a lock; investigate the current writer
+first.
 
 The plan script never applies. If either hostname already exists, import it
 before planning to prevent Terraform from attempting to create a duplicate:
