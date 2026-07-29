@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0.0",
+  "repository": "cvsz/zeaz",
+  "head": "0000000",
+  "generatedAt": "2026-07-29T00:00:00Z",
+  "items": [
+    {
+      "id": "ZERP-INSTALL-0001",
+      "category": "installer",
+      "path": "apps/zerp/scripts/install.sh",
+      "severity": "P1",
+      "status": "missing",
+      "evidence": "The SSOT requires a non-interactive, idempotent installer, but the required path is absent.",
+      "validation": "test -x apps/zerp/scripts/install.sh && apps/zerp/scripts/install.sh --dry-run --non-interactive",
+      "dependencies": [],
+      "completionEvidence": ""
+    }
+  ]
+}
