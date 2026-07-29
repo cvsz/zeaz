@@ -17,6 +17,7 @@ from sqlalchemy import select
 from ztrader.abt.models import TradingViewAlert as TradingViewAlertRecord
 from ztrader.abt.services.exchange_service import ExchangeConnector
 from ztrader.abt.utils.database import get_db_connection
+from ztrader.core.logging_utils import sanitize_log_value
 
 logger = getLogger(__name__)
 
@@ -191,12 +192,15 @@ async def tradingview_webhook(
             await db.flush()
 
             logger.info(
-                f"TradingView alert received: {alert.ticker} {action} @ {alert.price}",
+                "TradingView alert received: ticker=%s action=%s price=%s",
+                sanitize_log_value(alert.ticker),
+                sanitize_log_value(action),
+                alert.price,
                 extra={
                     "component": "tradingview",
                     "alert_id": alert_record.id,
-                    "ticker": alert.ticker,
-                    "action": action,
+                    "ticker": sanitize_log_value(alert.ticker),
+                    "action": sanitize_log_value(action),
                 },
             )
 
@@ -226,25 +230,29 @@ async def tradingview_webhook(
                         else str(order)
                     )
                     logger.info(
-                        f"Auto-trade executed: {action} {alert.ticker} "
-                        f"on {alert.exchange} (order: {trade_id})",
+                        "Auto-trade executed: action=%s ticker=%s exchange=%s order=%s",
+                        sanitize_log_value(action),
+                        sanitize_log_value(alert.ticker),
+                        sanitize_log_value(alert.exchange),
+                        sanitize_log_value(trade_id),
                         extra={
                             "component": "tradingview",
                             "alert_id": alert_record.id,
-                            "ticker": alert.ticker,
-                            "action": action,
-                            "order_id": trade_id,
+                            "ticker": sanitize_log_value(alert.ticker),
+                            "action": sanitize_log_value(action),
+                            "order_id": sanitize_log_value(trade_id),
                         },
                     )
                 except Exception as trade_error:
                     logger.error(
-                        f"Auto-trade failed for {alert.ticker}: {trade_error}",
+                        "Auto-trade failed for ticker=%s",
+                        sanitize_log_value(alert.ticker),
                         extra={
                             "component": "tradingview",
                             "alert_id": alert_record.id,
-                            "ticker": alert.ticker,
-                            "action": action,
-                            "error": str(trade_error),
+                            "ticker": sanitize_log_value(alert.ticker),
+                            "action": sanitize_log_value(action),
+                            "error_type": type(trade_error).__name__,
                         },
                     )
 
@@ -256,14 +264,18 @@ async def tradingview_webhook(
             }
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception as error:
         logger.error(
-            f"Error processing TradingView alert: {str(e)}",
-            extra={"component": "tradingview", "error": str(e)},
+            "Error processing TradingView alert",
+            extra={
+                "component": "tradingview",
+                "error_type": type(error).__name__,
+            },
         )
         raise HTTPException(
-            status_code=500, detail=f"Failed to process alert: {str(e)}"
-        ) from e
+            status_code=500,
+            detail="Failed to process alert",
+        ) from None
 
 
 @router.get("/alerts")

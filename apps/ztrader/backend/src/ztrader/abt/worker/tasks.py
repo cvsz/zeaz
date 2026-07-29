@@ -129,13 +129,13 @@ async def check_secret_rotation_async():
 
                 if overdue:
                     logger.warning(
-                        f"OVERDUE: Secret {secret['secretType']}:{secret['secretName']} "
-                        f"was due {abs(days)} days ago!"
+                        "A managed secret is overdue for rotation by %s day(s)",
+                        abs(days),
                     )
                 else:
                     logger.info(
-                        f"Secret {secret['secretType']}:{secret['secretName']} "
-                        f"needs rotation in {days} days"
+                        "A managed secret needs rotation in %s day(s)",
+                        days,
                     )
 
             # Count overdue vs upcoming
@@ -147,8 +147,11 @@ async def check_secret_rotation_async():
                 f"Overdue: {overdue_count}, Upcoming: {upcoming_count}"
             )
 
-        except Exception as e:
-            logger.error(f"Error during secret rotation check: {e}")
+        except Exception as error:
+            logger.error(
+                "Secret rotation check failed",
+                extra={"error_type": type(error).__name__},
+            )
             raise
 
 

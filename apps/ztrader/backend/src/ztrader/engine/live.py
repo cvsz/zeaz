@@ -4,6 +4,7 @@ import logging
 from typing import Optional, Dict, Any
 import ccxt
 from ztrader.core.security import encryptor
+from ztrader.core.logging_utils import sanitize_log_value
 from ztrader.models.db_models import ExchangeKey, Order as DBOrder
 from ztrader.engine.risk import RiskEngine, StrategyIntent, RiskStatus
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +22,13 @@ class MT5GatewayClient:
         self.password_encrypted = password_encrypted
 
     def execute_order(self, symbol: str, side: str, amount: float, price: float) -> Dict[str, Any]:
-        logger.info(f"MT5 execution request: {side} {amount} {symbol} @ {price} on {self.server}")
+        logger.info(
+            "MT5 execution request: side=%s amount=%s symbol=%s price=%s",
+            sanitize_log_value(side),
+            amount,
+            sanitize_log_value(symbol),
+            price,
+        )
         # Return mock MT5 execution receipt
         return {
             "id": f"mt5-deal-{int(amount * 100000)}",
@@ -84,21 +91,32 @@ class LiveBroker:
                 )
             else:
                 raise ValueError(f"Unsupported exchange target: {self.exchange_name}")
-        except Exception as e:
-            logger.error(f"Failed to initialize live exchange client for {self.exchange_name}: {e}")
+        except Exception as error:
+            logger.error(
+                "Failed to initialize live exchange client",
+                extra={"error_type": type(error).__name__},
+            )
             self.client = None
 
     async def execute(self, intent: StrategyIntent, price: float, risk: RiskEngine, db: AsyncSession) -> DBOrder:
         # Pre-execution Risk Gate check
         status, reason = risk.validate(intent)
         if status == RiskStatus.DENY:
-            logger.warning(f"Live order execution DENIED by RiskEngine: {reason}")
+            logger.warning(
+                "Live order execution denied by RiskEngine: reason=%s",
+                sanitize_log_value(reason),
+            )
             raise ValueError(f"Risk engine validation failed: {reason}")
 
         if not self.client:
             raise ValueError(f"Exchange client not initialized for {self.exchange_name}")
 
-        logger.info(f"Dispatching live order: {intent.side} {intent.symbol} on {self.exchange_name}")
+        logger.info(
+            "Dispatching live order: side=%s symbol=%s exchange=%s",
+            sanitize_log_value(intent.side),
+            sanitize_log_value(intent.symbol),
+            sanitize_log_value(self.exchange_name),
+        )
 
         # Calculate size based on notional and price
         amount = intent.notional / price
@@ -144,6 +162,9 @@ class LiveBroker:
             await db.refresh(db_order)
             return db_order
 
-        except Exception as e:
-            logger.error(f"Live broker order execution crashed: {e}")
+        except Exception as error:
+            logger.error(
+                "Live broker order execution failed",
+                extra={"error_type": type(error).__name__},
+            )
             raise

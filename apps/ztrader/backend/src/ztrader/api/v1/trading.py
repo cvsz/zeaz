@@ -7,6 +7,7 @@ from sqlalchemy.future import select
 
 from ztrader.core.config import settings
 from ztrader.core.database import get_db_session
+from ztrader.core.logging_utils import sanitize_log_value
 from ztrader.core.security import encryptor
 from ztrader.domain.schemas import (
     AuditLogResponse,
@@ -134,7 +135,11 @@ async def start_bot(req: BotStartRequest):
         "params": req.model_dump() if hasattr(req, "model_dump") else req.dict()
     }
 
-    logger.info(f"Bot {bot_id} started in mode: {settings.EXECUTION_MODE}")
+    logger.info(
+        "Bot %s started in mode %s",
+        sanitize_log_value(bot_id),
+        sanitize_log_value(settings.EXECUTION_MODE),
+    )
     return {
         "bot_id": bot_id,
         "strategy_name": req.strategy_name,
@@ -152,7 +157,7 @@ async def stop_bot(bot_id: str):
         )
 
     ACTIVE_BOTS[bot_id]["active"] = False
-    logger.info(f"Bot {bot_id} stopped.")
+    logger.info("Bot %s stopped", sanitize_log_value(bot_id))
     return {"status": "stopped", "bot_id": bot_id}
 
 @router.get("/api/v1/bot/status", response_model=list[BotStatusResponse])

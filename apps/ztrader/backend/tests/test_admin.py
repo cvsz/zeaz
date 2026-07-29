@@ -248,7 +248,10 @@ async def test_admin_system_health(client):
     assert data["status"] == "healthy"
     assert data["db_connected"] is True
     assert data["redis_connected"] is True
-    assert "binance.com" in data["broker_latency_ms"]
+    assert any(
+        broker_name == "binance.com"
+        for broker_name in data["broker_latency_ms"]
+    )
 
 @pytest.mark.asyncio
 async def test_admin_requires_bearer_token(client):

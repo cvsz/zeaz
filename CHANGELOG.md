@@ -71,6 +71,9 @@
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,
   verification, deletion and history endpoints, plus the reusable upload UI.
+- Hardened ZTrader logging against forged entries and sensitive-data exposure,
+  and replaced backend exception details in health and webhook responses with
+  stable public diagnostics.
 
 - Established MooPiew as a restaurant ordering and delivery platform with a
   customer storefront and owner operations console.
