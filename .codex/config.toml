@@ -24,6 +24,9 @@ args = ["-y", "@modelcontextprotocol/server-memory"]
 command = "npx"
 args = ["-y", "@playwright/mcp@latest", "--extension"]
 
+[mcp_servers.playwright.tools.browser_tabs]
+approval_mode = "approve"
+
 [mcp_servers.sequential-thinking]
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-sequential-thinking"]

@@ -1028,7 +1028,21 @@ class Handler(SimpleHTTPRequestHandler):
         nonce=getattr(self,"_script_nonce","")
         script_source="script-src 'self'" + (f" 'nonce-{nonce}'" if nonce else "")
         self.send_header("Content-Security-Policy", f"default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; {script_source}; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
-        if urlparse(self.path).path in {"/admin.html", "/admin.js", "/ops.html", "/ops.js", "/api-monitor.html", "/api-monitor.js", "/api-monitor.css"}: self.send_header("Cache-Control", "no-store, max-age=0")
+        if urlparse(self.path).path in {
+            "/admin.html",
+            "/ai.html",
+            "/api-monitor.html",
+            "/document-admin.html",
+            "/documents.html",
+            "/ops.html",
+            "/platform/admin.html",
+            "/platform/ai.html",
+            "/platform/api-monitor.html",
+            "/platform/document-admin.html",
+            "/platform/documents.html",
+            "/platform/ops.html",
+        }:
+            self.send_header("Cache-Control", "no-store, max-age=0")
         super().end_headers()
     def json(self, payload, status=200):
         encoded=json.dumps(payload, ensure_ascii=False).encode(); self.send_response(status); self.send_header("Content-Type", "application/json; charset=utf-8"); self.send_header("Content-Length", str(len(encoded))); self.send_header("Cache-Control", "no-store"); self.end_headers(); self.wfile.write(encoded)

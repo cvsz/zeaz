@@ -1,6 +1,5 @@
 import base64
 import json
-import subprocess
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -374,11 +373,14 @@ class DocumentApiTests(unittest.TestCase):
     def test_frontend_document_renderer_contract(self):
         with urlopen(self.base + "/documents.html", timeout=3) as response:
             page = response.read().decode()
-        self.assertIn("document-upload/document-page.js", page)
-        source = Path(app.ROOT / "web/components/document-upload/document-upload.js").read_text(encoding="utf-8")
-        self.assertIn("ondrop", source)
-        self.assertIn("capture=\"environment\"", source)
-        subprocess.run(["node", "--check", str(app.ROOT / "web/components/document-upload/document-upload.js")], check=True, capture_output=True)
+        self.assertIn("/platform/documents.html", page)
+        source = Path(app.ROOT / "apps/web/src/documents.tsx").read_text(encoding="utf-8")
+        service = Path(app.ROOT / "packages/sdk/src/documents.ts").read_text(encoding="utf-8")
+        self.assertIn("onDrop={drop}", source)
+        self.assertIn("api.documents.upload", source)
+        self.assertIn("api.documents.remove", source)
+        self.assertNotIn("fetch(", source)
+        self.assertIn('"/api/documents/upload"', service)
 
 
 if __name__ == "__main__":

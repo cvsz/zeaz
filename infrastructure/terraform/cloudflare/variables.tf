@@ -55,10 +55,10 @@ variable "moopiew_hostname" {
 variable "moopiew_origin" {
   type        = string
   default     = "http://127.0.0.1:8080"
-  description = "HTTP origin reached by cloudflared on the tunnel host."
+  description = "Loopback Caddy origin reached by cloudflared for the public application."
   validation {
-    condition     = can(regex("^https?://[^[:space:]]+$", var.moopiew_origin))
-    error_message = "moopiew_origin must be an HTTP(S) URL."
+    condition     = var.moopiew_origin == "http://127.0.0.1:8080"
+    error_message = "moopiew_origin must use the reviewed loopback Caddy proxy at http://127.0.0.1:8080."
   }
 }
 
@@ -74,11 +74,11 @@ variable "piewdash_hostname" {
 
 variable "piewdash_origin" {
   type        = string
-  default     = "http://127.0.0.1:8082"
-  description = "Dashboard origin reached by cloudflared on the tunnel host."
+  default     = "http://127.0.0.1:80"
+  description = "Loopback Caddy origin reached by cloudflared for the protected dashboard."
   validation {
-    condition     = can(regex("^https?://[^[:space:]]+$", var.piewdash_origin))
-    error_message = "piewdash_origin must be an HTTP(S) URL."
+    condition     = var.piewdash_origin == "http://127.0.0.1:80"
+    error_message = "piewdash_origin must use the reviewed Caddy authentication proxy at http://127.0.0.1:80."
   }
 }
 
@@ -95,8 +95,49 @@ variable "piewdash_access_allowed_emails" {
   }
 }
 
+variable "zerp_hostname" {
+  type        = string
+  default     = "zerp.zeaz.dev"
+  description = "Public hostname for the zERP web application."
+  validation {
+    condition     = endswith(lower(var.zerp_hostname), ".${lower(var.zone_name)}")
+    error_message = "zerp_hostname must be a subdomain of zone_name."
+  }
+}
+
+variable "zerp_origin" {
+  type        = string
+  default     = "http://127.0.0.1:80"
+  description = "Loopback Caddy origin reached by cloudflared for zERP."
+  validation {
+    condition     = var.zerp_origin == "http://127.0.0.1:80"
+    error_message = "zerp_origin must use the reviewed loopback Caddy proxy at http://127.0.0.1:80."
+  }
+}
+
 variable "manage_tunnel_config" {
   type        = bool
   default     = false
   description = "Only true after importing and reviewing the current remote tunnel ingress."
 }
+
+variable "cmeerp_hostname" {
+  type        = string
+  default     = "cmeerp.zeaz.dev"
+  description = "Public hostname for the CME Pro ERP web application."
+  validation {
+    condition     = endswith(lower(var.cmeerp_hostname), ".${lower(var.zone_name)}")
+    error_message = "cmeerp_hostname must be a subdomain of zone_name."
+  }
+}
+
+variable "cmeerp_origin" {
+  type        = string
+  default     = "http://127.0.0.1:8001"
+  description = "Loopback origin reached by cloudflared for CME Pro ERP."
+  validation {
+    condition     = can(regex("^http://127\\.0\\.0\\.1:[0-9]+$", var.cmeerp_origin))
+    error_message = "cmeerp_origin must use a loopback address."
+  }
+}
+

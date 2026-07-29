@@ -1,4 +1,8 @@
-```markdown
+---
+name: zeaz
+description: Repository-specific development patterns and workflows for MooPiew.
+---
+
 # zeaz Development Patterns
 
 > Auto-generated skill from repository analysis
@@ -135,4 +139,3 @@ _Example: Improving upload button styling_
 |-------------------------------|-----------------------------------------------------------------|
 | /new-document-upload-feature   | Start a new provider document upload feature or enhancement     |
 | /enhance-document-upload-ux    | Improve document upload UX or manage provider secret rotation   |
-```

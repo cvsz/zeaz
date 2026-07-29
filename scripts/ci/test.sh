@@ -69,18 +69,22 @@ from app import RATE_BUCKETS
 RATE_BUCKETS.clear()
 print("CSP nonce and rate-limit regression checks passed.")
 PY
-git -C "$ROOT" ls-files -z '*.js' | xargs -0 -r -n1 node --check
+while IFS= read -r -d '' javascript; do
+  [[ -f "$ROOT/$javascript" ]] && node --check "$ROOT/$javascript"
+done < <(git -C "$ROOT" ls-files -z '*.js')
 ROOT="$ROOT" python3 - <<'PY'
 import os
 from pathlib import Path
 
 root = Path(os.environ["ROOT"])
-app = (root / "web/app.js").read_text(encoding="utf-8")
+app = (root / "apps/web/src/main.tsx").read_text(encoding="utf-8")
+service = (root / "packages/sdk/src/orders.ts").read_text(encoding="utf-8")
 page = (root / "web/index.html").read_text(encoding="utf-8")
-for marker in ("/payments/scb/qr", "data:image/png;base64,", "payment-qr-status"):
+for marker in ("api.orders.createScbQr", "data:image/png;base64,", "qr-panel"):
     assert marker in app, marker
-for marker in ("payment-qr-panel", "payment-qr", "payment-qr-status"):
-    assert marker in page, marker
+assert "/payments/scb/qr" in service
+assert "/platform/index.html" in page
+assert not (root / "web/app.js").exists()
 print("SCB QR checkout UI coverage checks passed.")
 PY
 ROOT="$ROOT" python3 - <<'PY'
@@ -103,7 +107,7 @@ print("Reverse proxy reload and geolocation policy checks passed.")
 PY
 if [[ -d "$ROOT/node_modules" ]]; then
   (cd "$ROOT" && npm run typecheck && npm run build)
-  cmp --silent "$ROOT/apps/web/dist/index.html" "$ROOT/web/platform/index.html" || {
+  diff --brief --recursive "$ROOT/apps/web/dist" "$ROOT/web/platform" >/dev/null || {
     echo "web/platform is not synchronized with apps/web/dist; publish the current build before committing." >&2
     exit 1
   }
@@ -113,8 +117,11 @@ import re
 from pathlib import Path
 
 root=Path(os.environ["ROOT"])
-index=(root / "apps/web/dist/index.html").read_text()
-assets=re.findall(r'''/(?:platform/)?assets/([^"']+)''', index)
+html_files=sorted((root / "apps/web/dist").glob("*.html"))
+assert html_files, "No built platform HTML files found"
+assets=[]
+for html_file in html_files:
+    assets.extend(re.findall(r'''/(?:platform/)?assets/([^"']+)''', html_file.read_text()))
 assert assets, "No built platform assets found"
 for asset in assets:
     assert (root / "apps/web/dist/assets" / asset).is_file(), asset

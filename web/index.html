@@ -2,21 +2,10 @@
 <html lang="th">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#ff6b35">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta http-equiv="refresh" content="0;url=/platform/index.html">
     <title>หมูปิ้ววว — สั่งล่วงหน้า</title>
-    <link rel="stylesheet" href="/style.css">
+    <link rel="canonical" href="/platform/index.html">
   </head>
-  <body>
-    <header class="hero"><nav><a class="brand" href="#top">หมูปิ้ววว<span>®</span></a><a class="nav-link" href="#order">สั่งล่วงหน้า</a></nav>
-      <a class="hero-image-link" href="#order" aria-label="สั่งหมูปิ้งล่วงหน้า"><img src="/images/moopiew-hero.png" alt="หมูปิ้งย่างบนเตาถ่าน พร้อมข้อความหอมถ่าน ปิ้ววว ถึงใจ"></a>
-    </header>
-    <main id="order"><section class="intro"><p class="eyebrow">ORDER & DELIVERY</p><h2>เลือกของอร่อย<br>รับเองหรือส่งถึงบ้าน</h2><p>พรีออเดอร์ล่วงหน้า หรือเลือกจัดส่งในพื้นที่ให้บริการ</p></section>
-    <form id="order-form" class="order-layout"><section class="menu-panel"><h3>1. เลือกเมนู</h3><div id="menu" class="menu"></div></section>
-      <aside class="checkout"><h3>2. ข้อมูลการรับสินค้า</h3><label>ชื่อผู้สั่ง<input name="name" required minlength="2" placeholder="เช่น มายด์"></label><label>เบอร์โทร<input name="phone" required inputmode="tel" placeholder="0812345678"></label><label>วิธีรับสินค้า<select name="fulfillment_type" id="fulfillment-type"><option value="pickup">รับที่ร้าน</option><option value="delivery">จัดส่งถึงบ้าน</option></select></label><div id="pickup-fields" class="two"><label>วันที่รับ<input name="pickup_date" id="pickup-date" type="date" required></label><label>รอบรับ<select name="pickup_slot" id="pickup-slot" required></select></label></div><div id="delivery-fields" hidden><label>พื้นที่จัดส่ง<select name="delivery_zone_id" id="delivery-zone"></select></label><label>ชื่อผู้รับ<input name="recipient_name" placeholder="หากไม่กรอกจะใช้ชื่อผู้สั่ง"></label><label>เบอร์ผู้รับ<input name="recipient_phone" inputmode="tel" placeholder="หากไม่กรอกจะใช้เบอร์ผู้สั่ง"></label><label>ที่อยู่จัดส่ง<textarea name="delivery_address" placeholder="บ้านเลขที่ ซอย ถนน แขวง/ตำบล เขต/อำเภอ" ></textarea></label><label>จุดสังเกต<textarea name="delivery_landmark" placeholder="เช่น อาคาร A ชั้น 2"></textarea></label><input name="delivery_latitude" id="delivery-latitude" type="hidden"><input name="delivery_longitude" id="delivery-longitude" type="hidden"><button type="button" class="text-button" id="location-button">ใช้ตำแหน่งปัจจุบันเพื่อคำนวณค่าส่ง</button><small id="delivery-location-status"></small></div><label>คูปองส่วนลด<input name="coupon_code" placeholder="เช่น MOOPIEW10"></label><label>ใช้แต้ม (1 แต้ม = 1 บาท)<input name="points_to_redeem" type="number" min="0" value="0"></label><label>วิธีชำระเงิน<select name="payment_method"><option value="cash">จ่ายเมื่อรับสินค้า</option><option value="transfer">โอนเงิน</option></select></label><label>หมายเหตุ<textarea name="notes" placeholder="เช่น ไม่เอามัน"></textarea></label><div class="total"><span>ยอดรวมโดยประมาณ</span><strong id="total">฿0</strong></div><button class="button" type="submit">ยืนยันคำสั่งซื้อ</button><p class="fine-print">ตรวจแต้มคงเหลือได้จากค้นหาออเดอร์ก่อนใช้แต้ม</p></aside>
-    </form></main>
-    <section class="tracking"><div><p class="eyebrow">MY ORDER</p><h2>ตรวจสอบ<br>หรือยกเลิกออเดอร์</h2></div><form id="lookup-form"><label>เลขที่ออเดอร์<input name="order_id" placeholder="MPP-..." required></label><label>เบอร์โทรศัพท์<input name="phone" inputmode="tel" placeholder="0812345678" required></label><button class="button" type="submit">ค้นหาออเดอร์</button></form><div id="lookup-result" class="lookup-result" hidden></div></section>
-    <dialog id="success"><button class="close" aria-label="ปิด">×</button><p class="eyebrow">รับออเดอร์แล้ว</p><h2>ขอบคุณนะ!<br>เจอกันหน้าร้าน</h2><p id="confirmation"></p><div id="payment-qr-panel" hidden><p><strong>สแกน QR เพื่อชำระเงิน</strong></p><img id="payment-qr" class="payment-qr" alt="QR สำหรับชำระเงินผ่าน SCB" hidden><p id="payment-qr-status" class="fine-print"></p></div><button class="button close">เสร็จแล้ว</button></dialog>
-    <footer>หมูปิ้ววว · ย่างด้วยใจทุกไม้</footer><script src="/app.js"></script>
-  </body>
+  <body><p><a href="/platform/index.html">เปิดหน้าสั่งซื้อ MooPiew</a></p></body>
 </html>

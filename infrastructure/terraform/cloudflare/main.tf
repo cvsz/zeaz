@@ -31,6 +31,26 @@ resource "cloudflare_dns_record" "piewdash" {
   comment = "MooPiew engineering dashboard via Cloudflare Tunnel"
 }
 
+resource "cloudflare_dns_record" "zerp" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.zerp_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "ZEAZ ERP via Cloudflare Tunnel"
+}
+
+resource "cloudflare_dns_record" "cmeerp" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.cmeerp_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "CME Pro ERP via Cloudflare Tunnel"
+}
+
 resource "cloudflare_zero_trust_access_application" "piewdash" {
   account_id                 = var.cloudflare_account_id
   name                       = "MooPiew Engineering Dashboard"
@@ -64,6 +84,8 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "moopiew" {
     ingress = [
       { hostname = var.moopiew_hostname, service = var.moopiew_origin },
       { hostname = var.piewdash_hostname, service = var.piewdash_origin },
+      { hostname = var.zerp_hostname, service = var.zerp_origin },
+      { hostname = var.cmeerp_hostname, service = var.cmeerp_origin },
       { service = "http_status:404" },
     ]
   }
