@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
+from ztrader.core.logging_utils import sanitize_log_value
+
 try:
     from tradingagents.default_config import DEFAULT_CONFIG
     from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -67,7 +69,7 @@ class TradingAgentsStrategy:
         self._debug = debug
         logger.info(
             "TradingAgentsStrategy initialized with provider=%s",
-            llm_provider,
+            sanitize_log_value(llm_provider),
         )
 
     def analyze(
@@ -87,7 +89,11 @@ class TradingAgentsStrategy:
         if date is None:
             date = datetime.now().strftime("%Y-%m-%d")
 
-        logger.info("Running TradingAgents analysis for %s on %s", symbol, date)
+        logger.info(
+            "Running TradingAgents analysis for %s on %s",
+            sanitize_log_value(symbol),
+            sanitize_log_value(date),
+        )
 
         try:
             if self._graph is None:
@@ -106,24 +112,23 @@ class TradingAgentsStrategy:
             if self._debug:
                 logger.debug(
                     "TradingAgents result: symbol=%s signal=%s confidence=%.2f",
-                    symbol,
-                    signal.signal,
+                    sanitize_log_value(symbol),
+                    sanitize_log_value(signal.signal),
                     signal.confidence,
                 )
 
             return signal
-        except Exception as exc:
+        except Exception as error:
             logger.error(
-                "TradingAgents analysis failed for %s: %s",
-                symbol,
-                str(exc),
-                exc_info=True,
+                "TradingAgents analysis failed for symbol=%s",
+                sanitize_log_value(symbol),
+                extra={"error_type": type(error).__name__},
             )
             return TradingAgentsSignal(
                 symbol=symbol,
                 signal="hold",
                 confidence=0.0,
-                reasoning=f"Analysis failed: {exc}",
+                reasoning="Analysis failed",
                 analysis_date=date,
                 risk_score=1.0,
             )
@@ -141,10 +146,10 @@ class TradingAgentsStrategy:
                 "TradingAgents reflection complete (returns=%.4f)",
                 position_returns,
             )
-        except Exception as exc:
+        except Exception as error:
             logger.warning(
-                "TradingAgents reflection failed: %s",
-                str(exc),
+                "TradingAgents reflection failed",
+                extra={"error_type": type(error).__name__},
             )
 
     def _extract_signal(

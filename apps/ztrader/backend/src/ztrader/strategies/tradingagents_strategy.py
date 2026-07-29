@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 from ztrader.engine.risk import StrategyIntent
 from ztrader.engine.strategy import Candle, Strategy
+from ztrader.core.logging_utils import sanitize_log_value
 from ztrader.tradingagents_integration.adapter import TradingAgentsStrategy as TAAdapter
 
 logger = logging.getLogger(__name__)
@@ -53,8 +54,8 @@ class TradingAgentsLLMStrategy(Strategy):
         )
         logger.info(
             "TradingAgentsLLMStrategy initialized: symbol=%s provider=%s",
-            symbol,
-            llm_provider,
+            sanitize_log_value(symbol),
+            sanitize_log_value(llm_provider),
         )
 
     def generate_intent(self, candles: list[Candle]) -> Optional[StrategyIntent]:
@@ -74,23 +75,26 @@ class TradingAgentsLLMStrategy(Strategy):
 
         try:
             signal = self._ta.analyze(ticker, date)
-        except Exception as exc:
-            logger.error("TradingAgents analysis failed: %s", exc)
+        except Exception as error:
+            logger.error(
+                "TradingAgents analysis failed",
+                extra={"error_type": type(error).__name__},
+            )
             return None
 
         side = SIGNAL_TO_SIDE.get(signal.signal)
         if side is None:
             logger.debug(
                 "TradingAgents hold signal for %s (confidence=%.2f)",
-                self.symbol,
+                sanitize_log_value(self.symbol),
                 signal.confidence,
             )
             return None
 
         logger.info(
             "TradingAgents signal: %s %s (confidence=%.2f, risk=%.2f)",
-            self.symbol,
-            side,
+            sanitize_log_value(self.symbol),
+            sanitize_log_value(side),
             signal.confidence,
             signal.risk_score,
         )

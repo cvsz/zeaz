@@ -4,6 +4,7 @@
 // Author: ZeaZDev Meta-Intelligence (Generated) //
 // --- DO NOT EDIT HEADER --- //"""
 
+import logging
 import os
 from datetime import datetime
 
@@ -16,6 +17,7 @@ from ztrader.abt.models import User
 from ztrader.abt.utils.database import get_db_connection, time_database_operation
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("")
@@ -49,8 +51,15 @@ async def detailed_health_check():
                 "status": "healthy",
                 "responseTime": timing_result["responseTime"],
             }
-    except Exception as e:
-        components["database"] = {"status": "unhealthy", "error": str(e)}
+    except Exception as error:
+        logger.warning(
+            "Database health check failed",
+            extra={"error_type": type(error).__name__},
+        )
+        components["database"] = {
+            "status": "unhealthy",
+            "error": "Database health check failed",
+        }
         overall_status = "unhealthy"
 
     # Check Redis
@@ -68,8 +77,15 @@ async def detailed_health_check():
             "status": "healthy",
             "responseTime": round(response_time, 2),
         }
-    except Exception as e:
-        components["redis"] = {"status": "unhealthy", "error": str(e)}
+    except Exception as error:
+        logger.warning(
+            "Redis health check failed",
+            extra={"error_type": type(error).__name__},
+        )
+        components["redis"] = {
+            "status": "unhealthy",
+            "error": "Redis health check failed",
+        }
         overall_status = "unhealthy"
 
     # System metrics
@@ -83,8 +99,12 @@ async def detailed_health_check():
             "memoryUsage": round(memory.percent, 2),
             "diskUsage": round(disk.percent, 2),
         }
-    except Exception as e:
-        metrics = {"error": f"Could not retrieve system metrics: {str(e)}"}
+    except Exception as error:
+        logger.warning(
+            "System metrics collection failed",
+            extra={"error_type": type(error).__name__},
+        )
+        metrics = {"error": "Could not retrieve system metrics"}
 
     return {
         "status": overall_status,
@@ -122,15 +142,19 @@ async def database_health_check():
                 "version": db_version,
                 "timestamp": datetime.utcnow().isoformat(),
             }
-    except Exception as e:
+    except Exception as error:
+        logger.warning(
+            "Database-specific health check failed",
+            extra={"error_type": type(error).__name__},
+        )
         raise HTTPException(
             status_code=503,
             detail={
                 "status": "unhealthy",
-                "error": str(e),
+                "error": "Database health check failed",
                 "timestamp": datetime.utcnow().isoformat(),
             },
-        )
+        ) from None
 
 
 @router.get("/redis")
@@ -169,15 +193,19 @@ async def redis_health_check():
             "testOperation": "success" if test_value == b"ok" else "failed",
             "timestamp": datetime.utcnow().isoformat(),
         }
-    except Exception as e:
+    except Exception as error:
+        logger.warning(
+            "Redis-specific health check failed",
+            extra={"error_type": type(error).__name__},
+        )
         raise HTTPException(
             status_code=503,
             detail={
                 "status": "unhealthy",
-                "error": str(e),
+                "error": "Redis health check failed",
                 "timestamp": datetime.utcnow().isoformat(),
             },
-        )
+        ) from None
 
 
 @router.get("/system")
@@ -229,12 +257,16 @@ async def system_health_check():
             },
             "timestamp": datetime.utcnow().isoformat(),
         }
-    except Exception as e:
+    except Exception as error:
+        logger.warning(
+            "System health check failed",
+            extra={"error_type": type(error).__name__},
+        )
         raise HTTPException(
             status_code=500,
             detail={
                 "status": "error",
-                "error": str(e),
+                "error": "System health check failed",
                 "timestamp": datetime.utcnow().isoformat(),
             },
-        )
+        ) from None
