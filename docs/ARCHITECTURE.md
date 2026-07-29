@@ -42,6 +42,10 @@ Quote → customer order → queued → assigned → picked_up → on_the_way �
 The server calculates a distance fee from the configured store coordinates and
 pricing policy. The tracking API exposes only the minimum status information
 needed by the customer; delivery address and phone never appear in its payload.
+Owner assignment reserves an available rider in the same immediate transaction
+as the delivery update. A rider cannot hold multiple active deliveries;
+reassignment and terminal delivery states release availability. Staff can
+advance delivery status but cannot assign or reassign riders.
 
 ## Growth path
 

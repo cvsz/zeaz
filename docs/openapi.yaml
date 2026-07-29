@@ -88,19 +88,19 @@ paths:
   /api/admin/riders:
     post: {summary: Create rider record, security: [{adminKey: []}], responses: {'201': {description: Created}}}
   /api/admin/riders/{riderId}:
-    patch: {summary: Update rider activation or availability; active deliveries prevent deactivation, security: [{adminKey: []}], parameters: [{name: riderId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Updated}, '400': {description: Rider has an active delivery or mutation is invalid}}}
+    patch: {summary: Update rider activation or availability; active deliveries prevent deactivation or manual availability, security: [{adminKey: []}], parameters: [{name: riderId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Updated}, '400': {description: Rider has an active delivery or mutation is invalid}}}
   /api/admin/rider-applications/{applicationId}:
     patch: {summary: Atomically approve or reject a pending rider application once, security: [{adminKey: []}], parameters: [{name: applicationId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Reviewed}, '400': {description: Application was already reviewed or decision is invalid}}}
   /api/admin/merchant-applications/{applicationId}:
     patch: {summary: Atomically approve or reject a pending merchant application once, security: [{adminKey: []}], parameters: [{name: applicationId, in: path, required: true, schema: {type: string}}], responses: {'200': {description: Reviewed}, '400': {description: Application was already reviewed or decision is invalid}}}
   /api/admin/delivery-zones:
-    post: {summary: Create delivery zone, security: [{adminKey: []}], responses: {'201': {description: Created}}}
+    post: {summary: Atomically create a case-insensitively unique delivery zone with integer monetary values, security: [{adminKey: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateDeliveryZoneRequest'}}}}, responses: {'201': {description: Created}, '400': {description: Duplicate name or invalid monetary value}}}
   /api/admin/delivery-pricing:
     post: {summary: Update delivery fee policy and store coordinates with finite numeric values, security: [{adminKey: []}], responses: {'200': {description: Updated}, '400': {description: Invalid mode, coordinate or non-finite fee value}}}
   /api/admin/deliveries/{orderId}:
-    patch: {summary: Assign rider or update delivery status; delivered settlement requires confirmed payment, security: [{adminKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}, '400': {description: Invalid transition or payment is not confirmed}}}
+    patch: {summary: Atomically reserve or reassign one available rider, or update delivery status; assignment and status changes use separate requests, security: [{adminKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}, '400': {description: Rider unavailable, invalid transition, combined mutation or payment is not confirmed}}}
   /api/staff/deliveries/{orderId}:
-    patch: {summary: Update delivery status as staff; delivered settlement requires confirmed payment, security: [{employeeKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}, '400': {description: Invalid transition or payment is not confirmed}}}
+    patch: {summary: Update delivery status as staff; rider assignment is owner-only and delivered settlement requires confirmed payment, security: [{employeeKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}, '400': {description: Rider assignment, transition or settlement is invalid}}}
   /api/admin/inventory:
     post: {summary: Create inventory item with finite non-negative quantities, security: [{adminKey: []}], responses: {'201': {description: Created}, '400': {description: Invalid or non-finite inventory data}}}
   /api/admin/inventory/adjust:
@@ -110,7 +110,7 @@ paths:
   /api/admin/coupons:
     post: {summary: Create a unique coupon with optional UTC campaign window and serialized usage limit, security: [{adminKey: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CreateCouponRequest'}}}}, responses: {'201': {description: Created}, '400': {description: Invalid code, value, window or duplicate coupon}}}
   /api/admin/business-profile:
-    post: {summary: Update business profile for receipts and tax invoices, security: [{adminKey: []}], responses: {'200': {description: Updated}}}
+    post: {summary: Atomically replace the validated seller profile used for receipts and tax invoices, security: [{adminKey: []}], requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/BusinessProfileRequest'}}}}, responses: {'200': {description: Updated}, '400': {description: Invalid seller text, VAT flag or tax identifier}}}
   /api/admin/orders/{orderId}:
     patch: {summary: Update order as owner; completion requires an existing or atomic paid transition, security: [{adminKey: []}], parameters: [{name: orderId, in: path, required: true, schema: {$ref: '#/components/schemas/OrderId'}}], responses: {'200': {description: Updated}, '400': {description: Invalid status or payment transition}}}
   /api/staff/orders/{orderId}:
@@ -168,6 +168,24 @@ components:
         maximum_uses: {type: integer, minimum: 0, default: 0}
         starts_at: {type: string, format: date-time, description: Optional timezone-aware RFC3339 campaign start}
         ends_at: {type: string, format: date-time, description: Optional future timezone-aware RFC3339 campaign end}
+    CreateDeliveryZoneRequest:
+      type: object
+      additionalProperties: false
+      required: [name, fee]
+      properties:
+        name: {type: string, minLength: 2, maxLength: 80}
+        fee: {type: integer, minimum: 0}
+        minimum_order: {type: integer, minimum: 0, default: 0}
+    BusinessProfileRequest:
+      type: object
+      additionalProperties: false
+      required: [legal_name, address, vat_registered]
+      properties:
+        legal_name: {type: string, minLength: 2, maxLength: 160}
+        tax_id: {type: string, pattern: '^(?:\d{13})?$', description: Required when VAT registered; otherwise optional or empty}
+        address: {type: string, minLength: 5, maxLength: 500}
+        branch: {type: string, maxLength: 80, default: สำนักงานใหญ่}
+        vat_registered: {type: boolean}
     DocumentUploadRequest:
       type: object
       required: [provider, subject_type, subject_id, requirement_id, filename, mime_type, content_base64]

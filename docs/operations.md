@@ -5,10 +5,13 @@ an owner secret: do not place it in a public client, URL, screenshot or Git.
 
 ## First-time setup
 
-1. Complete the business profile before issuing tax invoices.
+1. Complete the business profile before issuing tax invoices. Use exactly 13
+   digits for the seller tax identifier. VAT registration cannot be enabled
+   without it; rejected profiles leave the prior profile unchanged.
 2. Configure the store coordinates, base fee, per-kilometre fee, maximum range
    and delivery zones. The server calculates fees; do not rely on a browser
-   calculation.
+   calculation. Zone names must be unique regardless of letter case, and zone
+   fee/minimum values must be whole non-negative amounts.
 3. Set menu items and their display order, then create inventory items and
    recipes where stock needs automatic deduction.
 4. Review rider and merchant applications. Approve only after verifying the

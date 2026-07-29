@@ -4,8 +4,8 @@ The canonical machine-readable results are `dashboard/data/*.json`, regenerated
 by `scripts/ci/evidence.py` and uploaded by `.github/workflows/validate.yml`.
 At this revision:
 
-- `python3 scripts/ci/evidence.py coverage` — 104 tests passed; 57.55% measured
-  Python line coverage with a 56% minimum gate; `app.py` measured 57.13%.
+- `python3 scripts/ci/evidence.py coverage` — 114 tests passed; 58.80% measured
+  Python line coverage with a 56% minimum gate; `app.py` measured 58.82%.
 - `npm run validate` — lint, TypeScript type checking, workspace build and
   Python tests passed.
 - `python3 scripts/ci/evidence.py security` — Python and npm dependency audits

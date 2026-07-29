@@ -92,6 +92,7 @@ DEFAULT_MENU = [
     {"id": "sticky-rice", "name": "ข้าวเหนียว", "description": "ห่อละกำลังดี", "price": 10, "available": True},
 ]
 DELIVERY_STATUSES = ("queued", "assigned", "picked_up", "on_the_way", "delivered", "failed", "cancelled")
+ACTIVE_DELIVERY_STATUSES = ("assigned", "picked_up", "on_the_way")
 
 def utcnow() -> str: return datetime.now(timezone.utc).isoformat()
 
@@ -326,6 +327,16 @@ def finite_float(value, error_message: str) -> float:
     except (TypeError,ValueError): raise ValueError(error_message)
     if not math.isfinite(result): raise ValueError(error_message)
     return result
+
+def integer_value(value, error_message: str) -> int:
+    if isinstance(value,bool):raise ValueError(error_message)
+    if isinstance(value,int):return value
+    if isinstance(value,float):
+        if math.isfinite(value) and value.is_integer():return int(value)
+        raise ValueError(error_message)
+    if isinstance(value,str) and re.fullmatch(r"[+-]?\d+",value.strip()):
+        return int(value)
+    raise ValueError(error_message)
 
 def optional_utc_timestamp(value, error_message: str) -> str:
     raw=str(value or "").strip()
@@ -1643,7 +1654,11 @@ class Handler(SimpleHTTPRequestHandler):
             rider=con.execute("SELECT * FROM riders WHERE id=?",(rider_id,)).fetchone()
             if not rider:return self.json({"error":"ไม่พบไรเดอร์"},404)
             active=int(parse_bool(form.get("active"),bool(rider["active"])));available=int(parse_bool(form.get("available"),bool(rider["available"]))) if active else 0
-            if not active and con.execute("SELECT 1 FROM deliveries WHERE rider_id=? AND status NOT IN ('delivered','cancelled') LIMIT 1",(rider_id,)).fetchone():raise ValueError("ไรเดอร์ยังมีงานจัดส่งที่ต้องโอนย้ายหรือปิดก่อน")
+            has_active_delivery=con.execute(
+                "SELECT 1 FROM deliveries WHERE rider_id=? AND status IN (?,?,?) LIMIT 1",
+                (rider_id,*ACTIVE_DELIVERY_STATUSES),
+            ).fetchone()
+            if has_active_delivery and (not active or available):raise ValueError("ไรเดอร์ยังมีงานจัดส่งที่ต้องโอนย้ายหรือปิดก่อน")
             con.execute("UPDATE riders SET active=?,available=?,updated_at=? WHERE id=?",(active,available,utcnow(),rider_id));audit(con,role,"update","rider",rider_id,{"active":bool(active),"available":bool(available)})
             response={"rider":dict(con.execute("SELECT * FROM riders WHERE id=?",(rider_id,)).fetchone())}
         return self.json(response)
@@ -1681,13 +1696,17 @@ class Handler(SimpleHTTPRequestHandler):
             response={"application":dict(con.execute("SELECT * FROM merchant_applications WHERE id=?",(application_id,)).fetchone())}
         return self.json(response)
     def create_delivery_zone(self,form,role):
-        name=str(form.get("name","")).strip()[:80]
-        try: fee,minimum=int(form.get("fee",0)),int(form.get("minimum_order",0))
-        except (ValueError,TypeError): raise ValueError("ค่าจัดส่งไม่ถูกต้อง")
+        if set(form)-{"name","fee","minimum_order"} or not isinstance(form.get("name"),str):raise ValueError("ข้อมูลพื้นที่จัดส่งไม่ถูกต้อง")
+        name=" ".join(form.get("name","").split())[:80]
+        fee=integer_value(form.get("fee",0),"ค่าจัดส่งไม่ถูกต้อง")
+        minimum=integer_value(form.get("minimum_order",0),"ค่าจัดส่งไม่ถูกต้อง")
         if len(name)<2 or fee<0 or minimum<0: raise ValueError("ข้อมูลพื้นที่จัดส่งไม่ถูกต้อง")
         zone={"id":f"ZONE-{secrets.token_hex(3).upper()}","name":name,"fee":fee,"minimum_order":minimum}; now=utcnow()
-        with db() as con: con.execute("INSERT INTO delivery_zones VALUES (?,?,?,?,?,?,?)",(zone["id"],name,fee,minimum,1,now,now));audit(con,role,"create","delivery_zone",zone["id"],zone)
-        self.json({"zone":zone},201)
+        with db(immediate=True) as con:
+            names=(row["name"].casefold() for row in con.execute("SELECT name FROM delivery_zones WHERE active=1"))
+            if name.casefold() in names:raise ValueError("มีพื้นที่จัดส่งชื่อนี้แล้ว")
+            con.execute("INSERT INTO delivery_zones VALUES (?,?,?,?,?,?,?)",(zone["id"],name,fee,minimum,1,now,now));audit(con,role,"create","delivery_zone",zone["id"],zone)
+        return self.json({"zone":zone},201)
     def create_inventory_item(self,form,role):
         name=str(form.get("name","")).strip()[:100]; unit=str(form.get("unit","")).strip()[:20]
         on_hand=finite_float(form.get("on_hand",0),"จำนวนสต็อกไม่ถูกต้อง")
@@ -1736,15 +1755,30 @@ class Handler(SimpleHTTPRequestHandler):
     def update_delivery(self,oid,form,role,area):
         status=str(form.get("status","")).strip(); rider_id=str(form.get("rider_id","")).strip()
         if status and status not in DELIVERY_STATUSES:raise ValueError("สถานะจัดส่งไม่ถูกต้อง")
+        if not status and not rider_id:raise ValueError("ไม่มีข้อมูลงานจัดส่งที่ต้องอัปเดต")
+        if status and rider_id:raise ValueError("กรุณามอบหมายไรเดอร์และอัปเดตสถานะแยกคำขอ")
+        if rider_id and area!="admin":raise ValueError("เฉพาะผู้ดูแลระบบที่มอบหมายไรเดอร์ได้")
         with STORE_LOCK,db(immediate=True) as con:
             delivery=con.execute("SELECT * FROM deliveries WHERE order_id=?",(oid,)).fetchone()
             if not delivery:return self.json({"error":"ไม่พบงานจัดส่ง"},404)
             transitions={"queued":{"assigned","cancelled"},"assigned":{"picked_up","cancelled"},"picked_up":{"on_the_way","failed"},"on_the_way":{"delivered","failed"},"failed":{"queued"},"delivered":set(),"cancelled":set()}
             if status and status != delivery["status"] and status not in transitions.get(delivery["status"],set()): raise ValueError("ลำดับสถานะจัดส่งไม่ถูกต้อง")
             if rider_id:
+                if delivery["status"] not in {"queued","assigned"}:raise ValueError("ไม่สามารถเปลี่ยนไรเดอร์หลังเริ่มจัดส่ง")
                 rider=con.execute("SELECT * FROM riders WHERE id=? AND active=1",(rider_id,)).fetchone()
                 if not rider:raise ValueError("ไม่พบไรเดอร์")
-                con.execute("UPDATE deliveries SET rider_id=?,status='assigned',assigned_at=?,updated_at=? WHERE order_id=?",(rider_id,utcnow(),utcnow(),oid)); status="assigned"
+                if rider_id!=delivery["rider_id"]:
+                    already_assigned=con.execute(
+                        "SELECT 1 FROM deliveries WHERE rider_id=? AND status IN (?,?,?) AND order_id<>? LIMIT 1",
+                        (rider_id,*ACTIVE_DELIVERY_STATUSES,oid),
+                    ).fetchone()
+                    if not rider["available"] or already_assigned:raise ValueError("ไรเดอร์ไม่พร้อมรับงาน")
+                    now=utcnow()
+                    if delivery["rider_id"]:
+                        con.execute("UPDATE riders SET available=1,updated_at=? WHERE id=?",(now,delivery["rider_id"]))
+                    con.execute("UPDATE riders SET available=0,updated_at=? WHERE id=?",(now,rider_id))
+                    con.execute("UPDATE deliveries SET rider_id=?,status='assigned',assigned_at=?,updated_at=? WHERE order_id=?",(rider_id,now,now,oid))
+                status="assigned"
             if status:
                 now=utcnow(); columns={"picked_up":"picked_up_at","delivered":"delivered_at"};sql="UPDATE deliveries SET status=?,updated_at=?";params=[status,now]
                 if status in columns:sql+=f",{columns[status]}=?";params.append(now)
@@ -1754,7 +1788,10 @@ class Handler(SimpleHTTPRequestHandler):
                     if not order:return self.json({"error":"ไม่พบออเดอร์"},404)
                     if order["status"] in {"cancelled","completed"}:raise ValueError("ออเดอร์นี้ปิดแล้ว ไม่สามารถส่งสำเร็จซ้ำได้")
                     if order["payment"]["status"]!="paid":raise ValueError("ต้องยืนยันการชำระเงินก่อนปิดงานจัดส่ง")
+                if status in {"failed","cancelled"}:sql+=",rider_id=NULL"
                 sql+=" WHERE order_id=?";params.append(oid);con.execute(sql,params)
+                if status in {"delivered","failed","cancelled"} and delivery["rider_id"]:
+                    con.execute("UPDATE riders SET available=1,updated_at=? WHERE id=?",(now,delivery["rider_id"]))
                 if status=="delivered":
                     con.execute("UPDATE orders SET status='completed' WHERE id=?",(oid,)); con.execute("INSERT INTO order_history(order_id,at,status,actor_role,note) VALUES (?,?,?,?,?)",(oid,now,"completed",role,"delivery_delivered")); self.complete_order_effects(con,oid,order,role)
             audit(con,role,"delivery_update","delivery",oid,{"status":status,"rider_id":rider_id});response={"order":row_order(con,oid)}
@@ -1771,11 +1808,22 @@ class Handler(SimpleHTTPRequestHandler):
             con.execute("INSERT INTO pos_receipts VALUES (?,?,?,?,?,?,?,?,?,?,?)",tuple(receipt[key] for key in ("id","order_id","receipt_number","customer_tax_name","customer_tax_id","subtotal","discount","delivery_fee","total","issued_at","issued_by")));audit(con,role,"issue","pos_receipt",receipt["id"],{"order_id":oid})
         return self.json({"receipt":receipt},201)
     def update_business_profile(self,form,role):
-        profile={"legal_name":str(form.get("legal_name","")).strip()[:160],"tax_id":re.sub(r"[^0-9]","",str(form.get("tax_id","")))[:13],"address":str(form.get("address","")).strip()[:500],"branch":str(form.get("branch","สำนักงานใหญ่")).strip()[:80] or "สำนักงานใหญ่","vat_registered":parse_bool(form.get("vat_registered"),False),"vat_rate":7}
-        if not profile["legal_name"] or not profile["address"]:raise ValueError("กรุณาระบุชื่อกิจการและที่อยู่")
-        if profile["vat_registered"] and len(profile["tax_id"])!=13:raise ValueError("เลขประจำตัวผู้เสียภาษีต้องมี 13 หลัก")
-        with db() as con:set_setting(con,"business_profile",profile);audit(con,role,"update","business_profile","store",{"vat_registered":profile["vat_registered"]})
-        self.json({"business_profile":profile})
+        text_fields=("legal_name","tax_id","address","branch")
+        if not {"legal_name","address","vat_registered"}<=set(form) or set(form)-set(text_fields)-{"vat_registered"}:raise ValueError("ข้อมูลผู้ขายไม่ถูกต้อง")
+        if any(key in form and not isinstance(form[key],str) for key in text_fields):raise ValueError("ข้อมูลผู้ขายไม่ถูกต้อง")
+        legal_name=" ".join(form.get("legal_name","").split())
+        tax_id=form.get("tax_id","").strip()
+        address=form.get("address","").strip()
+        branch=" ".join(form.get("branch","สำนักงานใหญ่").split()) or "สำนักงานใหญ่"
+        vat_registered=parse_bool(form.get("vat_registered"),False)
+        if not 2<=len(legal_name)<=160 or not 5<=len(address)<=500 or len(branch)>80:raise ValueError("กรุณาระบุชื่อกิจการและที่อยู่ให้ถูกต้อง")
+        if tax_id and not re.fullmatch(r"\d{13}",tax_id):raise ValueError("เลขประจำตัวผู้เสียภาษีต้องมี 13 หลัก")
+        if vat_registered and not tax_id:raise ValueError("เลขประจำตัวผู้เสียภาษีต้องมี 13 หลัก")
+        profile={"legal_name":legal_name,"tax_id":tax_id,"address":address,"branch":branch,"vat_registered":vat_registered,"vat_rate":7}
+        with db(immediate=True) as con:
+            set_setting(con,"business_profile",profile)
+            audit(con,role,"update","business_profile","store",{"fields":["legal_name","tax_id","address","branch","vat_registered"],"vat_registered":vat_registered})
+        return self.json({"business_profile":profile})
     def update_delivery_pricing(self,form,role):
         try:
             base_fee=int(form.get("base_fee",0))

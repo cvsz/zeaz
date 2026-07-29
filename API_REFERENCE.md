@@ -29,12 +29,25 @@ merchant registrations for the same phone produce one pending application.
 Riders assigned to non-terminal deliveries cannot be deactivated until those
 deliveries are reassigned or closed.
 
+Rider assignment is owner-only and serialized with availability changes. An
+available rider can hold at most one `assigned`, `picked_up`, or `on_the_way`
+delivery. Reassignment releases the previous rider, while `delivered`, `failed`,
+and `cancelled` release the current rider. Staff credentials may advance
+delivery status but cannot assign riders.
+
 Inventory quantities, recipe quantities, delivery rates and coordinates must
 be finite numbers; `NaN` and positive or negative infinity are rejected before
 SQLite mutation. Inventory adjustments serialize across processes, require a
 non-empty reason and cannot produce negative stock. Settings requests must
 change at least one supported key, roll back fully on invalid values and record
 the exact changed keys in the audit event.
+
+Delivery-zone names are normalized and unique case-insensitively among active
+zones. Zone fees and minimum orders must be non-negative integers; fractional
+or boolean JSON values are rejected rather than truncated. Seller profiles
+require bounded text and an exact 13-digit tax identifier whenever one is
+provided or VAT registration is enabled. Profile audit details record field
+names and VAT state but never the tax identifier or address.
 
 Menu partial updates serialize their read-modify-write transaction so concurrent
 changes to different fields cannot overwrite each other; each audit event names

@@ -225,6 +225,144 @@ class OperationalMutationTests(unittest.TestCase):
         self.assertEqual(pricing, app.DEFAULT_SETTINGS["delivery_pricing"])
         self.assertEqual(audits, 0)
 
+    def test_delivery_zone_rejects_fractional_and_boolean_money(self):
+        for payload in (
+            {"name": "Fractional Fee", "fee": 10.5, "minimum_order": 0},
+            {"name": "Boolean Fee", "fee": True, "minimum_order": 0},
+            {"name": "Fractional Minimum", "fee": 10, "minimum_order": 20.5},
+            {"name": "Unknown Field", "fee": 10, "unknown": True},
+            {"name": {"unexpected": "object"}, "fee": 10},
+        ):
+            status, _ = self.request("/api/admin/delivery-zones", "POST", payload)
+            self.assertEqual(status, 400)
+        with app.db() as connection:
+            zones = connection.execute(
+                """SELECT COUNT(*) FROM delivery_zones
+                   WHERE id<>'central'"""
+            ).fetchone()[0]
+            audits = connection.execute(
+                """SELECT COUNT(*) FROM audit_logs
+                   WHERE entity_type='delivery_zone'"""
+            ).fetchone()[0]
+        self.assertEqual(zones, 0)
+        self.assertEqual(audits, 0)
+
+    def test_concurrent_delivery_zone_names_are_unique_case_insensitively(self):
+        barrier = threading.Barrier(2)
+
+        def create(name):
+            barrier.wait(timeout=3)
+            return self.request(
+                "/api/admin/delivery-zones",
+                "POST",
+                {"name": name, "fee": 40, "minimum_order": 100},
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(create, ("Bangkok East", "bangkok east")))
+        self.assertEqual(sorted(status for status, _ in results), [201, 400])
+        with app.db() as connection:
+            zones = connection.execute(
+                """SELECT name,fee,minimum_order FROM delivery_zones
+                   WHERE id<>'central'"""
+            ).fetchall()
+            audits = connection.execute(
+                """SELECT COUNT(*) FROM audit_logs
+                   WHERE entity_type='delivery_zone' AND action='create'"""
+            ).fetchone()[0]
+        self.assertEqual(len(zones), 1)
+        self.assertEqual(zones[0]["name"].casefold(), "bangkok east")
+        self.assertEqual(zones[0]["fee"], 40)
+        self.assertEqual(zones[0]["minimum_order"], 100)
+        self.assertEqual(audits, 1)
+
+    def test_business_profile_requires_exact_text_and_tax_identifier(self):
+        original = app.DEFAULT_SETTINGS["business_profile"]
+        invalid_profiles = (
+            {
+                "legal_name": "MooPiew",
+                "tax_id": "12345678901234",
+                "address": "Bangkok",
+                "vat_registered": True,
+            },
+            {
+                "legal_name": "MooPiew",
+                "tax_id": "123-456-789-0123",
+                "address": "Bangkok",
+                "vat_registered": True,
+            },
+            {
+                "legal_name": {"unexpected": "object"},
+                "tax_id": "",
+                "address": "Bangkok",
+                "vat_registered": False,
+            },
+            {
+                "legal_name": "MooPiew",
+                "tax_id": "",
+                "address": "Bangkok",
+                "vat_registered": True,
+            },
+            {
+                "legal_name": "MooPiew",
+                "tax_id": "",
+                "address": "Bangkok",
+                "vat_registered": False,
+                "unknown": True,
+            },
+        )
+        for payload in invalid_profiles:
+            status, _ = self.request(
+                "/api/admin/business-profile", "POST", payload
+            )
+            self.assertEqual(status, 400)
+        with app.db() as connection:
+            profile = app.config(connection)["business_profile"]
+            audits = connection.execute(
+                """SELECT COUNT(*) FROM audit_logs
+                   WHERE entity_type='business_profile'"""
+            ).fetchone()[0]
+        self.assertEqual(profile, original)
+        self.assertEqual(audits, 0)
+
+    def test_business_profile_is_canonical_and_audit_excludes_tax_data(self):
+        status, result = self.request(
+            "/api/admin/business-profile",
+            "POST",
+            {
+                "legal_name": "  MooPiew   Company  ",
+                "tax_id": "1234567890123",
+                "address": "  Bangkok, Thailand  ",
+                "branch": "  Head   Office  ",
+                "vat_registered": True,
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            result["business_profile"],
+            {
+                "legal_name": "MooPiew Company",
+                "tax_id": "1234567890123",
+                "address": "Bangkok, Thailand",
+                "branch": "Head Office",
+                "vat_registered": True,
+                "vat_rate": 7,
+            },
+        )
+        with app.db() as connection:
+            event = connection.execute(
+                """SELECT details FROM audit_logs
+                   WHERE entity_type='business_profile'
+                   ORDER BY id DESC LIMIT 1"""
+            ).fetchone()
+        details = json.loads(event["details"])
+        self.assertEqual(details["vat_registered"], True)
+        self.assertEqual(
+            details["fields"],
+            ["legal_name", "tax_id", "address", "branch", "vat_registered"],
+        )
+        self.assertNotIn("1234567890123", event["details"])
+
 
 if __name__ == "__main__":
     unittest.main()

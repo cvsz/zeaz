@@ -56,6 +56,18 @@ the success response only after the database context exits and commits. This
 commit-before-response boundary is required for read-after-write consistency
 and prevents a late commit failure from becoming a false API success.
 
+Delivery assignment and rider availability share an immediate transaction.
+Only one delivery in `assigned`, `picked_up`, or `on_the_way` may reserve a
+rider through the API. Reassignment releases the previous rider; `delivered`,
+`failed`, and `cancelled` release the current rider before the successful
+response is emitted.
+
+Delivery-zone creation serializes the active-name lookup and insert, preventing
+concurrent case-insensitive duplicates. Zone monetary values are stored only
+after exact integer validation. The seller business profile remains one JSON
+setting, replaced atomically after bounded text, boolean and tax-identifier
+validation; audit records omit the tax identifier and address.
+
 ## Backup and recovery
 
 ```bash

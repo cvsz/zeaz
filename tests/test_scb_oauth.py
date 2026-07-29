@@ -134,14 +134,14 @@ class ScbOauthTests(unittest.TestCase):
 
         def consume():
             barrier.wait()
-            with patch.dict(os.environ, self.environment, clear=False):
-                results.append(app.scb_consume_oauth_state(state))
+            results.append(app.scb_consume_oauth_state(state))
 
         threads = [threading.Thread(target=consume) for _ in range(2)]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
+        with patch.dict(os.environ, self.environment, clear=False):
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
         self.assertCountEqual(results, [verifier, None])
         self.assertIsNone(app.scb_consume_oauth_state(state))
 
