@@ -328,6 +328,16 @@ def finite_float(value, error_message: str) -> float:
     if not math.isfinite(result): raise ValueError(error_message)
     return result
 
+def integer_value(value, error_message: str) -> int:
+    if isinstance(value,bool):raise ValueError(error_message)
+    if isinstance(value,int):return value
+    if isinstance(value,float):
+        if math.isfinite(value) and value.is_integer():return int(value)
+        raise ValueError(error_message)
+    if isinstance(value,str) and re.fullmatch(r"[+-]?\d+",value.strip()):
+        return int(value)
+    raise ValueError(error_message)
+
 def optional_utc_timestamp(value, error_message: str) -> str:
     raw=str(value or "").strip()
     if not raw:return ""
@@ -1686,13 +1696,17 @@ class Handler(SimpleHTTPRequestHandler):
             response={"application":dict(con.execute("SELECT * FROM merchant_applications WHERE id=?",(application_id,)).fetchone())}
         return self.json(response)
     def create_delivery_zone(self,form,role):
-        name=str(form.get("name","")).strip()[:80]
-        try: fee,minimum=int(form.get("fee",0)),int(form.get("minimum_order",0))
-        except (ValueError,TypeError): raise ValueError("ค่าจัดส่งไม่ถูกต้อง")
+        if set(form)-{"name","fee","minimum_order"} or not isinstance(form.get("name"),str):raise ValueError("ข้อมูลพื้นที่จัดส่งไม่ถูกต้อง")
+        name=" ".join(form.get("name","").split())[:80]
+        fee=integer_value(form.get("fee",0),"ค่าจัดส่งไม่ถูกต้อง")
+        minimum=integer_value(form.get("minimum_order",0),"ค่าจัดส่งไม่ถูกต้อง")
         if len(name)<2 or fee<0 or minimum<0: raise ValueError("ข้อมูลพื้นที่จัดส่งไม่ถูกต้อง")
         zone={"id":f"ZONE-{secrets.token_hex(3).upper()}","name":name,"fee":fee,"minimum_order":minimum}; now=utcnow()
-        with db() as con: con.execute("INSERT INTO delivery_zones VALUES (?,?,?,?,?,?,?)",(zone["id"],name,fee,minimum,1,now,now));audit(con,role,"create","delivery_zone",zone["id"],zone)
-        self.json({"zone":zone},201)
+        with db(immediate=True) as con:
+            names=(row["name"].casefold() for row in con.execute("SELECT name FROM delivery_zones WHERE active=1"))
+            if name.casefold() in names:raise ValueError("มีพื้นที่จัดส่งชื่อนี้แล้ว")
+            con.execute("INSERT INTO delivery_zones VALUES (?,?,?,?,?,?,?)",(zone["id"],name,fee,minimum,1,now,now));audit(con,role,"create","delivery_zone",zone["id"],zone)
+        return self.json({"zone":zone},201)
     def create_inventory_item(self,form,role):
         name=str(form.get("name","")).strip()[:100]; unit=str(form.get("unit","")).strip()[:20]
         on_hand=finite_float(form.get("on_hand",0),"จำนวนสต็อกไม่ถูกต้อง")
@@ -1794,11 +1808,22 @@ class Handler(SimpleHTTPRequestHandler):
             con.execute("INSERT INTO pos_receipts VALUES (?,?,?,?,?,?,?,?,?,?,?)",tuple(receipt[key] for key in ("id","order_id","receipt_number","customer_tax_name","customer_tax_id","subtotal","discount","delivery_fee","total","issued_at","issued_by")));audit(con,role,"issue","pos_receipt",receipt["id"],{"order_id":oid})
         return self.json({"receipt":receipt},201)
     def update_business_profile(self,form,role):
-        profile={"legal_name":str(form.get("legal_name","")).strip()[:160],"tax_id":re.sub(r"[^0-9]","",str(form.get("tax_id","")))[:13],"address":str(form.get("address","")).strip()[:500],"branch":str(form.get("branch","สำนักงานใหญ่")).strip()[:80] or "สำนักงานใหญ่","vat_registered":parse_bool(form.get("vat_registered"),False),"vat_rate":7}
-        if not profile["legal_name"] or not profile["address"]:raise ValueError("กรุณาระบุชื่อกิจการและที่อยู่")
-        if profile["vat_registered"] and len(profile["tax_id"])!=13:raise ValueError("เลขประจำตัวผู้เสียภาษีต้องมี 13 หลัก")
-        with db() as con:set_setting(con,"business_profile",profile);audit(con,role,"update","business_profile","store",{"vat_registered":profile["vat_registered"]})
-        self.json({"business_profile":profile})
+        text_fields=("legal_name","tax_id","address","branch")
+        if not {"legal_name","address","vat_registered"}<=set(form) or set(form)-set(text_fields)-{"vat_registered"}:raise ValueError("ข้อมูลผู้ขายไม่ถูกต้อง")
+        if any(key in form and not isinstance(form[key],str) for key in text_fields):raise ValueError("ข้อมูลผู้ขายไม่ถูกต้อง")
+        legal_name=" ".join(form.get("legal_name","").split())
+        tax_id=form.get("tax_id","").strip()
+        address=form.get("address","").strip()
+        branch=" ".join(form.get("branch","สำนักงานใหญ่").split()) or "สำนักงานใหญ่"
+        vat_registered=parse_bool(form.get("vat_registered"),False)
+        if not 2<=len(legal_name)<=160 or not 5<=len(address)<=500 or len(branch)>80:raise ValueError("กรุณาระบุชื่อกิจการและที่อยู่ให้ถูกต้อง")
+        if tax_id and not re.fullmatch(r"\d{13}",tax_id):raise ValueError("เลขประจำตัวผู้เสียภาษีต้องมี 13 หลัก")
+        if vat_registered and not tax_id:raise ValueError("เลขประจำตัวผู้เสียภาษีต้องมี 13 หลัก")
+        profile={"legal_name":legal_name,"tax_id":tax_id,"address":address,"branch":branch,"vat_registered":vat_registered,"vat_rate":7}
+        with db(immediate=True) as con:
+            set_setting(con,"business_profile",profile)
+            audit(con,role,"update","business_profile","store",{"fields":["legal_name","tax_id","address","branch","vat_registered"],"vat_registered":vat_registered})
+        return self.json({"business_profile":profile})
     def update_delivery_pricing(self,form,role):
         try:
             base_fee=int(form.get("base_fee",0))

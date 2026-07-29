@@ -61,6 +61,9 @@
   when delivery work terminates.
 - Removed cross-thread environment patching from the SCB OAuth atomic-consume
   regression, eliminating nondeterministic credential fixture teardown in CI.
+- Serialized case-insensitive delivery-zone uniqueness, rejected fractional or
+  boolean zone money, and hardened seller-profile text and tax-ID validation
+  without placing tax data in audit details.
 - Added additive provider document-policy schema and Thailand provider
   references for Grab, Bolt, LINE MAN and Lalamove.
 - Added database-driven requirement APIs, secure owner document upload,

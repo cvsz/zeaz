@@ -42,6 +42,13 @@ non-empty reason and cannot produce negative stock. Settings requests must
 change at least one supported key, roll back fully on invalid values and record
 the exact changed keys in the audit event.
 
+Delivery-zone names are normalized and unique case-insensitively among active
+zones. Zone fees and minimum orders must be non-negative integers; fractional
+or boolean JSON values are rejected rather than truncated. Seller profiles
+require bounded text and an exact 13-digit tax identifier whenever one is
+provided or VAT registration is enabled. Profile audit details record field
+names and VAT state but never the tax identifier or address.
+
 Menu partial updates serialize their read-modify-write transaction so concurrent
 changes to different fields cannot overwrite each other; each audit event names
 the submitted fields. Coupon codes are strict 3-32 character identifiers.

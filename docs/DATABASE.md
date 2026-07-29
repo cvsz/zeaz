@@ -62,6 +62,12 @@ rider through the API. Reassignment releases the previous rider; `delivered`,
 `failed`, and `cancelled` release the current rider before the successful
 response is emitted.
 
+Delivery-zone creation serializes the active-name lookup and insert, preventing
+concurrent case-insensitive duplicates. Zone monetary values are stored only
+after exact integer validation. The seller business profile remains one JSON
+setting, replaced atomically after bounded text, boolean and tax-identifier
+validation; audit records omit the tax identifier and address.
+
 ## Backup and recovery
 
 ```bash
