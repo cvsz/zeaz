@@ -1,1 +1,1 @@
-{"extends":"../../tsconfig.base.json","include":["src/**/*.ts","tailwind/**/*.ts"]}
+{"extends":"../../tsconfig.base.json","compilerOptions":{"types":["node"]},"include":["src/**/*.ts","tailwind/**/*.ts"]}

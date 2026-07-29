@@ -1,1 +1,1 @@
-{"name":"@moopiew/config","version":"1.0.0","private":true,"type":"module","exports":{".":"./src/index.ts","./tailwind":"./tailwind/preset.ts"},"scripts":{"typecheck":"tsc --noEmit"}}
+{"name":"@moopiew/config","version":"1.0.0","private":true,"type":"module","exports":{".":"./src/index.ts","./tailwind":"./tailwind/preset.ts"},"scripts":{"typecheck":"tsc --noEmit"},"devDependencies":{"@types/node":"^26.1.2"}}
