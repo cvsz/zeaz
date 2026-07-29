@@ -123,21 +123,6 @@ async def check_secret_rotation_async():
             # Check for secrets due for rotation in next 7 days
             due_secrets = await rotation_service.get_secrets_due_for_rotation(db=db, days_ahead=7)
 
-            for secret in due_secrets:
-                days = secret["daysUntilRotation"]
-                overdue = secret.get("overdue", False)
-
-                if overdue:
-                    logger.warning(
-                        "A managed secret is overdue for rotation by %s day(s)",
-                        abs(days),
-                    )
-                else:
-                    logger.info(
-                        "A managed secret needs rotation in %s day(s)",
-                        days,
-                    )
-
             # Count overdue vs upcoming
             overdue_count = sum(1 for s in due_secrets if s.get("overdue", False))
             upcoming_count = len(due_secrets) - overdue_count

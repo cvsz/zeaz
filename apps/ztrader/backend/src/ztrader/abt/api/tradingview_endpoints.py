@@ -192,10 +192,9 @@ async def tradingview_webhook(
             await db.flush()
 
             logger.info(
-                "TradingView alert received: ticker=%s action=%s price=%s",
+                "TradingView alert received: ticker=%s action=%s",
                 sanitize_log_value(alert.ticker),
                 sanitize_log_value(action),
-                alert.price,
                 extra={
                     "component": "tradingview",
                     "alert_id": alert_record.id,
