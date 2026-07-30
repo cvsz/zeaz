@@ -1,0 +1,5 @@
+tenancy: single_database_multi_company
+default_locale: th_TH
+timezone: Asia/Bangkok
+currency: THB
+companies: []

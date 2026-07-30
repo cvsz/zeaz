@@ -2,4 +2,10 @@
 ingress:
   - hostname: moopiew.zeaz.dev
     service: http://127.0.0.1:8080
+  - hostname: piewdash.zeaz.dev
+    service: http://127.0.0.1:80
+  - hostname: zerp.zeaz.dev
+    service: http://127.0.0.1:80
+  - hostname: cme.zeaz.dev
+    service: http://127.0.0.1:8001
   - service: http_status:404

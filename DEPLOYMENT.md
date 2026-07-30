@@ -15,14 +15,19 @@ with environment-specific hosts and immutable digests.
 
 The supported single-host dashboard service is
 `deploy/systemd/moopiew-dashboard.service`, listening only on
-`127.0.0.1:8082`. The Cloudflare Tunnel maps `piewdash.zeaz.dev` to that
-loopback origin through Caddy. Because the shared tunnel wildcard uses port 80,
-install `deploy/systemd/moopiew-proxy-system@.service` as the system-level
-reverse proxy; it runs as the selected user with only
+`127.0.0.1:8082`. The Cloudflare Tunnel maps `piewdash.zeaz.dev` to Caddy at
+`127.0.0.1:80`; Caddy authenticates the request before proxying it to the
+dashboard. Never configure the tunnel to target port 8082 directly. Install
+`deploy/systemd/moopiew-proxy-system@.service` as the system-level reverse
+proxy; it runs as the selected user with only
 `CAP_NET_BIND_SERVICE`. Public access is protected by a Terraform-managed
 Cloudflare Access application restricted to exact operator emails and by
 environment-backed Caddy Basic Auth at the origin. Keep `.env.dashboard` mode
 `0600`; anonymous requests must never return dashboard data.
+
+The zERP web application is served by its local web server on `127.0.0.1:3001`.
+Its Cloudflare Tunnel hostname must target Caddy at `127.0.0.1:80`, where the
+host-specific route forwards to zERP. Do not publish port 3001 directly.
 
 The application requires a dedicated `DOCUMENT_ENCRYPTION_KEY` before document
 onboarding is enabled. Run the hash-verified legacy migration and enable

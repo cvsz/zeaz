@@ -15,6 +15,20 @@ The Python service binds to loopback. Caddy and the tunnel are the only public
 path. SQLite runs with WAL and foreign keys; an order mutation is handled as a
 database transaction.
 
+The protected engineering dashboard follows a separate loopback path:
+
+```text
+Browser → proxied Cloudflare DNS → Access → Tunnel → Caddy :80
+                                                 → dashboard :8082
+```
+
+Caddy applies Basic Auth before forwarding dashboard traffic. Tunnel ingress
+must not target port 8082 directly.
+
+The zERP web application uses the same public edge: Tunnel → Caddy
+`127.0.0.1:80` → zERP web server `127.0.0.1:3001`. Cloudflare DNS remains
+proxied and tunnel ingress never exposes port 3001 directly.
+
 ## Boundaries
 
 - `app.py` owns API validation, authentication, order transitions and audit

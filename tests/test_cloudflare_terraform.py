@@ -53,7 +53,7 @@ class CloudflareTerraformTests(unittest.TestCase):
         self.assertIn('resource "cloudflare_dns_record" "cmeerp"', main)
         self.assertIn('comment = "CME Pro ERP via Cloudflare Tunnel"', main)
         self.assertIn('var.cmeerp_hostname, service = var.cmeerp_origin', main)
-        self.assertIn('default     = "cmeerp.zeaz.dev"', variables)
+        self.assertIn('default     = "cme.zeaz.dev"', variables)
         self.assertIn('default     = "http://127.0.0.1:8001"', variables)
         self.assertIn('output "cmeerp_url"', outputs)
         self.assertIn('"https://${var.cmeerp_hostname}"', outputs)

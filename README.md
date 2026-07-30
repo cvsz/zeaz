@@ -19,8 +19,10 @@ Live service: [moopiew.zeaz.dev](https://moopiew.zeaz.dev/) · API menu:
   movements.
 - Owner operations for business profile, menus, delivery pricing/zones,
   applications, riders, orders, receipts and tax invoices.
-- Private SQLite data with audit history, backups, Cloudflare Tunnel deployment
-  and operational health checks.
+- Private SQLite data with audit history, backups, proxied Cloudflare Tunnel
+  deployment and operational health checks.
+- zERP enterprise web application at [zerp.zeaz.dev](https://zerp.zeaz.dev/)
+  behind the same proxied Tunnel and Caddy boundary.
 - Optional owner-only **ZEAZ AI Live Catalog** that discovers configured
   Gemini, NVIDIA, Z.AI, OpenCode, OpenRouter and Hugging Face models without
   exposing provider keys; see [the AI guide](docs/huggingface.md).
@@ -74,7 +76,8 @@ python3 scripts/ci/evidence.py coverage
 
 Read [development](docs/DEVELOPMENT.md), [architecture](docs/ARCHITECTURE.md),
 [database operations](docs/DATABASE.md), [owner operations](docs/operations.md),
-[security controls](docs/security.th.md), and the bilingual roadmap
+[security controls](docs/security.th.md),
+[Cloudflare deployment](docs/cloudflare-deployment.md), and the bilingual roadmap
 ([English](docs/roadmap.en.md) / [ไทย](docs/roadmap.th.md)) before deploying.
 The [documentation index](SERVICES.md) identifies the canonical source for
 each operational concern.

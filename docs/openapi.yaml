@@ -64,6 +64,10 @@ paths:
     get: {summary: Owner audit log, security: [{adminKey: []}], responses: {'200': {description: Recent audit events}}}
   /api/admin/operations:
     get: {summary: Owner operational aggregate, security: [{adminKey: []}], responses: {'200': {description: Operations payload}}}
+  /api/admin/zerp/accounting/entries:
+    get: {summary: Owner-only balanced double-entry projection for issued receipts, security: [{adminKey: []}], responses: {'200': {description: Journal entries with debit/credit totals}, '401': {description: Owner key required}}}
+  /api/admin/zerp/inventory/moves:
+    get: {summary: Owner-only inventory movement journal projection, security: [{adminKey: []}], responses: {'200': {description: Stock movements with source and destination labels}, '401': {description: Owner key required}}}
   /api/admin/document-requirements:
     get: {summary: List provider document policy versions, security: [{adminKey: []}], responses: {'200': {description: Requirements}}}
   /api/admin/document-requirements/{requirementId}:

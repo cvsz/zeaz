@@ -1,0 +1,2 @@
+# Current implemented vertical slice is the React operations workspace.
+# Backend custom modules are not enabled by this profile.

@@ -243,6 +243,78 @@ def store_document(doc_id: str, raw: bytes) -> Path:
 def set_setting(con, key, value): con.execute("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, json.dumps(value, ensure_ascii=False)))
 def audit(con, role, action, entity_type, entity_id, details=None): con.execute("INSERT INTO audit_logs(at,actor_role,action,entity_type,entity_id,details) VALUES (?,?,?,?,?,?)", (utcnow(), role, action, entity_type, entity_id, json.dumps(details or {}, ensure_ascii=False)))
 
+def ensure_receipt_ledger(con: sqlite3.Connection) -> None:
+    """Materialize a balanced posted journal for each issued receipt.
+
+    Receipts are immutable snapshots, so this idempotent projection gives the
+    ERP read model a stable double-entry record without changing checkout or
+    tax-invoice behavior. Corrections must create a reviewed adjustment entry.
+    """
+    receipts = con.execute("SELECT * FROM pos_receipts ORDER BY issued_at, id").fetchall()
+    for receipt in receipts:
+        entry_id = f"JRN-{receipt['id']}"
+        if con.execute("SELECT 1 FROM ledger_entries WHERE id=?", (entry_id,)).fetchone():
+            continue
+        total = int(receipt["total"])
+        subtotal = int(receipt["subtotal"]) - int(receipt["discount"])
+        delivery = int(receipt["delivery_fee"])
+        if total <= 0 or subtotal < 0 or delivery < 0 or subtotal + delivery != total:
+            raise ValueError("ใบเสร็จไม่สมดุล ไม่สามารถสร้างรายการบัญชีได้")
+        created = str(receipt["issued_at"])
+        con.execute(
+            "INSERT INTO ledger_entries(id,entry_date,reference,journal,state,source_type,source_id,created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (entry_id, created[:10], str(receipt["receipt_number"]), "Sales", "posted", "pos_receipt", str(receipt["id"]), created),
+        )
+        lines = [("1100", "เงินสด/เงินรับชำระ", total, 0)]
+        if subtotal:
+            lines.append(("4100", "รายได้จากการขาย", 0, subtotal))
+        if delivery:
+            lines.append(("4200", "รายได้ค่าจัดส่ง", 0, delivery))
+        con.executemany(
+            "INSERT INTO ledger_lines(entry_id,account_code,account_name,debit,credit) VALUES (?,?,?,?,?)",
+            [(entry_id, *line) for line in lines],
+        )
+
+def ledger_entries_public(con: sqlite3.Connection) -> list[dict]:
+    ensure_receipt_ledger(con)
+    entries = []
+    for entry in con.execute("SELECT * FROM ledger_entries ORDER BY entry_date DESC, id DESC"):
+        lines = [dict(row) for row in con.execute("SELECT account_code,account_name,debit,credit FROM ledger_lines WHERE entry_id=? ORDER BY id", (entry["id"],))]
+        debit = sum(int(line["debit"]) for line in lines)
+        credit = sum(int(line["credit"]) for line in lines)
+        entries.append({**dict(entry), "lines": lines, "total_debit": debit, "total_credit": credit, "balanced": debit == credit})
+    return entries
+
+def stock_moves_public(con: sqlite3.Connection) -> list[dict]:
+    """Expose the existing inventory movement journal in ERP stock-move shape."""
+    rows = con.execute(
+        """SELECT m.id,m.inventory_item_id,m.delta,m.reason,m.order_id,m.note,
+                  m.created_at,i.name AS product_name,i.unit
+           FROM inventory_movements m
+           JOIN inventory_items i ON i.id=m.inventory_item_id
+           ORDER BY m.created_at DESC,m.id DESC LIMIT 500"""
+    )
+    moves = []
+    for row in rows:
+        delta = float(row["delta"])
+        moves.append({
+            "id": row["id"],
+            "product_id": row["inventory_item_id"],
+            "product_name": row["product_name"],
+            "quantity": abs(delta),
+            "uom": row["unit"],
+            "source_location": "stock" if delta < 0 else "external",
+            "destination_location": "consumption" if delta < 0 else "stock",
+            "lot_number": None,
+            "state": "done",
+            "delta": delta,
+            "reason": row["reason"],
+            "order_id": row["order_id"],
+            "note": row["note"],
+            "created_at": row["created_at"],
+        })
+    return moves
+
 def payment_public(row: dict) -> dict:
     return {key: row[key] for key in ("id", "provider", "provider_reference", "provider_order_id", "amount", "status", "qr_image", "qr_type", "expires_at", "created_at", "confirmed_at")}
 
@@ -1294,6 +1366,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.json({"logs":logs})
             if path=="/api/admin/operations":
                 if not self.require("admin"): return
+                ensure_receipt_ledger(con)
                 inventory=[dict(row) for row in con.execute("SELECT * FROM inventory_items ORDER BY name")]
                 riders=[dict(row) for row in con.execute("SELECT * FROM riders ORDER BY active DESC,name")]
                 applications=[dict(row) for row in con.execute("SELECT * FROM rider_applications ORDER BY CASE status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,created_at DESC")]
@@ -1303,7 +1376,13 @@ class Handler(SimpleHTTPRequestHandler):
                 receipts=[dict(row) for row in con.execute("SELECT * FROM pos_receipts ORDER BY issued_at DESC LIMIT 100")]
                 invoices=[dict(row) for row in con.execute("SELECT * FROM tax_invoices ORDER BY issued_at DESC LIMIT 100")]
                 recipes=[dict(row) for row in con.execute("SELECT r.menu_item_id,r.inventory_item_id,r.quantity,m.name AS menu_name,i.name AS inventory_name,i.unit FROM menu_recipes r JOIN menu_items m ON m.id=r.menu_item_id JOIN inventory_items i ON i.id=r.inventory_item_id ORDER BY m.name,i.name")]
-                return self.json({"delivery_zones":delivery_zones(con),"delivery_pricing":conf["delivery_pricing"],"deliveries":deliveries,"riders":riders,"rider_applications":applications,"merchant_applications":merchant_applications,"inventory":inventory,"menu":conf["menu"],"recipes":recipes,"coupons":coupons,"receipts":receipts,"tax_invoices":invoices,"business_profile":conf["business_profile"]})
+                return self.json({"delivery_zones":delivery_zones(con),"delivery_pricing":conf["delivery_pricing"],"deliveries":deliveries,"riders":riders,"rider_applications":applications,"merchant_applications":merchant_applications,"inventory":inventory,"menu":conf["menu"],"recipes":recipes,"coupons":coupons,"receipts":receipts,"tax_invoices":invoices,"ledger_entries":ledger_entries_public(con),"stock_moves":stock_moves_public(con),"business_profile":conf["business_profile"]})
+            if path=="/api/admin/zerp/accounting/entries":
+                if not self.require("admin"): return
+                return self.json({"entries": ledger_entries_public(con), "currency": "THB"})
+            if path=="/api/admin/zerp/inventory/moves":
+                if not self.require("admin"): return
+                return self.json({"moves": stock_moves_public(con), "currency": "THB"})
             printable=re.fullmatch(r"/api/admin/receipts/(RCT-[A-Z0-9-]+)/print",path)
             if printable:
                 if not self.require("admin"): return

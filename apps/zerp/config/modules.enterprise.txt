@@ -1,0 +1,2 @@
+# Enterprise modules are intentionally empty until a licensed entitlement and
+# an approved deployment source are documented.

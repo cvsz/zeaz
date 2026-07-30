@@ -20,6 +20,21 @@ http://piewdash.zeaz.dev:80 {
 	reverse_proxy 127.0.0.1:8082
 }
 
+http://zerp.zeaz.dev:80 {
+	bind 127.0.0.1
+
+	header {
+		-Server
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; script-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	}
+
+	reverse_proxy 127.0.0.1:3001
+}
+
 :8080 {
 	bind 127.0.0.1
 

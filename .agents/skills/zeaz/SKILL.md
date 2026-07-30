@@ -5,15 +5,17 @@ description: Repository-specific development patterns and workflows for MooPiew.
 
 # zeaz Development Patterns
 
-> Auto-generated skill from repository analysis
+> Repository-maintained workflow guidance
 
 ## Overview
-This skill teaches you the core development patterns and workflows used in the `zeaz` JavaScript codebase. You'll learn the project's coding conventions, how to contribute new features or enhancements—especially around document upload functionality—and how to follow the repository's established workflows for consistent, maintainable code.
+This skill captures repository-specific development patterns for the Python
+service, React/TypeScript clients, deployment assets, and provider-document
+workflow.
 
 ## Coding Conventions
 
-- **File Naming:**  
-  Use kebab-case for filenames.  
+- **File Naming:**
+  Use the naming convention already established by the nearest package.
   _Example:_  
   ```
   document-upload.js
@@ -67,10 +69,10 @@ This skill teaches you the core development patterns and workflows used in the `
 
 5. **Frontend components**  
    Modify or add:
-   - `web/components/document-upload/*`
-   - `web/document-admin.html`
-   - `web/document-admin.js`
-   - `web/documents.html`
+   - `apps/web/src/documents.tsx`
+   - `apps/web/src/documents.css`
+   - `apps/web/documents.html`
+   - generated `web/platform/` output through `npm run publish:platform`
 
 6. **Testing**  
    Update or add tests in `tests/test_documents.py`.
@@ -79,10 +81,10 @@ This skill teaches you the core development patterns and workflows used in the `
    Update scripts or templates as needed, such as `templates/store-master-data.json` or `scripts/ci/test.sh`.
 
 _Example: Adding a new document field to the upload component_
-```js
-// web/components/document-upload/document-upload.js
-export function validateDocumentType(type) {
-  // new validation logic
+```tsx
+// apps/web/src/documents.tsx
+export function validateDocumentType(type: string): boolean {
+  return type.length > 0;
 }
 ```
 
@@ -97,11 +99,11 @@ export function validateDocumentType(type) {
 
 2. **Frontend UX improvements**  
    Modify:
-   - `web/components/document-upload/document-upload.css`
-   - `web/components/document-upload/document-upload.js`
+   - `apps/web/src/documents.css`
+   - `apps/web/src/documents.tsx`
 
 3. **Admin interface**  
-   Update `web/document-admin.js` as needed.
+   Update `apps/web/src/documents.tsx` and republish the platform build.
 
 _Example: Improving upload button styling_
 ```css
@@ -114,23 +116,20 @@ _Example: Improving upload button styling_
 
 ## Testing Patterns
 
-- **Test File Naming:**  
-  Test files use the `*.test.*` pattern.  
+- **Test File Naming:**
+  Python regression tests use `tests/test_*.py`; TypeScript tests follow the
+  nearest package convention.
   _Example:_  
   ```
-  document-upload.test.js
+  tests/test_documents.py
   ```
 
-- **Framework:**  
-  No specific testing framework detected.  
+- **Framework:**
+  Python tests use `unittest`; TypeScript validation uses repository npm
+  scripts.
   _Example test structure:_  
   ```js
-  // document-upload.test.js
-  import { uploadDocument } from './document-upload.js';
-
-  test('uploads a valid document', () => {
-    // test logic here
-  });
+  python3 -m unittest tests.test_documents -v
   ```
 
 ## Commands

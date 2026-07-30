@@ -1,0 +1,31 @@
+[Unit]
+Description=ZEAZ zERP web application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=/home/%i/zeaz/apps/zerp
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run preview -- --host 127.0.0.1 --port 3001
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/home/%i/zeaz/apps/zerp/dist /home/%i/zeaz/node_modules
+
+[Install]
+WantedBy=multi-user.target

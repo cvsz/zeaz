@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Routed Cloudflare dashboard ingress through the authenticated loopback Caddy
+  proxy instead of the dashboard process, enforced proxied tunnel DNS and
+  reviewed loopback origins in Terraform, and synchronized deployment,
+  architecture, security, operations, and recovery documentation.
+- Added the proxied `zerp.zeaz.dev` route through Caddy with Terraform-managed
+  tunnel ingress and a loopback-only zERP origin.
+
 ## 1.0.0 — 2026-07-28
 
 - Added the live engineering dashboard, CI evidence reports, Docker deployment,

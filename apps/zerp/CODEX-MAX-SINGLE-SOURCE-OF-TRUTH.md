@@ -503,27 +503,27 @@ The loop is an orchestration aid, not a substitute for branch protection, CI, re
 
 The first Codex slice must create or complete all of the following without implementing broad business features prematurely:
 
-- [ ] `apps/zerp/AGENTS.md`
-- [ ] `apps/zerp/README.md`
-- [ ] `apps/zerp/CHANGELOG.md`
-- [ ] `apps/zerp/docs/ARCHITECTURE.md`
-- [ ] `apps/zerp/docs/MODULE-MATRIX.md`
-- [ ] `apps/zerp/docs/INSTALLATION.md`
-- [ ] `apps/zerp/docs/CONFIGURATION.md`
-- [ ] `apps/zerp/docs/SECURITY.md`
-- [ ] `apps/zerp/docs/THAI-LOCALIZATION.md`
-- [ ] `apps/zerp/docs/TESTING.md`
-- [ ] `apps/zerp/docs/decisions/`
-- [ ] `apps/zerp/docs/execution-records/`
-- [ ] upstream version and edition decision
-- [ ] Community/Enterprise/license matrix
-- [ ] existing repository integration inventory
-- [ ] target deployment profiles
-- [ ] threat model and data classification
-- [ ] baseline dependency and security scan
-- [ ] baseline install/test commands
-- [ ] risk register
-- [ ] prioritized vertical-slice backlog with dependencies
+- [x] `apps/zerp/AGENTS.md`
+- [x] `apps/zerp/README.md`
+- [x] `apps/zerp/CHANGELOG.md`
+- [x] `apps/zerp/docs/ARCHITECTURE.md`
+- [x] `apps/zerp/docs/MODULE-MATRIX.md`
+- [x] `apps/zerp/docs/INSTALLATION.md`
+- [x] `apps/zerp/docs/CONFIGURATION.md`
+- [x] `apps/zerp/docs/SECURITY.md`
+- [x] `apps/zerp/docs/THAI-LOCALIZATION.md`
+- [x] `apps/zerp/docs/TESTING.md`
+- [x] `apps/zerp/docs/decisions/`
+- [x] `apps/zerp/docs/execution-records/`
+- [ ] upstream version and edition decision (requires owner/licensing approval)
+- [x] Community/Enterprise/license matrix
+- [x] existing repository integration inventory
+- [x] target deployment profiles
+- [x] threat model and data classification
+- [x] baseline dependency and security scan for the current frontend slice
+- [x] baseline install/test commands
+- [x] risk register (see deferred decisions and module matrix)
+- [x] prioritized vertical-slice backlog with dependencies
 
 ## 16. Required decisions before production
 
@@ -555,3 +555,16 @@ This SSOT is informed by:
 - Cybernetics Plus's Odoo ERP positioning: integrated applications, process automation, centralized visibility, customization, implementation consulting, and ongoing support.
 
 External marketing claims are context, not acceptance evidence. Odoo official documentation, the selected source version, repository code, automated tests, signed architectural decisions, and business-owner acceptance are the implementation authorities.
+
+## 18. Current repository evidence (2026-07-29)
+
+The repository currently contains a working zERP operations workspace, not a
+complete Odoo distribution. `apps/zerp` reads the existing protected
+`/api/admin/operations` contract and presents live accounting receipts/tax
+invoices, inventory/reorder data, menu recipes, merchant applications, and
+rider workforce state. The owner key is held only in tab memory. This is the
+first integrated read-only vertical slice; the broader capabilities in section
+4 remain deferred until their backend models, permissions, migrations, and
+tests exist. The workspace is verified with `npm run typecheck --workspace
+@moopiew/zerp`, `npm run build --workspace @moopiew/zerp`, and the existing
+Cloudflare/web-shell regression tests.

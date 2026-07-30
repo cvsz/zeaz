@@ -13,8 +13,11 @@
 
 1. Request `/api/health`; a valid JSON response isolates UI/SSE failures.
 2. Validate `python3 -m dashboard.api.health`.
-3. Treat missing reports as unavailable evidence, not a successful control.
-4. Restart the dashboard only after preserving its logs.
+3. Verify the tunnel ingress targets `http://127.0.0.1:80` and that an
+   anonymous public request receives Cloudflare Access or Caddy
+   authentication, never dashboard JSON.
+4. Treat missing reports as unavailable evidence, not a successful control.
+5. Restart the dashboard only after preserving its logs.
 
 ## Terraform state migration failure
 

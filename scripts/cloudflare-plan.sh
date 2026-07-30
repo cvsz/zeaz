@@ -38,7 +38,11 @@ export TF_VAR_cloudflare_tunnel_id="$CLOUDFLARE_TUNNEL_ID"
 export TF_VAR_moopiew_hostname="${MOOPIEW_HOSTNAME:-moopiew.zeaz.dev}"
 export TF_VAR_moopiew_origin="${MOOPIEW_ORIGIN:-http://127.0.0.1:8080}"
 export TF_VAR_piewdash_hostname="${PIEWDASH_HOSTNAME:-piewdash.zeaz.dev}"
-export TF_VAR_piewdash_origin="${PIEWDASH_ORIGIN:-http://127.0.0.1:8082}"
+export TF_VAR_piewdash_origin="${PIEWDASH_ORIGIN:-http://127.0.0.1:80}"
+export TF_VAR_zerp_hostname="${ZERP_HOSTNAME:-zerp.zeaz.dev}"
+export TF_VAR_zerp_origin="${ZERP_ORIGIN:-http://127.0.0.1:80}"
+export TF_VAR_cmeerp_hostname="${CMEERP_HOSTNAME:-cme.zeaz.dev}"
+export TF_VAR_cmeerp_origin="${CMEERP_ORIGIN:-http://127.0.0.1:8001}"
 export TF_VAR_piewdash_access_allowed_emails="$PIEWDASH_ACCESS_ALLOWED_EMAILS"
 
 "$TF_BIN" -chdir="$STACK" fmt -check -recursive

@@ -4,8 +4,10 @@ The project uses the same split of responsibilities as z-platform:
 
 1. Terraform owns the proxied DNS CNAME for `moopiew.zeaz.dev`.
 2. An existing Cloudflare Tunnel owns the public-to-private connection.
-3. `cloudflared` forwards that hostname to Caddy on `127.0.0.1:8080`.
-4. Caddy proxies to the MooPiew service on `127.0.0.1:8000`.
+3. `cloudflared` forwards the application to Caddy on `127.0.0.1:8080`.
+4. `cloudflared` forwards the dashboard hostname to Caddy on
+   `127.0.0.1:80`; Caddy applies Basic Auth and proxies to
+   `127.0.0.1:8082`.
 5. Cloudflare Access and Caddy Basic Auth protect `piewdash.zeaz.dev`.
 
 ## Required operator values
@@ -20,6 +22,9 @@ Populate `.env.cloudflare` locally from the Cloudflare account that owns
 - `CLOUDFLARE_TUNNEL_TOKEN`: only on the origin host that runs cloudflared.
 - `PIEWDASH_ACCESS_ALLOWED_EMAILS`: a JSON array containing exact operator
   emails. Never use an `everyone` or domain-wide Access rule.
+- `MOOPIEW_ORIGIN=http://127.0.0.1:8080` and
+  `PIEWDASH_ORIGIN=http://127.0.0.1:80`. The latter must never point directly
+  to port 8082 because that bypasses Caddy Basic Auth.
 
 The API token and tunnel token are distinct secrets. Never commit either one.
 
@@ -32,10 +37,12 @@ python3 -m venv .venv
 ./scripts/cloudflare-plan.sh
 ```
 
-If Cloudflare already has a record for `moopiew.zeaz.dev`, import that record
-before applying the reviewed plan. Keep `manage_tunnel_config = false`; merge
-the generated ingress fragment into the existing tunnel config instead, unless
-the entire existing remote configuration has been imported and reviewed.
+If Cloudflare already has a record for any hostname, import each applicable
+records before applying the reviewed plan. Confirm the plan keeps each CNAME
+proxied and targets the selected tunnel. Keep `manage_tunnel_config = false`;
+merge the generated ingress fragment into the existing tunnel config instead,
+unless the entire existing remote configuration has been imported and
+reviewed.
 
 Start the connector on the origin host with:
 
@@ -65,7 +72,7 @@ bcrypt hash, and keep the file mode `0600`. Verify all paths with
 
 Then verify `https://moopiew.zeaz.dev/api/menu`,
 authenticated `https://piewdash.zeaz.dev/api/health`, `/api/ready`, and the
-customer storefront. An anonymous dashboard request must receive a Caddy
+`https://zerp.zeaz.dev/` application route, and the customer storefront. An anonymous dashboard request must receive a Caddy
 `401` or a Cloudflare Access login redirect, never dashboard data. A 502
 response indicates an unreachable origin; a 530 indicates that Cloudflare
 cannot reach a healthy tunnel.

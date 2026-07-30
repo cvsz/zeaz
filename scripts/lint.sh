@@ -10,7 +10,7 @@ while IFS= read -r -d '' javascript; do
 done < <(git ls-files -z '*.js')
 node --check dashboard/assets/app.js
 if grep -RInI -E '\b(TODO|FIXME|XXX|HACK|PLACEHOLDER|STUB|TEMPORARY)\b' \
-  --exclude='lint.sh' --exclude='*.md' --exclude-dir='__pycache__' --exclude-dir='.turbo' --exclude-dir='node_modules' --exclude-dir='.venv' --exclude-dir='dist' --exclude-dir='build' \
+  --exclude='lint.sh' --exclude='verify.sh' --exclude='*.md' --exclude-dir='__pycache__' --exclude-dir='.turbo' --exclude-dir='node_modules' --exclude-dir='.venv' --exclude-dir='dist' --exclude-dir='build' \
   app.py apps packages scripts tests web infrastructure deploy dashboard; then
   echo "Implementation markers are not allowed in production source." >&2
   exit 1

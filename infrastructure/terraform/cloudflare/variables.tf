@@ -123,7 +123,7 @@ variable "manage_tunnel_config" {
 
 variable "cmeerp_hostname" {
   type        = string
-  default     = "cmeerp.zeaz.dev"
+  default     = "cme.zeaz.dev"
   description = "Public hostname for the CME Pro ERP web application."
   validation {
     condition     = endswith(lower(var.cmeerp_hostname), ".${lower(var.zone_name)}")

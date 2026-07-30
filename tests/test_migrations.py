@@ -19,11 +19,11 @@ class MigrationTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_fresh_database_and_idempotence(self):
-        self.assertEqual(apply_migrations(self.connection), [0, 1, 2, 3, 4])
+        self.assertEqual(apply_migrations(self.connection), [0, 1, 2, 3, 4, 5])
         versions = self.connection.execute(
             "SELECT version FROM schema_migrations ORDER BY version"
         ).fetchall()
-        self.assertEqual(versions, [(0,), (1,), (2,), (3,), (4,)])
+        self.assertEqual(versions, [(0,), (1,), (2,), (3,), (4,), (5,)])
         columns = {
             row[1] for row in self.connection.execute("PRAGMA table_info(deliveries)")
         }
@@ -202,7 +202,7 @@ class MigrationTests(unittest.TestCase):
         rows = self.connection.execute(
             "SELECT version,COUNT(*) FROM schema_migrations GROUP BY version"
         ).fetchall()
-        self.assertEqual(rows, [(0, 1), (1, 1), (2, 1), (3, 1), (4, 1)])
+        self.assertEqual(rows, [(0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1)])
 
 
 if __name__ == "__main__":

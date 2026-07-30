@@ -9,7 +9,8 @@
 | Application runtime | `app.py` |
 | Browser production assets | `web/` |
 | Shared TypeScript contracts | `packages/` |
-| Cloudflare infrastructure | `infrastructure/terraform/cloudflare/` |
+| Cloudflare infrastructure | `infrastructure/terraform/cloudflare/` and `docs/cloudflare-deployment.md` |
+| zERP web application | `apps/zerp/` and `zerp.zeaz.dev` via the Cloudflare/Caddy proxy |
 | Host and Kubernetes deployment | `deploy/` and `DEPLOYMENT.md` |
 | Operational procedures | `OPERATIONS.md` and `RUNBOOK.md` |
 | Security policy | `SECURITY.md` |

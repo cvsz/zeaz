@@ -1,0 +1,10 @@
+; Reserved for a future reviewed Odoo-compatible deployment profile.
+; The current zERP UI uses MooPiew's Python/SQLite service as its source of truth.
+[options]
+admin_passwd = CHANGE_ME_IN_A_PROTECTED_SECRET_STORE
+db_host = 127.0.0.1
+db_port = 5432
+db_name = zerp
+proxy_mode = True
+list_db = False
+; addons_path must be supplied by the deployment profile, never guessed.

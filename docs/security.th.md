@@ -10,6 +10,16 @@ Cloudflare Tunnel ส่งเข้า Caddy ที่ `127.0.0.1:8080` ก่�
 `127.0.0.1:8000` โดยรักษา `Host`, `X-Real-IP`, `X-Forwarded-For` และ
 `X-Forwarded-Proto` ตาม proxy contract ของ zeaz-platform.
 
+สำหรับ `piewdash.zeaz.dev` ให้ Tunnel ส่งเข้า Caddy ที่ `127.0.0.1:80`
+เท่านั้น เพื่อให้ Cloudflare Access และ Caddy Basic Auth ทำงานครบสองชั้น
+ห้ามส่งตรงเข้า dashboard process ที่ `127.0.0.1:8082` เพราะจะข้าม Basic Auth
+ที่ origin ส่วน DNS CNAME ของทั้งแอปและ dashboard ต้องเปิด Cloudflare proxy
+และชี้ไป Tunnel ที่ Terraform จัดการ
+
+สำหรับ `zerp.zeaz.dev` ให้ใช้ DNS แบบ proxied และส่ง Tunnel เข้า Caddy ที่
+`127.0.0.1:80` เท่านั้น จากนั้น Caddy จึงส่งต่อไป zERP ที่ `127.0.0.1:3001`;
+ห้ามเปิดหรือชี้ DNS ตรงไปพอร์ต 3001
+
 ## Application controls
 
 - บังคับ `ADMIN_KEY` ที่ไม่ใช่ค่าเริ่มต้นเมื่อ `REQUIRE_ADMIN_KEY=true` และใช้ constant-time comparison

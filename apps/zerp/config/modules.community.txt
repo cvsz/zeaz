@@ -1,0 +1,2 @@
+# Reserved module profile. Enable only after a reviewed Odoo Community source
+# and PostgreSQL deployment are selected.

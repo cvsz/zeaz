@@ -6,6 +6,11 @@ dependency-light Python HTTP service and SQLite WAL storage. Static clients are
 served from `web/`; the TypeScript workspace builds the migration surface under
 `apps/web` and publishes it to `web/platform`.
 
+Cloudflare DNS records are proxied CNAMEs to the existing tunnel. Application
+ingress terminates at loopback Caddy port 8080. Dashboard ingress terminates at
+loopback Caddy port 80 so its Basic Auth gate runs before forwarding to the
+dashboard process on port 8082.
+
 The engineering dashboard is a separate read-only process. It collects Git and
 repository controls locally, reads CI-produced JSON evidence, and serves JSON
 plus SSE to `dashboard/index.html`. It never mutates the repository or executes

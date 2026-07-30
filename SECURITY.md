@@ -24,6 +24,9 @@ operator emails; `everyone` and domain-wide rules are prohibited. Caddy Basic
 Auth provides independent origin enforcement using credentials stored only in
 the mode-`0600` ignored `.env.dashboard` file. The Caddy systemd unit must not
 use `--environ`, which would write those credentials to the service journal.
+Cloudflared targets Caddy at `127.0.0.1:80`; targeting the dashboard process at
+`127.0.0.1:8082` would bypass Basic Auth and is prohibited by Terraform
+validation.
 
 SCB callback claims never settle an order by themselves; the server performs a
 provider inquiry first. A provider-confirmed payment received after an order

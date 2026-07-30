@@ -31,7 +31,8 @@ proxy. Repository state, branch names, and commit subjects are operational
 metadata.
 
 The production single-host URL is `https://piewdash.zeaz.dev/`; its local
-origin is `http://127.0.0.1:8082`.
+process listens at `http://127.0.0.1:8082`. Cloudflared must target the
+authenticated Caddy route at `http://127.0.0.1:80`, not the process directly.
 
 ## Terraform state
 
