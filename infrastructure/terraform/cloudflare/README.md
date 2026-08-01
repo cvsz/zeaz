@@ -1,9 +1,10 @@
 # Moopiew Cloudflare Terraform
 
 This stack follows the Cloudflare Tunnel DNS ownership model used by
-`z-platform`: proxied CNAMEs send `moopiew.zeaz.dev`, `piewdash.zeaz.dev`, and
-`zerp.zeaz.dev` to an existing tunnel. Cloudflared forwards the app to
-Caddy on port 8080 and the dashboard hostname to Caddy on port 80. The
+`z-platform`: proxied CNAMEs send `moopiew.zeaz.dev`, `zttshop.zeaz.dev`,
+`piewdash.zeaz.dev`, `qwen.zeaz.dev`, `zerp.zeaz.dev`, and `cme.zeaz.dev` to
+an existing tunnel. Cloudflared forwards the public app hostnames to Caddy on
+port 8080 and the dashboard and ERP hostnames to Caddy on port 80. The
 host-specific dashboard route applies Basic Auth before proxying to the
 loopback dashboard process on port 8082. Never point the tunnel directly at
 port 8082 because that bypasses the origin authentication layer. The zERP
@@ -17,7 +18,7 @@ layer.
 
 The stack accepts the tunnel ID as either its canonical UUID or the compact
 32-character identifier used by the existing z-platform environment.
-All three DNS records are Cloudflare-proxied (`proxied = true`, automatic TTL), so
+All DNS records are Cloudflare-proxied (`proxied = true`, automatic TTL), so
 the origin is not published as a directly reachable DNS target.
 
 ## Safe setup
@@ -83,9 +84,15 @@ before planning to prevent Terraform from attempting to create a duplicate:
 terraform -chdir=infrastructure/terraform/cloudflare import \
   cloudflare_dns_record.moopiew "<zone-id>/<dns-record-id>"
 terraform -chdir=infrastructure/terraform/cloudflare import \
+  cloudflare_dns_record.zttshop "<zone-id>/<dns-record-id>"
+terraform -chdir=infrastructure/terraform/cloudflare import \
   cloudflare_dns_record.piewdash "<zone-id>/<dns-record-id>"
 terraform -chdir=infrastructure/terraform/cloudflare import \
+  cloudflare_dns_record.qwen "<zone-id>/<dns-record-id>"
+terraform -chdir=infrastructure/terraform/cloudflare import \
   cloudflare_dns_record.zerp "<zone-id>/<dns-record-id>"
+terraform -chdir=infrastructure/terraform/cloudflare import \
+  cloudflare_dns_record.cmeerp "<zone-id>/<dns-record-id>"
 ./scripts/cloudflare-plan.sh
 ```
 
@@ -94,5 +101,5 @@ Only after review, an operator may apply `tfplan` manually. Keep
 been imported and reviewed. For a local cloudflared configuration, merge the
 rendered `cloudflared_ingress` output before its final fallback rule. The
 reviewed origins are deliberately restricted to `127.0.0.1`: application
-traffic uses Caddy port 8080 and dashboard traffic uses authenticated Caddy
-port 80; zERP traffic uses Caddy port 80 and is forwarded to port 3001.
+traffic uses Caddy port 8080 and dashboard and ERP traffic uses authenticated
+Caddy port 80; zERP traffic uses Caddy port 80 and is forwarded to port 3001.

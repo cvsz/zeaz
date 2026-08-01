@@ -2,6 +2,10 @@
 ingress:
   - hostname: moopiew.zeaz.dev
     service: http://127.0.0.1:8080
+  - hostname: zttshop.zeaz.dev
+    service: http://127.0.0.1:8080
+  - hostname: qwen.zeaz.dev
+    service: http://127.0.0.1:8091
   - hostname: piewdash.zeaz.dev
     service: http://127.0.0.1:80
   - hostname: zerp.zeaz.dev

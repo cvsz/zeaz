@@ -39,6 +39,9 @@ class CloudflareAccessTests(unittest.TestCase):
         self.assertIn(
             'cloudflare_zero_trust_access_application" "piewdash', main
         )
+        self.assertNotIn(
+            'cloudflare_zero_trust_access_application" "qwen', main
+        )
         self.assertIn("enable_binding_cookie      = true", main)
         self.assertIn("http_only_cookie_attribute = true", main)
         self.assertIn("piewdash_access_allowed_emails", main)

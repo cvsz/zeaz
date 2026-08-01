@@ -37,11 +37,15 @@ class AIConsoleTests(unittest.TestCase):
         self.assertIn('"X-Admin-Key-B64"', self.owner_auth)
 
     def test_console_uses_typed_sdk_for_production_ai_routes(self):
-        self.assertIn("api.ai.config(adminKey)", self.component)
-        self.assertIn("api.ai.models(adminKey)", self.component)
-        self.assertIn("api.ai.chat(", self.component)
+        self.assertIn("api.ai.publicModels()", self.component)
+        self.assertIn("api.ai.publicChat(", self.component)
+        self.assertIn("api.ai.config(key)", self.component)
+        self.assertIn("api.ai.models(key)", self.component)
+        self.assertIn("api.ai.chat(ownerKey,", self.component)
         self.assertNotIn("fetch(", self.component)
         for route in (
+            "/api/ai/models",
+            "/api/ai/chat",
             "/api/admin/ai/config",
             "/api/admin/ai/models",
             "/api/admin/ai/chat",
@@ -61,7 +65,7 @@ class AIConsoleTests(unittest.TestCase):
             'aria-live="polite"',
             'role="radiogroup"',
             "maxLength={12000}",
-            'href="#studio"',
+            'href="#composer"',
         ):
             self.assertIn(marker, self.component)
 

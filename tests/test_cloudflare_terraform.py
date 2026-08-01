@@ -10,10 +10,10 @@ class CloudflareTerraformTests(unittest.TestCase):
     def test_public_dns_records_are_proxied_tunnel_cnames(self):
         main = (STACK / "main.tf").read_text(encoding="utf-8")
 
-        self.assertEqual(main.count('type    = "CNAME"'), 4)
-        self.assertEqual(main.count("content = local.tunnel_cname"), 4)
-        self.assertEqual(main.count("proxied = true"), 4)
-        self.assertEqual(main.count("ttl     = 1"), 4)
+        self.assertEqual(main.count('type    = "CNAME"'), 6)
+        self.assertEqual(main.count("content = local.tunnel_cname"), 6)
+        self.assertEqual(main.count("proxied = true"), 6)
+        self.assertEqual(main.count("ttl     = 1"), 6)
 
     def test_tunnel_origins_use_reviewed_caddy_proxies(self):
         variables = (STACK / "variables.tf").read_text(encoding="utf-8")
@@ -28,6 +28,13 @@ class CloudflareTerraformTests(unittest.TestCase):
         self.assertIn(
             'var.moopiew_origin == "http://127.0.0.1:8080"', variables
         )
+        self.assertIn('default     = "zttshop.zeaz.dev"', variables)
+        self.assertIn(
+            'var.zttshop_origin == "http://127.0.0.1:8080"', variables
+        )
+        self.assertIn('default     = "qwen.zeaz.dev"', variables)
+        self.assertIn('default     = "http://127.0.0.1:8091"', variables)
+        self.assertIn('var.qwen_origin == "http://127.0.0.1:8091"', variables)
         self.assertIn('default     = "http://127.0.0.1:80"', variables)
         self.assertIn('var.piewdash_origin == "http://127.0.0.1:80"', variables)
         self.assertNotIn('default     = "http://127.0.0.1:8082"', variables)
@@ -37,12 +44,17 @@ class CloudflareTerraformTests(unittest.TestCase):
         )
         self.assertIn("hostname: moopiew.zeaz.dev", ingress)
         self.assertIn("service: http://127.0.0.1:8080", ingress)
+        self.assertIn("hostname: zttshop.zeaz.dev", ingress)
+        self.assertIn("hostname: qwen.zeaz.dev", ingress)
+        self.assertIn("service: http://127.0.0.1:8091", ingress)
         self.assertIn("hostname: piewdash.zeaz.dev", ingress)
         self.assertIn("service: http://127.0.0.1:80", ingress)
         self.assertIn("hostname: zerp.zeaz.dev", ingress)
         self.assertEqual(
             ingress.count("service: http://127.0.0.1:80\n"), 2
         )
+        self.assertEqual(ingress.count("service: http://127.0.0.1:8080\n"), 2)
+        self.assertEqual(ingress.count("service: http://127.0.0.1:8091\n"), 1)
         self.assertNotIn("service: http://127.0.0.1:8082", ingress)
 
     def test_cmeerp_dns_record_and_ingress_are_present(self):
@@ -57,6 +69,32 @@ class CloudflareTerraformTests(unittest.TestCase):
         self.assertIn('default     = "http://127.0.0.1:8001"', variables)
         self.assertIn('output "cmeerp_url"', outputs)
         self.assertIn('"https://${var.cmeerp_hostname}"', outputs)
+
+    def test_qwen_chat_hostname_and_public_ingress_are_present(self):
+        main = (STACK / "main.tf").read_text(encoding="utf-8")
+        variables = (STACK / "variables.tf").read_text(encoding="utf-8")
+        outputs = (STACK / "outputs.tf").read_text(encoding="utf-8")
+        plan = (ROOT / "scripts" / "cloudflare-plan.sh").read_text(
+            encoding="utf-8"
+        )
+        ingress = (
+            ROOT / "deploy" / "cloudflared" / "moopiew-ingress.yml.example"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('resource "cloudflare_dns_record" "qwen"', main)
+        self.assertIn('comment = "Qwen chat interface via Cloudflare Tunnel"', main)
+        self.assertIn('var.qwen_hostname, service = var.qwen_origin', main)
+        self.assertIn('resource "cloudflare_dns_record" "zttshop"', main)
+        self.assertIn('comment = "zttshop public app via Cloudflare Tunnel"', main)
+        self.assertIn('var.zttshop_hostname, service = var.zttshop_origin', main)
+        self.assertIn('default     = "qwen.zeaz.dev"', variables)
+        self.assertIn('default     = "http://127.0.0.1:8091"', variables)
+        self.assertIn('output "qwen_url"', outputs)
+        self.assertIn('"https://${var.qwen_hostname}"', outputs)
+        self.assertIn('TF_VAR_qwen_hostname="${QWEN_HOSTNAME:-qwen.zeaz.dev}"', plan)
+        self.assertIn('TF_VAR_qwen_origin="${QWEN_ORIGIN:-http://127.0.0.1:8091}"', plan)
+        self.assertIn("hostname: qwen.zeaz.dev", ingress)
+        self.assertIn("service: http://127.0.0.1:8091", ingress)
 
     def test_zerp_uses_caddy_proxy_instead_of_direct_dev_server(self):
         variables = (STACK / "variables.tf").read_text(encoding="utf-8")

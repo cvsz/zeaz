@@ -21,6 +21,26 @@ resource "cloudflare_dns_record" "moopiew" {
   comment = "Moopiew preorder via Cloudflare Tunnel"
 }
 
+resource "cloudflare_dns_record" "zttshop" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.zttshop_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "zttshop public app via Cloudflare Tunnel"
+}
+
+resource "cloudflare_dns_record" "qwen" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.qwen_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "Qwen chat interface via Cloudflare Tunnel"
+}
+
 resource "cloudflare_dns_record" "piewdash" {
   zone_id = var.cloudflare_zone_id
   name    = var.piewdash_hostname
@@ -83,6 +103,8 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "moopiew" {
   config = {
     ingress = [
       { hostname = var.moopiew_hostname, service = var.moopiew_origin },
+      { hostname = var.zttshop_hostname, service = var.zttshop_origin },
+      { hostname = var.qwen_hostname, service = var.qwen_origin },
       { hostname = var.piewdash_hostname, service = var.piewdash_origin },
       { hostname = var.zerp_hostname, service = var.zerp_origin },
       { hostname = var.cmeerp_hostname, service = var.cmeerp_origin },

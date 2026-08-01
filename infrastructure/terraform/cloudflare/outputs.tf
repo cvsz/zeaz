@@ -3,6 +3,16 @@ output "moopiew_url" {
   description = "Public Moopiew preorder URL after the DNS record and tunnel ingress are active."
 }
 
+output "zttshop_url" {
+  value       = "https://${var.zttshop_hostname}"
+  description = "Public zttshop URL after the proxied DNS record and tunnel ingress are active."
+}
+
+output "qwen_url" {
+  value       = "https://${var.qwen_hostname}"
+  description = "Public Qwen chat URL after the proxied DNS record and tunnel ingress are active."
+}
+
 output "piewdash_url" {
   value       = "https://${var.piewdash_hostname}"
   description = "Public engineering dashboard URL."
@@ -26,6 +36,8 @@ output "piewdash_access_audience" {
 output "cloudflared_ingress" {
   value = [
     { hostname = var.moopiew_hostname, service = var.moopiew_origin },
+    { hostname = var.zttshop_hostname, service = var.zttshop_origin },
+    { hostname = var.qwen_hostname, service = var.qwen_origin },
     { hostname = var.piewdash_hostname, service = var.piewdash_origin },
     { hostname = var.zerp_hostname, service = var.zerp_origin },
     { hostname = var.cmeerp_hostname, service = var.cmeerp_origin },
@@ -33,4 +45,3 @@ output "cloudflared_ingress" {
   ]
   description = "Ingress fragment to merge before the terminal fallback of a locally managed tunnel."
 }
-

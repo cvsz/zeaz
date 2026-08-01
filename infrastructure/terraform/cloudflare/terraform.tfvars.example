@@ -5,6 +5,8 @@ cloudflare_tunnel_id  = "00000000-0000-0000-0000-000000000000"
 
 moopiew_hostname       = "moopiew.zeaz.dev"
 moopiew_origin         = "http://127.0.0.1:8080"
+zttshop_hostname       = "zttshop.zeaz.dev"
+zttshop_origin         = "http://127.0.0.1:8080"
 piewdash_hostname      = "piewdash.zeaz.dev"
 piewdash_origin        = "http://127.0.0.1:80"
 zerp_hostname          = "zerp.zeaz.dev"

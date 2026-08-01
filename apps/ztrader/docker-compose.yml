@@ -17,6 +17,19 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run/postgresql
 
   redis:
     image: redis:7-alpine
@@ -32,6 +45,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
 
   backend-api:
     build:
@@ -67,6 +92,18 @@ services:
     networks:
       - default
       - proxy
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
@@ -99,6 +136,18 @@ services:
       RISK_MAX_ORDER_NOTIONAL: ${RISK_MAX_ORDER_NOTIONAL:-100.0}
       RISK_ALLOWED_SYMBOLS: ${RISK_ALLOWED_SYMBOLS:-BTC/USDT,ETH/USDT}
     command: celery -A ztrader.worker worker --loglevel=info
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
 
   frontend:
     build:
@@ -117,6 +166,19 @@ services:
     networks:
       - default
       - proxy
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/nextjs/.next/cache
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
@@ -150,6 +212,15 @@ services:
     stdin_open: true
     networks:
       - default
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
   pgdata:

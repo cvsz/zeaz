@@ -62,6 +62,46 @@ variable "moopiew_origin" {
   }
 }
 
+variable "zttshop_hostname" {
+  type        = string
+  default     = "zttshop.zeaz.dev"
+  description = "Public hostname for the zttshop web application."
+  validation {
+    condition     = endswith(lower(var.zttshop_hostname), ".${lower(var.zone_name)}")
+    error_message = "zttshop_hostname must be a subdomain of zone_name."
+  }
+}
+
+variable "zttshop_origin" {
+  type        = string
+  default     = "http://127.0.0.1:8080"
+  description = "Loopback Caddy origin reached by cloudflared for zttshop."
+  validation {
+    condition     = var.zttshop_origin == "http://127.0.0.1:8080"
+    error_message = "zttshop_origin must use the reviewed loopback Caddy proxy at http://127.0.0.1:8080."
+  }
+}
+
+variable "qwen_hostname" {
+  type        = string
+  default     = "qwen.zeaz.dev"
+  description = "Public hostname for the Qwen chat interface."
+  validation {
+    condition     = endswith(lower(var.qwen_hostname), ".${lower(var.zone_name)}")
+    error_message = "qwen_hostname must be a subdomain of zone_name."
+  }
+}
+
+variable "qwen_origin" {
+  type        = string
+  default     = "http://127.0.0.1:8091"
+  description = "Loopback origin reached by cloudflared for the Qwen chat interface."
+  validation {
+    condition     = var.qwen_origin == "http://127.0.0.1:8091"
+    error_message = "qwen_origin must use the reviewed loopback origin at http://127.0.0.1:8091."
+  }
+}
+
 variable "piewdash_hostname" {
   type        = string
   default     = "piewdash.zeaz.dev"
@@ -140,4 +180,3 @@ variable "cmeerp_origin" {
     error_message = "cmeerp_origin must use a loopback address."
   }
 }
-

@@ -1,10 +1,12 @@
 # Live AI catalog integration
 
-MooPiew uses an owner-only, feature-gated live AI catalog for operational
-writing and analysis. It is not exposed to customers, riders or merchant
-applicants. The catalog currently supports Hugging Face Inference Providers,
-Gemini, NVIDIA NIM, Z.AI, OpenCode Zen, OpenRouter, Groq, BytePlus ModelArk, Fireworks, OpenAI, Kimi, Scaleway and Together AI whenever the associated
-local key is configured. The owner page is named **ZEAZ AI Live Catalog**.
+MooPiew uses a public Qwen chat front-end with an owner unlock path for the
+full live catalog. The public page is `qwen.zeaz.dev`; the owner-only catalog
+remains available from `/platform/ai.html`. The catalog currently supports
+Hugging Face Inference Providers, Gemini, NVIDIA NIM, Z.AI, OpenCode Zen,
+OpenRouter, Groq, BytePlus ModelArk, Fireworks, OpenAI, Kimi, Scaleway and
+Together AI whenever the associated local key is configured. The owner page is
+named **ZEAZ AI Live Catalog**.
 
 ## What “all free models” means in practice
 
@@ -48,9 +50,9 @@ credential. Do not reuse an upstream provider key as a gateway client key.
    inspect the usable catalog, or add `--strict` to fail when any configured
    provider is unavailable. Add `--smoke` to make one short inference request
    to each provider that has a live free model; responses are not printed or
-   saved. Use `./scripts/huggingface-preflight.sh` only when
-   enabling Hugging Face chat inference. Restart the service, open
-   `/ai.html`, enter the owner key and load the
+   saved. Use `./scripts/huggingface-preflight.sh` only when enabling Hugging
+   Face chat inference. Restart the service and open `qwen.zeaz.dev` for the
+   public chat interface, or `/platform/ai.html` to unlock the full owner
    catalog.
 
 `./scripts/check-ai-provider-keys.sh` probes the official model-list endpoint

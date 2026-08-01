@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from ztrader.abt.services.audit_middleware import AuditMiddleware
 from ztrader.api.v1 import admin, health, platform, trading, webhooks
 from ztrader.tradingagents_integration.api import router as ta_router
 
@@ -19,6 +20,7 @@ app = FastAPI(
 
 from prometheus_fastapi_instrumentator import Instrumentator
 
+app.add_middleware(AuditMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[

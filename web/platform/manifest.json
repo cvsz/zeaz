@@ -1,0 +1,21 @@
+{
+  "short_name": "ZEAZ",
+  "name": "ZEAZ Platform & MooPiew",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#090605",
+  "theme_color": "#ff5522",
+  "display": "standalone",
+  "orientation": "any"
+}

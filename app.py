@@ -26,7 +26,7 @@ from html import escape as escape_html
 from pathlib import Path
 from threading import Lock
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -60,6 +60,8 @@ HF_MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.:-]
 PROVIDER_MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/-]*")
 AI_MODEL_CACHE: dict[str, object] = {"catalog": {}, "expires": 0.0}
 AI_MODEL_LOCK = Lock()
+AI_PUBLIC_MODEL_PROVIDERS = {"local", "github", "groq", "cerebras", "huggingface"}
+AI_PUBLIC_PROVIDER_PRIORITY = ("cerebras", "groq", "opencode", "github", "huggingface", "local")
 GEMINI_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 NVIDIA_API_BASE = "https://integrate.api.nvidia.com/v1"
 ZAI_API_BASE = "https://api.z.ai/api/paas/v4"
@@ -75,6 +77,25 @@ TOGETHER_API_BASE = "https://api.together.xyz/v1"
 GITHUB_MODELS_API_BASE = "https://models.github.ai"
 CEREBRAS_API_BASE = "https://api.cerebras.ai/v1"
 ZEAZ_GATEWAY_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+QWEN_HOSTNAME = os.environ.get("QWEN_HOSTNAME", "qwen.zeaz.dev").lower()
+QWEN_UPSTREAM_URL = os.environ.get("QWEN_UPSTREAM_URL", "http://127.0.0.1:8799").rstrip("/")
+ZTTSHOP_HOSTNAME = os.environ.get("ZTTSHOP_HOSTNAME", "zttshop.zeaz.dev").lower()
+TIKTOK_CLIENT_KEY = os.environ.get("TIKTOK_CLIENT_KEY", "").strip()
+TIKTOK_CLIENT_SECRET = os.environ.get("TIKTOK_CLIENT_SECRET", "").strip()
+TIKTOK_REDIRECT_URI = os.environ.get(
+    "TIKTOK_REDIRECT_URI",
+    "https://zttshop.zeaz.dev/api/auth/tiktok/callback",
+).strip()
+TIKTOK_AUTHORIZE_URL = os.environ.get(
+    "TIKTOK_AUTHORIZE_URL",
+    "https://www.tiktok.com/v2/auth/authorize/",
+).strip().rstrip("/")
+TIKTOK_TOKEN_URL = os.environ.get(
+    "TIKTOK_TOKEN_URL",
+    "https://open.tiktokapis.com/v2/oauth/token/",
+).strip()
+TIKTOK_SCOPE = os.environ.get("TIKTOK_SCOPE", "user.info.basic").strip()
+TIKTOK_TOKEN_SUBJECT = "tiktok_zttshop"
 AI_PROVIDER_NAMES = {"local","zai","kimi","scaleway","together","github","openrouter","opencode","huggingface","groq","cerebras","gemini","nvidia","byteplus","fireworks","openai","zeaz_gateway"}
 AI_PROVIDER_PRIORITY = ("local","zai","kimi","scaleway","together","github","openrouter","opencode","huggingface","groq","cerebras","gemini","nvidia","byteplus","fireworks","openai","zeaz_gateway")
 AI_SYSTEM_PROMPT = "You are MooPiew's operator assistant. Do not request or reveal secrets, payment credentials, or customer personal data. Answer concisely in the language used by the operator."
@@ -483,6 +504,1036 @@ def zeaz_gateway_config() -> tuple[str,str] | None:
         return base,token
     raise ValueError("ZEAZ gateway ต้องใช้ HTTPS หรือ HTTP บน loopback เท่านั้น")
 
+def qwen_upstream_url() -> str:
+    base = QWEN_UPSTREAM_URL
+    parsed = urlparse(base)
+    if parsed.query or parsed.fragment or parsed.username or parsed.password or not parsed.hostname:
+        raise ValueError("QWEN_UPSTREAM_URL ไม่ถูกต้อง")
+    if parsed.scheme == "https" or (parsed.scheme == "http" and parsed.hostname.lower() in ZEAZ_GATEWAY_LOOPBACK_HOSTS):
+        return base
+    raise ValueError("QWEN_UPSTREAM_URL ต้องใช้ HTTPS หรือ HTTP บน loopback เท่านั้น")
+
+def zttshop_page(
+    title: str,
+    heading: str,
+    body: str,
+    *,
+    primary_href: str = "",
+    primary_label: str = "",
+    secondary_href: str = "",
+    secondary_label: str = "",
+    panel_title: str = "Quick facts",
+    panel_items: tuple[str, ...] = (),
+) -> str:
+    primary = f'<a class="button" href="{escape_html(primary_href)}">{escape_html(primary_label)}</a>' if primary_href and primary_label else ""
+    secondary = f'<a class="button button-secondary" href="{escape_html(secondary_href)}">{escape_html(secondary_label)}</a>' if secondary_href and secondary_label else ""
+    panel_items = panel_items or (
+        "Public hostname: zttshop.zeaz.dev",
+        "Auth callback: /api/auth/tiktok/callback",
+        "Scope in use: user.info.basic",
+    )
+    panel = "".join(f"<li>{escape_html(item)}</li>" for item in panel_items)
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{escape_html(title)}</title>
+  <link rel="stylesheet" href="/assets/zttshop.css">
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f4efe6;
+      --bg-2: #eef5f1;
+      --panel: rgba(255, 255, 255, 0.84);
+      --panel-strong: #ffffff;
+      --ink: #19202d;
+      --muted: #586170;
+      --line: rgba(31, 41, 55, 0.12);
+      --accent: #0f766e;
+      --accent-2: #c58c12;
+      --accent-soft: #e6f3f0;
+      --shadow: 0 26px 70px rgba(15, 23, 42, 0.11);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 18%, rgba(15, 118, 110, 0.12), transparent 26%),
+        radial-gradient(circle at 84% 18%, rgba(197, 140, 18, 0.11), transparent 22%),
+        linear-gradient(135deg, #fbf8f2 0%, var(--bg) 44%, var(--bg-2) 100%);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow-x: hidden;
+    }}
+    .ambient {{
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 20% 18%, rgba(255,255,255,0.72), transparent 18%),
+        radial-gradient(circle at 78% 22%, rgba(255,255,255,0.35), transparent 16%);
+      opacity: .5;
+    }}
+    main {{
+      position: relative;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+      min-height: 100vh;
+      display: grid;
+      align-items: center;
+    }}
+    .shell {{
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.7);
+      border-radius: 32px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.90), rgba(255,255,255,0.76));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }}
+    .shell::before, .shell::after {{
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      filter: blur(8px);
+      pointer-events: none;
+    }}
+    .shell::before {{
+      width: 260px;
+      height: 260px;
+      right: -90px;
+      top: -80px;
+      background: radial-gradient(circle, rgba(15,118,110,0.18), transparent 68%);
+    }}
+    .shell::after {{
+      width: 300px;
+      height: 300px;
+      left: -120px;
+      bottom: -100px;
+      background: radial-gradient(circle, rgba(197,140,18,0.16), transparent 68%);
+    }}
+    .content {{
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 28px;
+      padding: 34px;
+    }}
+    .brandline {{
+      position: absolute;
+      left: 34px;
+      top: 24px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: rgba(23,29,41,0.7);
+      font-size: 12px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }}
+    .brand-mark {{
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 6px rgba(15,118,110,0.12);
+    }}
+    .eyebrow {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 18px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(15, 118, 110, 0.08);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      width: fit-content;
+    }}
+    .eyebrow-dot {{
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 0 6px rgba(15, 118, 110, 0.14);
+    }}
+    h1 {{
+      margin: 0;
+      max-width: 12ch;
+      font-size: clamp(42px, 5.8vw, 78px);
+      line-height: .92;
+      letter-spacing: -.06em;
+    }}
+    .copy {{
+      margin-top: 18px;
+      font-size: clamp(16px, 1.9vw, 19px);
+      line-height: 1.75;
+      color: var(--muted);
+    }}
+    .copy p {{ margin: 0 0 14px; }}
+    .copy p:last-child {{ margin-bottom: 0; }}
+    .copy ul {{ margin: 12px 0 0 20px; padding: 0; }}
+    .copy li {{ margin: 8px 0; }}
+    .actions {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }}
+    .button {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 52px;
+      padding: 0 20px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 800;
+      border: 1px solid var(--accent);
+      background: linear-gradient(180deg, #0f766e, #0d5f58);
+      color: #fff;
+      box-shadow: 0 12px 24px rgba(15, 118, 110, 0.22);
+      transition: transform .2s ease, box-shadow .2s ease;
+    }}
+    .button:hover {{ transform: translateY(-1px); box-shadow: 0 16px 28px rgba(15, 118, 110, 0.26); }}
+    .button-secondary {{
+      background: rgba(255,255,255,0.72);
+      color: var(--accent);
+      border-color: rgba(15, 118, 110, 0.18);
+      box-shadow: none;
+    }}
+    .button-secondary:hover {{ box-shadow: 0 12px 20px rgba(15, 23, 42, 0.08); }}
+    .panel {{
+      padding: 22px;
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(16, 24, 40, 0.96), rgba(17, 24, 39, 0.92));
+      color: #fff;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }}
+    .panel h2 {{
+      margin: 0;
+      font-size: 14px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.68);
+    }}
+    .panel ul {{
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 10px;
+    }}
+    .panel li {{
+      padding: 14px 14px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.92);
+      line-height: 1.55;
+    }}
+    .panel-note {{
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.72);
+      font-size: 13px;
+      line-height: 1.6;
+    }}
+    .panel-note code {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #fff;
+    }}
+    .subtle-grid {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }}
+    .stat {{
+      padding: 14px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.84);
+      border: 1px solid rgba(15,118,110,0.12);
+      min-height: 112px;
+    }}
+    .stat .label {{
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: var(--accent);
+      font-weight: 800;
+      margin-bottom: 10px;
+    }}
+    .stat strong {{
+      display: block;
+      font-size: 17px;
+      line-height: 1.15;
+      margin-bottom: 8px;
+    }}
+    .stat p {{
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--muted);
+    }}
+    .footer-chip {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 18px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(15,118,110,0.08);
+      color: #0f4b45;
+      font-size: 13px;
+      font-weight: 800;
+      width: fit-content;
+    }}
+    @media (max-width: 900px) {{
+      .content {{ grid-template-columns: 1fr; padding: 24px; }}
+      .brandline {{ position: static; margin: 0 0 10px 24px; }}
+      h1 {{ max-width: 100%; }}
+      .subtle-grid {{ grid-template-columns: 1fr; }}
+    }}
+    code {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }}
+    p {{ margin: 0 0 16px; font-size: 17px; line-height: 1.6; color: var(--muted); }}
+  </style>
+</head>
+<body>
+  <div class="ambient"></div>
+  <main>
+    <section class="shell" aria-label="{escape_html(title)}">
+      <div class="brandline"><span class="brand-mark"></span> zTTShop / live</div>
+      <div class="content">
+        <div>
+          <div class="eyebrow"><span class="eyebrow-dot"></span>{escape_html(title)}</div>
+          <h1>{escape_html(heading)}</h1>
+          <div class="copy">{body}</div>
+          <div class="actions">{primary}{secondary}</div>
+          <div class="subtle-grid">
+            <div class="stat">
+              <div class="label">Web app</div>
+              <strong>Public hostname online</strong>
+              <p>zttshop is served through Cloudflare Tunnel and the local Caddy origin.</p>
+            </div>
+            <div class="stat">
+              <div class="label">Auth flow</div>
+              <strong>TikTok login ready</strong>
+              <p>The callback, token exchange, and encrypted storage are already wired.</p>
+            </div>
+            <div class="stat">
+              <div class="label">Support pages</div>
+              <strong>Privacy and terms live</strong>
+              <p>The legal pages are published alongside the main web experience.</p>
+            </div>
+          </div>
+        </div>
+        <aside class="panel">
+          <h2>{escape_html(panel_title)}</h2>
+          <ul>{panel}</ul>
+          <div class="panel-note">Origin: <code>127.0.0.1:8080</code>. Public hostname: <code>zttshop.zeaz.dev</code>. TikTok verification file is also published on the same origin.</div>
+        </aside>
+      </div>
+    </section>
+  </main>
+</body>
+</html>"""
+
+def zttshop_homepage() -> str:
+    return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Loading zttshop</title>
+  <link rel="stylesheet" href="/assets/zttshop.css">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f1e8;
+      --bg-2: #edf6f4;
+      --panel: rgba(255, 255, 255, 0.82);
+      --panel-strong: #ffffff;
+      --ink: #171d29;
+      --muted: #5c6473;
+      --line: rgba(30, 41, 59, 0.12);
+      --accent: #0f766e;
+      --accent-2: #ca8a04;
+      --accent-soft: #e7f5f3;
+      --shadow: 0 28px 80px rgba(15, 23, 42, 0.12);
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 18%, rgba(15, 118, 110, 0.16), transparent 26%),
+        radial-gradient(circle at 84% 18%, rgba(202, 138, 4, 0.13), transparent 22%),
+        radial-gradient(circle at 50% 100%, rgba(15, 118, 110, 0.12), transparent 28%),
+        linear-gradient(135deg, #fbfaf6 0%, var(--bg) 46%, var(--bg-2) 100%);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow-x: hidden;
+    }
+    .ambient {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 20% 18%, rgba(255,255,255,0.72), transparent 18%),
+        radial-gradient(circle at 78% 22%, rgba(255,255,255,0.35), transparent 16%);
+      opacity: .55;
+    }
+    main {
+      position: relative;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+      min-height: 100vh;
+      display: grid;
+      align-items: center;
+    }
+    .shell {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.7);
+      border-radius: 32px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,255,255,0.72));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+    .shell::before,
+    .shell::after {
+      content: "";
+      position: absolute;
+      inset: auto;
+      border-radius: 999px;
+      filter: blur(8px);
+      pointer-events: none;
+    }
+    .shell::before {
+      width: 260px;
+      height: 260px;
+      right: -90px;
+      top: -80px;
+      background: radial-gradient(circle, rgba(15,118,110,0.18), transparent 68%);
+    }
+    .shell::after {
+      width: 300px;
+      height: 300px;
+      left: -120px;
+      bottom: -100px;
+      background: radial-gradient(circle, rgba(202,138,4,0.16), transparent 68%);
+    }
+    .content {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 28px;
+      padding: 34px;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 18px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(15, 118, 110, 0.08);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      width: fit-content;
+    }
+    .eyebrow-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 0 6px rgba(15, 118, 110, 0.14);
+    }
+    h1 {
+      margin: 0;
+      max-width: 12ch;
+      font-size: clamp(48px, 6vw, 88px);
+      line-height: .92;
+      letter-spacing: -.06em;
+    }
+    .lead {
+      max-width: 58ch;
+      margin: 18px 0 0;
+      font-size: clamp(17px, 2vw, 20px);
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 24px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.74);
+      border: 1px solid var(--line);
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .chip b { font-weight: 800; }
+    .chip-soft {
+      background: var(--accent-soft);
+      border-color: rgba(15, 118, 110, 0.14);
+      color: #0f4b45;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 52px;
+      padding: 0 20px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 800;
+      border: 1px solid var(--accent);
+      background: linear-gradient(180deg, #0f766e, #0d5f58);
+      color: #fff;
+      box-shadow: 0 12px 24px rgba(15, 118, 110, 0.22);
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .button:hover { transform: translateY(-1px); box-shadow: 0 16px 28px rgba(15, 118, 110, 0.26); }
+    .button-secondary {
+      background: rgba(255,255,255,0.7);
+      color: var(--accent);
+      border-color: rgba(15, 118, 110, 0.18);
+      box-shadow: none;
+    }
+    .button-secondary:hover { box-shadow: 0 12px 20px rgba(15, 23, 42, 0.08); }
+    .status-panel {
+      display: grid;
+      gap: 16px;
+      padding: 22px;
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(16, 24, 40, 0.96), rgba(17, 24, 39, 0.92));
+      color: #fff;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .status-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .status-title {
+      font-size: 14px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.68);
+      font-weight: 800;
+    }
+    .pulse {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.9);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .pulse-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #34d399;
+      box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55);
+      animation: pulse 1.8s infinite;
+    }
+    .loader {
+      display: grid;
+      place-items: center;
+      width: 124px;
+      height: 124px;
+      margin: 10px auto 4px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at center, rgba(255,255,255,0.15) 0 28%, transparent 29%),
+        conic-gradient(from 0deg, #34d399, #22c55e, #0f766e, #f59e0b, #34d399);
+      animation: spin 2.4s linear infinite;
+      position: relative;
+    }
+    .loader::after {
+      content: "";
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      background: linear-gradient(180deg, rgba(17,24,39,1), rgba(15,23,42,1));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+    }
+    .loader-label {
+      text-align: center;
+      color: rgba(255,255,255,0.82);
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 2px 0 0;
+    }
+    .status-list {
+      display: grid;
+      gap: 10px;
+      margin: 4px 0 0;
+    }
+    .status-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 14px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .status-index {
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .status-item strong {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 14px;
+    }
+    .status-item span {
+      display: block;
+      color: rgba(255,255,255,0.7);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.72);
+      font-size: 13px;
+    }
+    .footer code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #fff;
+    }
+    .brandline {
+      position: absolute;
+      left: 34px;
+      top: 24px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: rgba(23,29,41,0.7);
+      font-size: 12px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+    .brand-mark {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 6px rgba(15,118,110,0.12);
+    }
+    .screen {
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .mini-card {
+      padding: 14px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.92);
+      border: 1px solid rgba(15,118,110,0.12);
+      min-height: 112px;
+    }
+    .mini-card .label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: var(--accent);
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+    .mini-card strong {
+      display: block;
+      font-size: 18px;
+      line-height: 1.1;
+      margin-bottom: 8px;
+    }
+    .mini-card p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5); }
+      70% { box-shadow: 0 0 0 10px rgba(52, 211, 153, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+    }
+    @media (max-width: 900px) {
+      .content { grid-template-columns: 1fr; padding: 24px; }
+      .brandline { position: static; margin-bottom: 10px; }
+      h1 { max-width: 100%; font-size: clamp(42px, 12vw, 64px); }
+      .mini-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient"></div>
+  <main>
+    <section class="shell" aria-label="zTTShop loading screen">
+      <div class="brandline"><span class="brand-mark"></span> zTTShop / live</div>
+      <div class="content">
+        <div class="screen">
+          <div class="eyebrow"><span class="eyebrow-dot"></span> Loading workspace</div>
+          <h1>Preparing the TikTok sign-in flow</h1>
+          <p class="lead">The public zTTShop experience is coming online. Sign-in, privacy, and callback routing are already wired; the page is now presenting a polished loading state while the integration is finalized.</p>
+          <div class="meta-row">
+            <div class="chip chip-soft"><b>Live:</b> `zttshop.zeaz.dev`</div>
+            <div class="chip"><b>OAuth:</b> TikTok Login Kit</div>
+            <div class="chip"><b>Scope:</b> `user.info.basic`</div>
+          </div>
+          <div class="actions">
+            <a class="button" href="/api/auth/tiktok/start">Continue</a>
+            <a class="button button-secondary" href="/privacy">Privacy</a>
+            <a class="button button-secondary" href="/terms">Terms</a>
+          </div>
+          <div class="mini-grid">
+            <div class="mini-card">
+              <div class="label">Step 01</div>
+              <strong>Open the app</strong>
+              <p>Visitors land on a focused loading screen instead of a generic placeholder.</p>
+            </div>
+            <div class="mini-card">
+              <div class="label">Step 02</div>
+              <strong>Start TikTok sign-in</strong>
+              <p>The CTA sends users to the TikTok authorization flow with the approved callback.</p>
+            </div>
+            <div class="mini-card">
+              <div class="label">Step 03</div>
+              <strong>Continue the flow</strong>
+              <p>Once TikTok approves access, the callback exchanges the code and stores the tokens.</p>
+            </div>
+          </div>
+        </div>
+        <aside class="status-panel">
+          <div class="status-head">
+            <div class="status-title">System status</div>
+            <div class="pulse"><span class="pulse-dot"></span> Loading live</div>
+          </div>
+          <div class="loader" aria-hidden="true"></div>
+          <p class="loader-label">The storefront is warming up while the authentication path is kept ready for review and sign-in.</p>
+          <div class="status-list">
+            <div class="status-item">
+              <div class="status-index">1</div>
+              <div>
+                <strong>Homepage ready</strong>
+                <span>The public root now presents a clear loading state with the key action visible.</span>
+              </div>
+            </div>
+            <div class="status-item">
+              <div class="status-index">2</div>
+              <div>
+                <strong>TikTok callback live</strong>
+                <span>The OAuth callback and token exchange are wired into the running app.</span>
+              </div>
+            </div>
+            <div class="status-item">
+              <div class="status-index">3</div>
+              <div>
+                <strong>Verification in place</strong>
+                <span>The TikTok signature file is published from the same public hostname.</span>
+              </div>
+            </div>
+          </div>
+          <div class="footer">
+            <span>Origin: <code>127.0.0.1:8080</code></span>
+            <span>Tunnel: <code>Cloudflare</code></span>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+</body>
+</html>"""
+
+def zttshop_privacy_page() -> str:
+    return zttshop_page(
+        "Privacy Policy",
+        "Privacy policy",
+        "<p>zTTShop collects only the information needed to authenticate the user, connect the TikTok account, and keep workflow automation running. We do not sell personal data or use it for unrelated advertising.</p><p>For TikTok sign-in, the app requests <code>user.info.basic</code> so it can identify the signed-in account and link it to the workspace. We may also store operational events such as login state, workflow changes, and review activity so the platform can function reliably.</p><p>OAuth access and refresh tokens are stored encrypted on the server and are used only for the connected account session. Data is retained only as long as it is needed to operate the service, satisfy legal requirements, or support account recovery and troubleshooting.</p><p>If you want deletion or access help for an authorized account, contact the operator of zTTShop through the published support channel for this deployment.</p>",
+        primary_href="/",
+        primary_label="Home",
+        secondary_href="/terms",
+        secondary_label="Terms",
+        panel_title="What we collect",
+        panel_items=(
+            "TikTok account identifier returned by the OAuth callback",
+            "Encrypted access and refresh tokens on the server",
+            "Basic operational metadata needed to run the workflow UI",
+            "Review and troubleshooting events needed to support the service",
+        ),
+    )
+
+def zttshop_terms_page() -> str:
+    return zttshop_page(
+        "Terms of Service",
+        "Terms of service",
+        "<p>Use zTTShop only for lawful automation workflows and only for accounts you are authorized to manage. Access tokens, webhook secrets, and account credentials remain your responsibility.</p><p>You must not use the service to bypass platform rules, scrape protected data, impersonate users, or submit unauthorized requests on behalf of any person or organization.</p><p>TikTok products and scopes must match the actual feature set shown in the product and in review. If a scope or feature is no longer needed, remove it before submission so the review remains accurate.</p><p>We may update the service while the app is under review, during maintenance, or while integrating approved TikTok products. Continued use after an update means you accept the revised terms.</p>",
+        primary_href="/",
+        primary_label="Home",
+        secondary_href="/privacy",
+        secondary_label="Privacy",
+        panel_title="Usage rules",
+        panel_items=(
+            "Use the app only for lawful TikTok-connected workflows",
+            "Do not share or expose tokens, secrets, or credentials",
+            "Follow TikTok review and platform requirements",
+            "Keep the public website, callback URL, and demo video consistent",
+        ),
+    )
+
+def zttshop_callback_page(query: dict[str, list[str]]) -> str:
+    error = (query.get("error") or [""])[0]
+    error_description = (query.get("error_description") or [""])[0]
+    code = (query.get("code") or [""])[0]
+    state = (query.get("state") or [""])[0]
+    if error:
+        body = f"TikTok returned an error: {escape_html(error)}"
+        if error_description:
+            body += f"<br>{escape_html(error_description)}"
+    elif code and state:
+        body = "TikTok authorization callback received. Return to zttshop and finish the sign-in flow."
+    else:
+        body = "This endpoint is live. TikTok authorization responses will land here."
+    return zttshop_page(
+        "TikTok Callback",
+        "OAuth callback",
+        body,
+        primary_href="/",
+        primary_label="Home",
+        secondary_href="/privacy",
+        secondary_label="Privacy",
+    )
+
+def zttshop_callback_error_page(message: str) -> str:
+    return zttshop_page(
+        "TikTok Callback",
+        "OAuth callback failed",
+        message,
+        primary_href="/api/auth/tiktok/start",
+        primary_label="Try again",
+        secondary_href="/privacy",
+        secondary_label="Privacy",
+    )
+
+def zttshop_token_cipher() -> Fernet:
+    key = (
+        env("TIKTOK_TOKEN_ENCRYPTION_KEY")
+        or env("SCB_TOKEN_ENCRYPTION_KEY")
+        or env("DOCUMENT_ENCRYPTION_KEY")
+    )
+    if not key:
+        raise ValueError("ยังไม่ได้ตั้งค่า TIKTOK_TOKEN_ENCRYPTION_KEY")
+    try:
+        return Fernet(key.encode())
+    except (TypeError, ValueError) as error:
+        raise ValueError("TIKTOK_TOKEN_ENCRYPTION_KEY ไม่ถูกต้อง") from error
+
+def zttshop_state() -> str:
+    return f"tiktok-{secrets.token_urlsafe(24)}"
+
+def zttshop_store_state(state: str) -> None:
+    now = utcnow()
+    with db(immediate=True) as con:
+        con.execute("DELETE FROM oauth_states WHERE expires_at < ? OR used_at != ''", (now,))
+        con.execute(
+            "INSERT INTO oauth_states(state,expires_at,verifier_cipher) VALUES (?,?,?)",
+            (state, (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(), ""),
+        )
+
+def zttshop_consume_state(state: str) -> bool:
+    if not re.fullmatch(r"tiktok-[A-Za-z0-9_-]{24,128}", state):
+        return False
+    now = utcnow()
+    with db(immediate=True) as con:
+        row = con.execute(
+            """UPDATE oauth_states SET used_at=?
+               WHERE state=? AND used_at='' AND expires_at>=?
+               RETURNING state""",
+            (now, state, now),
+        ).fetchone()
+    return row is not None
+
+def zttshop_authorize_url(state: str) -> str:
+    if not TIKTOK_CLIENT_KEY or not TIKTOK_REDIRECT_URI:
+        raise ValueError("ยังไม่ได้ตั้งค่า TikTok client credentials")
+    query = urlencode(
+        {
+            "client_key": TIKTOK_CLIENT_KEY,
+            "response_type": "code",
+            "scope": TIKTOK_SCOPE,
+            "redirect_uri": TIKTOK_REDIRECT_URI,
+            "state": state,
+        },
+        quote_via=quote,
+    )
+    return f"{TIKTOK_AUTHORIZE_URL}?{query}"
+
+def zttshop_parse_token_response(data: dict) -> dict:
+    body = data.get("data", data) if isinstance(data, dict) else {}
+    if not isinstance(body, dict):
+        raise ValueError("TikTok token response ไม่ถูกต้อง")
+    token = body.get("access_token")
+    refresh = body.get("refresh_token", "")
+    open_id = body.get("open_id")
+    if not isinstance(token, str) or not token:
+        raise ValueError("TikTok token response ไม่ได้ส่ง access_token")
+    if not isinstance(refresh, str):
+        refresh = ""
+    if not isinstance(open_id, str) or not open_id:
+        raise ValueError("TikTok token response ไม่ได้ส่ง open_id")
+    return {
+        "access_token": token,
+        "refresh_token": refresh,
+        "open_id": open_id,
+        "scope": body.get("scope", ""),
+        "token_type": body.get("token_type", ""),
+        "expires_in": int(body.get("expires_in", 86400) or 86400),
+        "refresh_expires_in": int(body.get("refresh_expires_in", 31536000) or 31536000),
+    }
+
+def zttshop_store_token(access_token: str, refresh_token: str, owner: str, expires_in=86400, refresh_expires_in=31536000) -> None:
+    cipher = zttshop_token_cipher()
+    now = datetime.now(timezone.utc)
+    access_until = now + timedelta(seconds=max(60, int(expires_in or 86400)))
+    refresh_until = now + timedelta(seconds=max(60, int(refresh_expires_in or 31536000)))
+    encrypted = lambda value: cipher.encrypt(value.encode()).decode()
+    with db() as con:
+        con.execute(
+            """INSERT INTO oauth_tokens(subject,access_cipher,refresh_cipher,owner_cipher,access_expires_at,refresh_expires_at,updated_at)
+               VALUES (?,?,?,?,?,?,?)
+               ON CONFLICT(subject) DO UPDATE SET
+                 access_cipher=excluded.access_cipher,
+                 refresh_cipher=excluded.refresh_cipher,
+                 owner_cipher=excluded.owner_cipher,
+                 access_expires_at=excluded.access_expires_at,
+                 refresh_expires_at=excluded.refresh_expires_at,
+                 updated_at=excluded.updated_at""",
+            (
+                TIKTOK_TOKEN_SUBJECT,
+                encrypted(access_token),
+                encrypted(refresh_token) if refresh_token else "",
+                encrypted(owner),
+                access_until.isoformat(),
+                refresh_until.isoformat() if refresh_token else "",
+                utcnow(),
+            ),
+        )
+
+def zttshop_exchange_auth_code(code: str) -> dict:
+    if not TIKTOK_CLIENT_KEY or not TIKTOK_CLIENT_SECRET or not TIKTOK_TOKEN_URL or not TIKTOK_REDIRECT_URI:
+        raise ValueError("ยังไม่ได้ตั้งค่า TikTok client credentials")
+    payload = urlencode(
+        {
+            "client_key": TIKTOK_CLIENT_KEY,
+            "client_secret": TIKTOK_CLIENT_SECRET,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": TIKTOK_REDIRECT_URI,
+        }
+    ).encode()
+    request = Request(
+        TIKTOK_TOKEN_URL,
+        data=payload,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            raw = response.read(2_000_000)
+    except HTTPError as error:
+        raw = error.read() if hasattr(error, "read") else b""
+        try:
+            body = json.loads(raw.decode()) if raw else {}
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            body = {}
+        description = body.get("error_description") or body.get("message") or f"HTTP {error.code}"
+        raise ValueError(f"TikTok token exchange failed ({error.code}): {description}") from error
+    except (URLError, OSError) as error:
+        raise ValueError("ไม่สามารถเชื่อมต่อ TikTok token endpoint ได้") from error
+    try:
+        data = json.loads(raw.decode())
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("TikTok token endpoint ตอบกลับไม่ใช่ JSON") from error
+    parsed = zttshop_parse_token_response(data)
+    zttshop_store_token(
+        parsed["access_token"],
+        parsed["refresh_token"],
+        parsed["open_id"],
+        parsed["expires_in"],
+        parsed["refresh_expires_in"],
+    )
+    return parsed
+
+def zttshop_auth_success_page(parsed: dict) -> str:
+    scope = escape_html(str(parsed.get("scope", ""))) or "n/a"
+    token_type = escape_html(str(parsed.get("token_type", ""))) or "Bearer"
+    return zttshop_page(
+        "TikTok Connected",
+        "Authorization complete",
+        f"TikTok account connected successfully. Open ID: <code>{escape_html(str(parsed['open_id']))}</code>. Scope: <code>{scope}</code>. Token type: <code>{token_type}</code>.",
+        primary_href="/",
+        primary_label="Home",
+        secondary_href="/privacy",
+        secondary_label="Privacy",
+    )
+
 def ai_public_config() -> dict:
     keys=ai_provider_keys()
     try: gateway=bool(zeaz_gateway_config())
@@ -666,6 +1717,32 @@ def ai_catalog() -> dict:
         AI_MODEL_CACHE.update(catalog=catalog,expires=now+max(30,min(3600,int(env("AI_MODEL_CATALOG_TTL",env("HF_MODEL_CATALOG_TTL","300")) or 300))))
         return catalog
 
+def ai_public_catalog() -> dict:
+    """Return the public chat catalog limited to explicitly free models."""
+    catalog = ai_catalog()
+    models = [
+        item
+        for item in catalog["models"]
+        if item.get("free") is True or item.get("free_tier") is True or item["provider"] in AI_PUBLIC_MODEL_PROVIDERS
+    ]
+    if not models:
+        raise ValueError("ไม่พบ public AI model ที่ใช้งานได้")
+    models.sort(
+        key=lambda item: (
+            AI_PUBLIC_PROVIDER_PRIORITY.index(item["provider"])
+            if item["provider"] in AI_PUBLIC_PROVIDER_PRIORITY
+            else 999,
+            item["model"].casefold(),
+        )
+    )
+    providers: dict[str, dict[str, object]] = {}
+    for model in models:
+        provider = str(model["provider"])
+        provider_entry = providers.setdefault(provider, {"enabled": True, "models": 0})
+        provider_entry["models"] = int(provider_entry["models"]) + 1
+    cached_seconds = max(0, int(float(AI_MODEL_CACHE.get("expires", 0)) - time.monotonic()))
+    return {"models": models, "providers": providers, "catalog": "live-provider", "cached_seconds": cached_seconds}
+
 def gemini_chat(token: str, model: str, prompt: str, max_tokens: int, temperature: float) -> str:
     data=ai_http(f"{GEMINI_MODELS_URL}/{quote(model,safe='-._')}:generateContent",{"x-goog-api-key":token},{"systemInstruction":{"parts":[{"text":AI_SYSTEM_PROMPT}]},"contents":[{"role":"user","parts":[{"text":prompt}]}],"generationConfig":{"maxOutputTokens":max_tokens,"temperature":temperature}})
     candidates=data.get("candidates",[]); content=candidates[0].get("content",{}) if isinstance(candidates,list) and candidates and isinstance(candidates[0],dict) else {}
@@ -703,7 +1780,8 @@ def ai_chat(model_id: str, prompt: str, max_tokens=512, temperature=0.2) -> dict
     keys=ai_provider_keys()
     def invoke(item):
         provider,model=item["provider"],item["model"]
-        if provider=="local": return openai_compatible_chat(local_ai_base(),env("LOCAL_AI_API_KEY"),model,prompt.strip(),tokens,temp,"Local AI")
+        base_url=str(item.get("baseUrl") or "").strip()
+        if provider=="local": return openai_compatible_chat(base_url or local_ai_base(),env("LOCAL_AI_API_KEY"),model,prompt.strip(),tokens,temp,"Local AI")
         if provider=="gemini": return gemini_chat(keys["gemini"],model,prompt.strip(),tokens,temp)
         if provider=="nvidia": return nvidia_chat(keys["nvidia"],model,prompt.strip(),tokens,temp)
         if provider=="zai": return zai_chat(keys["zai"],model,prompt.strip(),tokens,temp)
@@ -713,7 +1791,7 @@ def ai_chat(model_id: str, prompt: str, max_tokens=512, temperature=0.2) -> dict
             choices=data.get("choices",[]); content=choices[0].get("message",{}).get("content","") if choices else ""
             if not isinstance(content,str) or not content: raise ValueError("GitHub Models ไม่ได้ส่งข้อความตอบกลับ")
             return content
-        if provider in bases: return openai_compatible_chat(bases[provider][0],keys[provider],model,prompt.strip(),tokens,temp,bases[provider][1])
+        if provider in bases: return openai_compatible_chat(base_url or bases[provider][0],keys[provider],model,prompt.strip(),tokens,temp,bases[provider][1])
         if provider=="zeaz_gateway":
             gateway=zeaz_gateway_config()
             if not gateway: raise ValueError("ZEAZ gateway ยังไม่ได้ตั้งค่า")
@@ -733,6 +1811,14 @@ def ai_chat(model_id: str, prompt: str, max_tokens=512, temperature=0.2) -> dict
         except (ValueError, HTTPError, URLError, OSError):
             failures.append(item["provider"])
     raise ValueError("AI ไม่มี provider ที่ตอบกลับได้: " + ", ".join(dict.fromkeys(failures)))
+
+def public_ai_chat(model_id: str, prompt: str, max_tokens=512, temperature=0.2) -> dict:
+    """Run chat against the public free-model catalog."""
+    catalog = ai_public_catalog()
+    selected = next((item for item in catalog["models"] if item["id"] == model_id), None)
+    if not selected:
+        raise ValueError("โมเดลนี้ไม่อยู่ใน public AI catalog")
+    return ai_chat(selected["id"], prompt, max_tokens, temperature)
 
 def hf_request(path: str, payload: dict | None = None) -> dict:
     """Call the official HF Router with a server-only token and bounded body."""
@@ -1095,6 +2181,53 @@ def slots_for(day, rows, conf):
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs): super().__init__(*args, directory=str(WEB), **kwargs)
     def log_message(self, format, *args): print(f"[{self.log_date_time_string()}] {format % args}")
+    def proxy_qwen_upstream(self):
+        try:
+            base = qwen_upstream_url()
+        except ValueError as error:
+            return self.json({"error": str(error)}, 503)
+        parsed = urlparse(self.path)
+        target = f"{base}{parsed.path}"
+        if parsed.query:
+            target = f"{target}?{parsed.query}"
+        headers = {
+            key: value
+            for key, value in self.headers.items()
+            if key.lower() not in {"host", "content-length", "connection", "accept-encoding"}
+        }
+        body = None
+        if self.command in {"POST", "PUT", "PATCH"}:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                return self.json({"error": "ขนาดข้อมูลไม่ถูกต้อง"}, 400)
+            body = self.rfile.read(length) if length > 0 else None
+        try:
+            with urlopen(
+                Request(target, data=body, headers=headers, method=self.command),
+                timeout=30,
+            ) as response:
+                raw = response.read()
+                status = response.status
+                response_headers = list(response.getheaders())
+        except HTTPError as error:
+            raw = error.read() if hasattr(error, "read") else b""
+            status = error.code
+            response_headers = list(error.headers.items()) if error.headers else []
+        except (URLError, OSError):
+            return self.json({"error": "qwen service unavailable"}, 502)
+        self.send_response(status)
+        hop_headers = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade"}
+        for key, value in response_headers:
+            lower = key.lower()
+            if lower in hop_headers or lower == "content-length":
+                continue
+            self.send_header(key, value)
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        if self.command != "HEAD" and raw:
+            self.wfile.write(raw)
+        return True
     def end_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff"); self.send_header("X-Frame-Options", "DENY"); self.send_header("Referrer-Policy", "strict-origin-when-cross-origin"); self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)")
         nonce=getattr(self,"_script_nonce","")
@@ -1252,6 +2385,46 @@ class Handler(SimpleHTTPRequestHandler):
         return self.json(response,201)
     def do_GET(self):
         parsed=urlparse(self.path); path, query=parsed.path, parse_qs(parsed.query)
+        host=(self.headers.get("Host","").split(":",1)[0] or "").lower()
+        if host == ZTTSHOP_HOSTNAME:
+            if path in {"", "/"}:
+                return self.html(zttshop_homepage())
+            if path == "/privacy":
+                return self.html(zttshop_privacy_page())
+            if path == "/terms":
+                return self.html(zttshop_terms_page())
+            if path == "/api/auth/tiktok/start":
+                try:
+                    state = zttshop_state()
+                    zttshop_store_state(state)
+                    location = zttshop_authorize_url(state)
+                except ValueError as error:
+                    return self.html(zttshop_callback_error_page(escape_html(str(error))), 503)
+                self.send_response(302)
+                self.send_header("Location", location)
+                self.send_header("Cache-Control", "no-store")
+                return self.end_headers()
+            if path == "/api/auth/tiktok/callback":
+                error = (query.get("error") or [""])[0]
+                error_description = (query.get("error_description") or [""])[0]
+                code = (query.get("code") or [""])[0]
+                state = (query.get("state") or [""])[0]
+                if error:
+                    message = f"TikTok returned an error: {escape_html(error)}"
+                    if error_description:
+                        message += f"<br>{escape_html(error_description)}"
+                    return self.html(zttshop_callback_error_page(message), 400)
+                if code and state:
+                    if not zttshop_consume_state(state):
+                        return self.html(zttshop_callback_error_page("Authorization state is invalid or expired."), 400)
+                    try:
+                        parsed = zttshop_exchange_auth_code(code)
+                    except ValueError as error:
+                        return self.html(zttshop_callback_error_page(escape_html(str(error))), 400)
+                    return self.html(zttshop_auth_success_page(parsed))
+                return self.html(zttshop_callback_page(query))
+        if host == QWEN_HOSTNAME:
+            return self.proxy_qwen_upstream()
         if path == "/auth/scb/callback":
             code=(query.get("code") or query.get("authCode") or [""])[0]
             state=(query.get("state") or [""])[0]
@@ -1265,6 +2438,13 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/health":
             return self.json({"status": "ok", "service": "moopiew", "time": utcnow()})
         if path == "/api/payments/scb/config": return self.json(scb_config_public())
+        if path == "/api/ai/models":
+            if not self.rate("public"): return self.json({"error":"คำขอมากเกินไป"},429)
+            try:
+                catalog = ai_public_catalog()
+                return self.json(catalog)
+            except ValueError as error:
+                return self.json({"error":str(error)},503)
         if path == "/api/admin/ai/config":
             if not self.require("admin"): return
             return self.json(ai_public_config())
@@ -1397,10 +2577,45 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
     def do_HEAD(self):
         path=urlparse(self.path).path
+        host=(self.headers.get("Host","").split(":",1)[0] or "").lower()
+        if host == ZTTSHOP_HOSTNAME and path == "/api/auth/tiktok/start":
+            try:
+                state = zttshop_state()
+                zttshop_store_state(state)
+                location = zttshop_authorize_url(state)
+            except ValueError as error:
+                payload = zttshop_callback_error_page(escape_html(str(error))).encode()
+                self.send_response(503)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Cache-Control", "no-store")
+                return self.end_headers()
+            self.send_response(302)
+            self.send_header("Location", location)
+            self.send_header("Cache-Control", "no-store")
+            return self.end_headers()
+        if host == ZTTSHOP_HOSTNAME and path in {"/", "/privacy", "/terms", "/api/auth/tiktok/callback"}:
+            payload = {
+                "/": zttshop_homepage(),
+                "/privacy": zttshop_privacy_page(),
+                "/terms": zttshop_terms_page(),
+                "/api/auth/tiktok/callback": zttshop_callback_page(parse_qs(urlparse(self.path).query)),
+            }[path]
+            encoded = payload.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.send_header("Cache-Control", "no-store")
+            return self.end_headers()
+        if host == QWEN_HOSTNAME:
+            return self.proxy_qwen_upstream()
         if path=="/api/menu": self.send_response(200); self.send_header("Content-Type","application/json; charset=utf-8"); self.send_header("Cache-Control","no-store"); return self.end_headers()
         return super().do_HEAD()
     def do_POST(self):
         path=urlparse(self.path).path
+        host=(self.headers.get("Host","").split(":",1)[0] or "").lower()
+        if host == QWEN_HOSTNAME:
+            return self.proxy_qwen_upstream()
         try: form=self.body(15_000_000 if path in {"/api/documents/upload","/documents/upload"} else 100_000)
         except ValueError as error: return self.json({"error":str(error)},400)
         try:
@@ -1430,6 +2645,9 @@ class Handler(SimpleHTTPRequestHandler):
             if path=="/api/order-lookup":
                 if not self.rate("lookup"): return self.json({"error":"คำขอมากเกินไป"},429)
                 return self.lookup_order(form)
+            if path=="/api/ai/chat":
+                if not self.rate("public"): return self.json({"error":"คำขอมากเกินไป"},429)
+                return self.public_ai_chat(form)
             if path=="/api/admin/ai/chat":
                 role=self.require("admin")
                 if not role:return
@@ -1542,6 +2760,12 @@ class Handler(SimpleHTTPRequestHandler):
         # customer data. Audit only the model and response size.
         with db() as con:
             audit(con,role,"ai_chat","ai",result["id"],{"provider":result["provider"],"response_characters":len(result["content"])})
+        return self.json(result)
+    def public_ai_chat(self, form):
+        try:
+            result=public_ai_chat(form.get("model",""),form.get("prompt",""),form.get("max_tokens",512),form.get("temperature",0.2))
+        except ValueError as error:
+            return self.json({"error":str(error)},400)
         return self.json(result)
     def admin_dashboard(self,con,conf):
         orders=all_orders(con); recent=[dict(row) for row in con.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 10")]
