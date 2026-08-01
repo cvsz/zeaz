@@ -823,7 +823,7 @@ def zttshop_page(
             <div class="stat">
               <div class="label">Web app</div>
               <strong>Public hostname online</strong>
-              <p>zttshop is served through Cloudflare Tunnel and the local Caddy origin.</p>
+              <p>zTTShop is served through Cloudflare Tunnel and the local Caddy origin.</p>
             </div>
             <div class="stat">
               <div class="label">Auth flow</div>
@@ -854,7 +854,7 @@ def zttshop_homepage() -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Loading zttshop</title>
+  <title>Loading zTTShop</title>
   <link rel="stylesheet" href="/assets/zttshop.css">
   <style>
     :root {
@@ -1348,7 +1348,7 @@ def zttshop_callback_page(query: dict[str, list[str]]) -> str:
         if error_description:
             body += f"<br>{escape_html(error_description)}"
     elif code and state:
-        body = "TikTok authorization callback received. Return to zttshop and finish the sign-in flow."
+        body = "TikTok authorization callback received. Return to zTTShop and finish the sign-in flow."
     else:
         body = "This endpoint is live. TikTok authorization responses will land here."
     return zttshop_page(
