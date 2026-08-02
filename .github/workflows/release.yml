@@ -132,7 +132,7 @@ jobs:
           echo "app=ghcr.io/$repository/moopiew" >> "$GITHUB_OUTPUT"
           echo "dashboard=ghcr.io/$repository/dashboard" >> "$GITHUB_OUTPUT"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
