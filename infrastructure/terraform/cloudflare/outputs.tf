@@ -43,6 +43,11 @@ output "zai_url" {
   description = "Public ZEAZ AI Command Center URL after proxied DNS record and tunnel ingress are active."
 }
 
+output "auth_url" {
+  value       = "https://${var.auth_hostname}"
+  description = "Public ZEAZ Authentication Portal URL after proxied DNS record and tunnel ingress are active."
+}
+
 output "piewdash_access_audience" {
   value       = cloudflare_zero_trust_access_application.piewdash.aud
   description = "Audience claim expected on Cloudflare Access JWTs for the dashboard."
@@ -59,6 +64,7 @@ output "cloudflared_ingress" {
     { hostname = var.cmeerp_hostname, service = var.cmeerp_origin },
     { hostname = var.arin_hostname, service = var.arin_origin },
     { hostname = var.zai_hostname, service = var.zai_origin },
+    { hostname = var.auth_hostname, service = var.auth_origin },
     { service = "http_status:404" },
   ]
   description = "Ingress fragment to merge before the terminal fallback of a locally managed tunnel."

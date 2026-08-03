@@ -101,6 +101,16 @@ resource "cloudflare_dns_record" "zai" {
   comment = "ZEAZ AI Command Center via Cloudflare Tunnel"
 }
 
+resource "cloudflare_dns_record" "auth" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.auth_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "ZEAZ Authentication Portal via Cloudflare Tunnel"
+}
+
 resource "cloudflare_zero_trust_access_application" "piewdash" {
   account_id                 = var.cloudflare_account_id
   name                       = "MooPiew Engineering Dashboard"
@@ -141,6 +151,7 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "moopiew" {
       { hostname = var.cmeerp_hostname, service = var.cmeerp_origin },
       { hostname = var.arin_hostname, service = var.arin_origin },
       { hostname = var.zai_hostname, service = var.zai_origin },
+      { hostname = var.auth_hostname, service = var.auth_origin },
       { service = "http_status:404" },
     ]
   }

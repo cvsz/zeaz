@@ -240,3 +240,23 @@ variable "zai_origin" {
     error_message = "zai_origin must use a loopback address."
   }
 }
+
+variable "auth_hostname" {
+  type        = string
+  default     = "auth.zeaz.dev"
+  description = "Public hostname for the ZEAZ Authentication Portal."
+  validation {
+    condition     = endswith(lower(var.auth_hostname), ".${lower(var.zone_name)}")
+    error_message = "auth_hostname must be a subdomain of zone_name."
+  }
+}
+
+variable "auth_origin" {
+  type        = string
+  default     = "http://127.0.0.1:8080"
+  description = "Loopback origin reached by cloudflared for ZEAZ Authentication Portal."
+  validation {
+    condition     = can(regex("^http://127\\.0\\.0\\.1:[0-9]+$", var.auth_origin))
+    error_message = "auth_origin must use a loopback address."
+  }
+}
