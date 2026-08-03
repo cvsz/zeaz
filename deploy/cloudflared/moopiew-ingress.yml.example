@@ -6,10 +6,18 @@ ingress:
     service: http://127.0.0.1:8080
   - hostname: qwen.zeaz.dev
     service: http://127.0.0.1:8091
+  - hostname: chat.zeaz.dev
+    service: http://127.0.0.1:3000
   - hostname: piewdash.zeaz.dev
     service: http://127.0.0.1:80
   - hostname: zerp.zeaz.dev
     service: http://127.0.0.1:80
   - hostname: cme.zeaz.dev
     service: http://127.0.0.1:8001
+  - hostname: arin.zeaz.dev
+    service: http://127.0.0.1:8080
+  - hostname: auth.zeaz.dev
+    service: http://127.0.0.1:8080
+  - hostname: zai.zeaz.dev
+    service: http://127.0.0.1:8765
   - service: http_status:404
