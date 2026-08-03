@@ -62,6 +62,26 @@ variable "moopiew_origin" {
   }
 }
 
+variable "arin_hostname" {
+  type        = string
+  default     = "arin.zeaz.dev"
+  description = "Public hostname for the Arin static marketing site."
+  validation {
+    condition     = endswith(lower(var.arin_hostname), ".${lower(var.zone_name)}")
+    error_message = "arin_hostname must be a subdomain of zone_name."
+  }
+}
+
+variable "arin_origin" {
+  type        = string
+  default     = "http://127.0.0.1:8080"
+  description = "Loopback Caddy origin serving the Arin static site."
+  validation {
+    condition     = var.arin_origin == "http://127.0.0.1:8080"
+    error_message = "arin_origin must use the reviewed loopback Caddy proxy at http://127.0.0.1:8080."
+  }
+}
+
 variable "zttshop_hostname" {
   type        = string
   default     = "zttshop.zeaz.dev"
@@ -99,6 +119,26 @@ variable "qwen_origin" {
   validation {
     condition     = var.qwen_origin == "http://127.0.0.1:8091"
     error_message = "qwen_origin must use the reviewed loopback origin at http://127.0.0.1:8091."
+  }
+}
+
+variable "chat_hostname" {
+  type        = string
+  default     = "chat.zeaz.dev"
+  description = "Public hostname for the OpenWebUI chat interface."
+  validation {
+    condition     = endswith(lower(var.chat_hostname), ".${lower(var.zone_name)}")
+    error_message = "chat_hostname must be a subdomain of zone_name."
+  }
+}
+
+variable "chat_origin" {
+  type        = string
+  default     = "http://127.0.0.1:3000"
+  description = "Host-loopback origin published by the OpenWebUI container."
+  validation {
+    condition     = var.chat_origin == "http://127.0.0.1:3000"
+    error_message = "chat_origin must use the reviewed OpenWebUI host port at http://127.0.0.1:3000."
   }
 }
 
@@ -178,5 +218,25 @@ variable "cmeerp_origin" {
   validation {
     condition     = can(regex("^http://127\\.0\\.0\\.1:[0-9]+$", var.cmeerp_origin))
     error_message = "cmeerp_origin must use a loopback address."
+  }
+}
+
+variable "zai_hostname" {
+  type        = string
+  default     = "zai.zeaz.dev"
+  description = "Public hostname for the ZEAZ AI Command Center."
+  validation {
+    condition     = endswith(lower(var.zai_hostname), ".${lower(var.zone_name)}")
+    error_message = "zai_hostname must be a subdomain of zone_name."
+  }
+}
+
+variable "zai_origin" {
+  type        = string
+  default     = "http://127.0.0.1:8765"
+  description = "Loopback origin reached by cloudflared for ZEAZ AI Command Center."
+  validation {
+    condition     = can(regex("^http://127\\.0\\.0\\.1:[0-9]+$", var.zai_origin))
+    error_message = "zai_origin must use a loopback address."
   }
 }

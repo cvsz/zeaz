@@ -21,6 +21,16 @@ resource "cloudflare_dns_record" "moopiew" {
   comment = "Moopiew preorder via Cloudflare Tunnel"
 }
 
+resource "cloudflare_dns_record" "arin" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.arin_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "Arin static site via Cloudflare Tunnel"
+}
+
 resource "cloudflare_dns_record" "zttshop" {
   zone_id = var.cloudflare_zone_id
   name    = var.zttshop_hostname
@@ -39,6 +49,16 @@ resource "cloudflare_dns_record" "qwen" {
   ttl     = 1
   proxied = true
   comment = "Qwen chat interface via Cloudflare Tunnel"
+}
+
+resource "cloudflare_dns_record" "chat" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.chat_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "OpenWebUI chat via Cloudflare Tunnel"
 }
 
 resource "cloudflare_dns_record" "piewdash" {
@@ -69,6 +89,16 @@ resource "cloudflare_dns_record" "cmeerp" {
   ttl     = 1
   proxied = true
   comment = "CME Pro ERP via Cloudflare Tunnel"
+}
+
+resource "cloudflare_dns_record" "zai" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.zai_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "ZEAZ AI Command Center via Cloudflare Tunnel"
 }
 
 resource "cloudflare_zero_trust_access_application" "piewdash" {
@@ -105,9 +135,12 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "moopiew" {
       { hostname = var.moopiew_hostname, service = var.moopiew_origin },
       { hostname = var.zttshop_hostname, service = var.zttshop_origin },
       { hostname = var.qwen_hostname, service = var.qwen_origin },
+      { hostname = var.chat_hostname, service = var.chat_origin },
       { hostname = var.piewdash_hostname, service = var.piewdash_origin },
       { hostname = var.zerp_hostname, service = var.zerp_origin },
       { hostname = var.cmeerp_hostname, service = var.cmeerp_origin },
+      { hostname = var.arin_hostname, service = var.arin_origin },
+      { hostname = var.zai_hostname, service = var.zai_origin },
       { service = "http_status:404" },
     ]
   }

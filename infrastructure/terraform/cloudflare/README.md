@@ -1,10 +1,14 @@
 # Moopiew Cloudflare Terraform
 
 This stack follows the Cloudflare Tunnel DNS ownership model used by
-`z-platform`: proxied CNAMEs send `moopiew.zeaz.dev`, `zttshop.zeaz.dev`,
-`piewdash.zeaz.dev`, `qwen.zeaz.dev`, `zerp.zeaz.dev`, and `cme.zeaz.dev` to
+`z-platform`: proxied CNAMEs send `moopiew.zeaz.dev`, `arin.zeaz.dev`, `zttshop.zeaz.dev`,
+`piewdash.zeaz.dev`, `qwen.zeaz.dev`, `chat.zeaz.dev`, `zerp.zeaz.dev`, and
+`cme.zeaz.dev` to
 an existing tunnel. Cloudflared forwards the public app hostnames to Caddy on
 port 8080 and the dashboard and ERP hostnames to Caddy on port 80. The
+OpenWebUI chat hostname is forwarded directly to its reviewed host-published
+port 3000, matching the existing container mapping, rather than to the
+container-only port 8080.
 host-specific dashboard route applies Basic Auth before proxying to the
 loopback dashboard process on port 8082. Never point the tunnel directly at
 port 8082 because that bypasses the origin authentication layer. The zERP
@@ -84,7 +88,11 @@ before planning to prevent Terraform from attempting to create a duplicate:
 terraform -chdir=infrastructure/terraform/cloudflare import \
   cloudflare_dns_record.moopiew "<zone-id>/<dns-record-id>"
 terraform -chdir=infrastructure/terraform/cloudflare import \
+  cloudflare_dns_record.arin "<zone-id>/<dns-record-id>"
+terraform -chdir=infrastructure/terraform/cloudflare import \
   cloudflare_dns_record.zttshop "<zone-id>/<dns-record-id>"
+terraform -chdir=infrastructure/terraform/cloudflare import \
+  cloudflare_dns_record.chat "<zone-id>/<dns-record-id>"
 terraform -chdir=infrastructure/terraform/cloudflare import \
   cloudflare_dns_record.piewdash "<zone-id>/<dns-record-id>"
 terraform -chdir=infrastructure/terraform/cloudflare import \
