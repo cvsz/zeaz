@@ -1,0 +1,93 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - link "Go to TikTok For You feed" [ref=e5] [cursor=pointer]:
+      - /url: /?lang=en
+      - strong: TikTok
+    - link "Feedback and help" [ref=e16] [cursor=pointer]:
+      - /url: https://www.tiktok.com/feedback/?lang=en
+  - generic [ref=e22]:
+    - heading "Log in to TikTok" [level=2] [ref=e23]
+    - generic [ref=e24]:
+      - generic [ref=e25]: Manage your account, check notifications, comment on videos, and more.
+      - generic [ref=e27]:
+        - link "Use QR code" [ref=e29] [cursor=pointer]
+        - link "Use phone / email / username" [ref=e36] [cursor=pointer]
+        - link "Continue with Facebook" [ref=e43] [cursor=pointer]
+        - link "Continue with Google" [ref=e51] [cursor=pointer]
+        - link "Continue with LINE" [ref=e61] [cursor=pointer]
+        - link "Continue with KakaoTalk" [ref=e73] [cursor=pointer]
+        - link "Continue with Apple" [ref=e82] [cursor=pointer]
+  - generic [ref=e88]:
+    - paragraph [ref=e90]:
+      - text: By continuing, you agree to TikTok’s
+      - link "Terms of Service" [ref=e91] [cursor=pointer]:
+        - /url: https://www.tiktok.com/legal/terms-of-use?lang=en
+      - text: and confirm that you have read TikTok’s
+      - link "Privacy Policy" [ref=e92] [cursor=pointer]:
+        - /url: https://www.tiktok.com/legal/privacy-policy?lang=en
+      - text: .
+    - generic [ref=e93]:
+      - generic [ref=e94]: Don’t have an account?
+      - link "Sign up" [ref=e95] [cursor=pointer]:
+        - /url: /signup?lang=en&enter_method=web&enter_from=dev_awwx6rw1asvyh3ix&redirect_url=https%253A%252F%252Fwww.tiktok.com%252Fv2%252Fauth%252Fauthorize%252F%253Fclient_key%253Dawwx6rw1asvyh3ix%2526response_type%253Dcode%2526scope%253Duser.info.basic%2526redirect_uri%253Dhttps%25253A%25252F%25252Fzttshop.zeaz.dev%25252Fapi%25252Fauth%25252Ftiktok%25252Fcallback%2526state%253Dtiktok-78dUOqJWiOYRdalMR-fWpw1Lxigix-pc&hide_left_icon=0&type=&no_cta_popup=1
+    - generic [ref=e96]:
+      - generic [ref=e97] [cursor=pointer]:
+        - paragraph [ref=e98]: English (US)
+        - combobox [ref=e99]:
+          - option "Azərbaycan"
+          - option "Bahasa Indonesia"
+          - option "Bahasa Melayu"
+          - option "Basa Jawa"
+          - option "Català"
+          - option "Cebuano"
+          - option "Čeština"
+          - option "Dansk"
+          - option "Deutsch"
+          - option "Eesti"
+          - option "English (UK)"
+          - option "English (US)" [selected]
+          - option "Español"
+          - option "Español (Latinoamérica)"
+          - option "Filipino"
+          - option "Français"
+          - option "Français (Canada)"
+          - option "Gaeilge"
+          - option "Hrvatski"
+          - option "Íslenska"
+          - option "Italiano"
+          - option "Kiswahili"
+          - option "Latviešu"
+          - option "Lietuvių"
+          - option "Magyar"
+          - option "Nederlands"
+          - option "norsk (bokmål)"
+          - option "Oʻzbek"
+          - option "Polski"
+          - option "Português"
+          - option "Português (Brasil)"
+          - option "Română"
+          - option "Shqip"
+          - option "Slovenčina"
+          - option "Slovenščina"
+          - option "Suomi"
+          - option "Svenska"
+          - option "Tiếng Việt"
+          - option "Türkçe"
+          - option "Ελληνικά"
+          - option "Български"
+          - option "Қазақша"
+          - option "Русский"
+          - option "Українська"
+          - option "עברית"
+          - option "اردو"
+          - option "العربية"
+          - option "हिंदी"
+          - option "বাংলা"
+          - option "ภาษาไทย"
+          - option "မြန်မာ"
+          - option "ខ្មែរ"
+          - option "日本語"
+          - option "中文 (繁體)"
+          - option "中文 (简体)"
+          - option "한국어"
+      - generic [ref=e100]: © 2026 TikTok

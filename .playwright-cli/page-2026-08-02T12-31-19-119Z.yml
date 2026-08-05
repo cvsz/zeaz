@@ -1,0 +1,123 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - link "zTTShop home" [ref=e4] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e5]: zT
+      - generic [ref=e6]:
+        - strong [ref=e7]: zTTShop
+        - generic [ref=e8]: connect / build / go
+    - navigation "Primary" [ref=e9]:
+      - link "How it works" [ref=e10] [cursor=pointer]:
+        - /url: "#flow"
+      - link "Trust layer" [ref=e11] [cursor=pointer]:
+        - /url: "#trust"
+    - link "Start TikTok sign-in" [ref=e12] [cursor=pointer]:
+      - /url: /api/auth/tiktok/start
+  - main [ref=e13]:
+    - region [ref=e14]:
+      - generic [ref=e15]:
+        - paragraph [ref=e16]: TikTok-connected workspace
+        - heading "A calmer way to connect TikTok." [level=1] [ref=e18]
+        - paragraph [ref=e19]: One clear sign-in, one clean callback, and a workspace that is ready when you are. zTTShop keeps the first step focused so the rest of the flow feels effortless.
+        - generic [ref=e20]:
+          - link "Continue with TikTok" [ref=e21] [cursor=pointer]:
+            - /url: /api/auth/tiktok/start
+          - link "Privacy" [ref=e22] [cursor=pointer]:
+            - /url: /privacy
+        - paragraph [ref=e23]:
+          - generic [ref=e24]: ✓
+          - text: Secure callback · no setup maze
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]: "01"
+          - text: identity in
+        - generic [ref=e28]:
+          - generic [ref=e29]: "02"
+          - text: workspace ready
+        - article "TikTok connection preview" [ref=e30]:
+          - generic [ref=e31]: Connection preview
+          - generic [ref=e37]:
+            - generic [ref=e38]: ♪
+            - generic [ref=e40]:
+              - generic [ref=e41]: Provider
+              - strong [ref=e42]: TikTok Login Kit
+            - generic [ref=e43]: Ready
+          - generic [ref=e45]:
+            - generic [ref=e46]:
+              - generic [ref=e47]: "01"
+              - generic [ref=e48]:
+                - generic [ref=e49]: Permission
+                - strong [ref=e50]: user.info.basic
+              - generic [ref=e51]: ✓
+            - generic [ref=e52]:
+              - generic [ref=e53]: "02"
+              - generic [ref=e54]:
+                - generic [ref=e55]: Return path
+                - strong [ref=e56]: zTTShop workspace
+              - generic [ref=e57]: ✓
+          - generic [ref=e58]:
+            - generic [ref=e59]: same-origin callback
+            - code [ref=e61]: /callback
+    - region "Connection details" [ref=e62]:
+      - generic [ref=e63]:
+        - generic [ref=e64]: Provider
+        - strong [ref=e65]: TikTok Login Kit
+      - generic [ref=e66]:
+        - generic [ref=e67]: Scope
+        - strong [ref=e68]: user.info.basic
+      - generic [ref=e69]:
+        - generic [ref=e70]: Experience
+        - strong [ref=e71]: One calm first click
+    - region [ref=e72]:
+      - paragraph [ref=e73]: The flow / 01
+      - heading "Less friction. More signal." [level=2] [ref=e74]
+      - paragraph [ref=e75]: The public surface says exactly what is happening, then gets out of the way. Each step is visible, deliberate, and easy to trust.
+      - generic [ref=e76]:
+        - article [ref=e77]:
+          - generic [ref=e78]: 01 / START
+          - generic [ref=e79]: ↗
+          - heading "Open the door" [level=3] [ref=e80]
+          - paragraph [ref=e81]: Choose Start TikTok sign-in and continue through the official provider screen.
+        - article [ref=e82]:
+          - generic [ref=e83]: 02 / RETURN
+          - generic [ref=e84]: ↺
+          - heading "Come back cleanly" [level=3] [ref=e85]
+          - paragraph [ref=e86]: The callback returns you to the same public surface with the connection state intact.
+        - article [ref=e87]:
+          - generic [ref=e88]: 03 / READY
+          - generic [ref=e89]: ✓
+          - heading "Get to work" [level=3] [ref=e90]
+          - paragraph [ref=e91]: Once connected, the workspace has the identity signal it needs to move forward.
+    - region [ref=e92]:
+      - generic [ref=e93]:
+        - paragraph [ref=e94]: A considered first step
+        - heading "Everything important is close by." [level=2] [ref=e95]
+        - paragraph [ref=e96]: "The homepage stays selective: clear action first, useful context second, and operational detail only when it helps. Your account connection is handled server-side and the public policy pages are always one tap away."
+        - list [ref=e97]:
+          - listitem [ref=e98]:
+            - generic [ref=e99]: ✓
+            - text: Encrypted token storage on the server
+          - listitem [ref=e100]:
+            - generic [ref=e101]: ✓
+            - text: Same-origin callback path
+          - listitem [ref=e102]:
+            - generic [ref=e103]: ✓
+            - text: Privacy and terms kept visible
+      - complementary "Policy links" [ref=e104]:
+        - generic [ref=e105]: Read before you connect
+        - paragraph [ref=e106]: Know what is requested and how the connected session is handled.
+        - generic [ref=e107]:
+          - link "Privacy" [ref=e108] [cursor=pointer]:
+            - /url: /privacy
+          - link "Terms" [ref=e109] [cursor=pointer]:
+            - /url: /terms
+  - contentinfo [ref=e110]:
+    - generic [ref=e111]: zTTShop · a clear path into your TikTok-connected workspace
+    - navigation "Footer" [ref=e112]:
+      - link "Privacy" [ref=e113] [cursor=pointer]:
+        - /url: /privacy
+      - link "Terms" [ref=e114] [cursor=pointer]:
+        - /url: /terms
+      - link "Start TikTok sign-in" [ref=e115] [cursor=pointer]:
+        - /url: /api/auth/tiktok/start
+        - text: Start TikTok sign-in ↗

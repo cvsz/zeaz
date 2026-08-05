@@ -20,6 +20,35 @@ http://piewdash.zeaz.dev:80 {
 	reverse_proxy 127.0.0.1:8082
 }
 
+http://arin.zeaz.dev:8080 {
+	bind 127.0.0.1
+
+	encode zstd gzip
+
+	root * /home/cvsz/zeaz/deploy/arin
+
+	header -Server
+
+	@arin_dynamic path /api/* /preview/* /app/*
+	handle @arin_dynamic {
+		reverse_proxy 127.0.0.1:8787
+	}
+
+	handle {
+		header {
+			-Server
+			X-Content-Type-Options "nosniff"
+			X-Frame-Options "DENY"
+			Referrer-Policy "strict-origin-when-cross-origin"
+			Permissions-Policy "camera=(), microphone=(), geolocation=()"
+			Content-Security-Policy "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		}
+
+		try_files {path} /index.html
+		file_server
+	}
+}
+
 http://zerp.zeaz.dev:80 {
 	bind 127.0.0.1
 

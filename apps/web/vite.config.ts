@@ -20,6 +20,7 @@ export default defineConfig({
         merchantRegister: resolve(__dirname, "merchant-register.html"),
         ops: resolve(__dirname, "ops.html"),
         riderRegister: resolve(__dirname, "rider-register.html"),
+        salesDemo: resolve(__dirname, "sales-demo.html"),
       },
     },
   },

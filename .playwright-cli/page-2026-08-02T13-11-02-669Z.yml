@@ -1,0 +1,171 @@
+- generic [ref=f1e3]:
+  - complementary [ref=f1e4]:
+    - link "กลับหน้าหลัก zTT Shop" [ref=f1e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f1e6]: Z
+      - generic [ref=f1e7]:
+        - strong [ref=f1e8]: zTT Shop
+        - generic [ref=f1e9]: commerce OS
+    - generic [ref=f1e10]: DEMO WORKSPACE
+    - navigation "Demo navigation" [ref=f1e11]:
+      - button "◈ Command center" [ref=f1e12] [cursor=pointer]:
+        - generic [ref=f1e13]: ◈
+        - text: Command center
+      - button "◌ AI sales inbox 3" [ref=f1e14] [cursor=pointer]:
+        - generic [ref=f1e15]: ◌
+        - text: AI sales inbox
+        - emphasis [ref=f1e16]: "3"
+      - button "✦ Product knowledge" [ref=f1e17] [cursor=pointer]:
+        - generic [ref=f1e18]: ✦
+        - text: Product knowledge
+      - button "▤ Orders & stock" [ref=f1e19] [cursor=pointer]:
+        - generic [ref=f1e20]: ▤
+        - text: Orders & stock
+    - generic [ref=f1e23]:
+      - strong [ref=f1e24]: Demo mode online
+      - generic [ref=f1e25]: ข้อมูลจำลอง ไม่เชื่อมบัญชีจริง
+  - main [ref=f1e26]:
+    - generic [ref=f1e27]:
+      - generic [ref=f1e28]:
+        - generic [ref=f1e29]: Customer presentation
+        - generic [ref=f1e30]: /
+        - strong [ref=f1e31]: Command center
+      - generic [ref=f1e32]:
+        - generic [ref=f1e33]: DEMO DATA
+        - button "↻ Sync channels" [ref=f1e35] [cursor=pointer]
+    - generic [ref=f1e36]:
+      - generic [ref=f1e37]:
+        - generic [ref=f1e38]:
+          - paragraph [ref=f1e39]: AI SALES COMMAND CENTER
+          - heading [level=1] [ref=f1e41]:
+            - text: แชตเดียว
+            - emphasis [ref=f1e42]: ปิดการขายได้
+          - paragraph [ref=f1e43]: รวมแชตจาก Facebook และ Shopee ให้ AI เข้าใจปัญหาผิว ตอบอย่างเป็นธรรมชาติ และส่งต่อคนได้ในจังหวะที่ควรส่งต่อ
+          - generic [ref=f1e44]:
+            - button "ดู AI ปิดการขาย ↗" [ref=f1e45] [cursor=pointer]:
+              - text: ดู AI ปิดการขาย
+              - generic [ref=f1e46]: ↗
+            - generic [ref=f1e47]: Hybrid RAG · Sales framework · Human handoff
+        - generic [ref=f1e48]:
+          - generic [ref=f1e49]:
+            - generic [ref=f1e50]: "8"
+            - generic [ref=f1e51]: EXTRACTS
+          - paragraph [ref=f1e52]: LIVE SALES SCRIPT
+          - heading [level=2] [ref=f1e53]:
+            - text: ถาม → เข้าใจ
+            - emphasis [ref=f1e54]: → เสนอ → ปิด
+          - generic [ref=f1e55]:
+            - generic [ref=f1e56]: "01"
+            - generic [ref=f1e57]: เรียนรู้ pain point
+            - generic [ref=f1e58]: 10:42:08
+          - generic [ref=f1e59]:
+            - generic [ref=f1e60]: "02"
+            - generic [ref=f1e61]: เลือกสารสกัดที่ตรง
+            - generic [ref=f1e62]: 10:42:09
+          - generic [ref=f1e63]:
+            - generic [ref=f1e64]: "03"
+            - generic [ref=f1e65]: เสนอโปร 2 แถม 1
+            - generic [ref=f1e66]: 10:42:10
+      - region "Demo metrics" [ref=f1e67]:
+        - article [ref=f1e68]:
+          - generic [ref=f1e69]: ยอดขายรวมวันนี้
+          - strong [ref=f1e70]: ฿47,280
+          - generic [ref=f1e71]: +24.8% จากเมื่อวาน
+        - article [ref=f1e73]:
+          - generic [ref=f1e74]: ออเดอร์จากแชต
+          - strong [ref=f1e75]: "126"
+          - generic [ref=f1e76]: 38% ปิดโดย AI
+        - article [ref=f1e78]:
+          - generic [ref=f1e79]: สต็อกพร้อมขาย
+          - strong [ref=f1e80]: 387 ขวด
+          - generic [ref=f1e81]: ตัดทันทีเมื่อสร้างออเดอร์
+        - article [ref=f1e83]:
+          - generic [ref=f1e84]: ส่งต่อแอดมิน
+          - strong [ref=f1e85]: "01"
+          - generic [ref=f1e86]: AI หยุดตอบทุกเคส
+      - generic [ref=f1e88]:
+        - generic [ref=f1e89]:
+          - generic [ref=f1e90]:
+            - generic [ref=f1e91]:
+              - paragraph [ref=f1e92]: CHANNEL PULSE
+              - heading "ทุกช่องทาง อยู่ในจอเดียว" [level=2] [ref=f1e93]
+            - button "เปิด inbox ↗" [ref=f1e94] [cursor=pointer]
+          - generic [ref=f1e95]:
+            - generic [ref=f1e96]:
+              - generic [ref=f1e97]: f
+              - generic [ref=f1e98]:
+                - strong [ref=f1e99]: Facebook Messenger
+                - generic [ref=f1e100]: 48 conversations · 12 active
+              - generic [ref=f1e101]: Connected
+            - generic [ref=f1e103]:
+              - generic [ref=f1e104]: S
+              - generic [ref=f1e105]:
+                - strong [ref=f1e106]: Shopee
+                - generic [ref=f1e107]: 78 orders · 4 pending
+              - generic [ref=f1e108]: Connected
+            - generic [ref=f1e110]:
+              - generic [ref=f1e111]: ✦
+              - generic [ref=f1e112]:
+                - strong [ref=f1e113]: AI Sales Agent
+                - generic [ref=f1e114]: ตอบตาม knowledge base
+              - generic [ref=f1e115]: Ready
+          - generic [ref=f1e117]:
+            - generic [ref=f1e118]: All systems nominal
+            - generic [ref=f1e120]: Last sync เมื่อสักครู่
+        - generic [ref=f1e121]:
+          - generic [ref=f1e122]:
+            - generic [ref=f1e123]:
+              - paragraph [ref=f1e124]: INVENTORY GUARDRAIL
+              - heading "สต็อกไม่หลุดมือ" [level=2] [ref=f1e125]
+            - button "ดูสต็อก ↗" [ref=f1e126] [cursor=pointer]
+          - generic [ref=f1e127]:
+            - generic [ref=f1e130]:
+              - generic [ref=f1e131]: BODY
+              - strong [ref=f1e132]: "8"
+              - generic [ref=f1e133]: serum
+            - generic [ref=f1e134]:
+              - text: BEST SELLER · BODY-SERUM-01
+              - heading "Complete Care 8 สารสกัด" [level=3] [ref=f1e135]: Complete Care8 สารสกัด
+              - paragraph [ref=f1e136]:
+                - text: พร้อมส่ง
+                - strong [ref=f1e137]: 387 ขวด
+          - generic [ref=f1e138]:
+            - generic [ref=f1e139]:
+              - generic [ref=f1e140]: Stock level
+              - generic [ref=f1e141]: 77%
+            - text: จุดสั่งซื้อเพิ่ม 100 ขวด · ไม่มี oversell
+        - generic [ref=f1e144]:
+          - generic [ref=f1e145]:
+            - generic [ref=f1e146]:
+              - paragraph [ref=f1e147]: AI SALES INBOX
+              - heading "บทสนทนาที่กำลังปิดการขาย" [level=2] [ref=f1e148]
+            - button "ดูทั้งหมด ↗" [ref=f1e149] [cursor=pointer]
+          - generic [ref=f1e150]:
+            - button "ม คุณเมย์ ช่วยเรื่องขาลายกับรอยคล้ำไหมคะ? ตอบเมื่อ 12 วินาทีก่อน" [ref=f1e151] [cursor=pointer]:
+              - generic [ref=f1e152]: ม
+              - generic [ref=f1e153]:
+                - strong [ref=f1e154]: คุณเมย์
+                - generic [ref=f1e155]: ช่วยเรื่องขาลายกับรอยคล้ำไหมคะ?
+              - emphasis [ref=f1e158]: ตอบเมื่อ 12 วินาทีก่อน
+            - button "น คุณนก ผิวแพ้ง่าย ใช้แล้วจะแสบไหมคะ ตอบเมื่อ 2 นาทีที่แล้ว" [ref=f1e159] [cursor=pointer]:
+              - generic [ref=f1e160]: น
+              - generic [ref=f1e161]:
+                - strong [ref=f1e162]: คุณนก
+                - generic [ref=f1e163]: ผิวแพ้ง่าย ใช้แล้วจะแสบไหมคะ
+              - emphasis [ref=f1e166]: ตอบเมื่อ 2 นาทีที่แล้ว
+            - button "อ คุณอ้อม ขอคุยกับแอดมินคนได้ไหมคะ HANDOFF" [ref=f1e167] [cursor=pointer]:
+              - generic [ref=f1e168]: อ
+              - generic [ref=f1e169]:
+                - strong [ref=f1e170]: คุณอ้อม
+                - generic [ref=f1e171]: ขอคุยกับแอดมินคนได้ไหมคะ
+              - emphasis [ref=f1e174]: HANDOFF
+        - generic [ref=f1e175]:
+          - generic [ref=f1e176]:
+            - paragraph [ref=f1e177]: WHY AI DOESN'T FEEL LIKE A BOT
+            - heading [level=2] [ref=f1e178]:
+              - text: “ตอบตรงจุด
+              - emphasis [ref=f1e179]: ก่อนชวนซื้อ”
+            - paragraph [ref=f1e180]: เริ่มจากความเข้าใจ ไม่ใช่ยิงโปรทันที ระบบใช้ข้อมูลสินค้าเป็นแหล่งอ้างอิงเดียวและหยุดทันทีเมื่อควรให้คนดูแล
+          - generic [ref=f1e181]:
+            - strong [ref=f1e182]: 38%
+            - generic [ref=f1e183]: AI close rate

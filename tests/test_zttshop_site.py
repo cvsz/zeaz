@@ -71,9 +71,16 @@ class ZttshopSiteTests(unittest.TestCase):
     def test_homepage_privacy_terms_and_callback_are_served(self):
         status, body = self.request("/")
         self.assertEqual(status, 200)
-        self.assertIn("Preparing the TikTok sign-in flow", body)
-        self.assertIn("loading", body.lower())
-        self.assertIn("/assets/zttshop.css", body)
+        self.assertIn("A calmer way to connect TikTok.", body)
+        self.assertIn('aria-label="TikTok connection preview"', body)
+        self.assertIn("same-origin callback", body)
+        self.assertIn("/api/auth/tiktok/start", body)
+        self.assertNotIn("127.0.0.1:8080", body)
+        self.assertIn('href="/assets/zttshop-home.css"', body)
+        self.assertNotIn("<style>", body)
+        self.assertIn("Start TikTok sign-in", body)
+        self.assertIn("/assets/zttshop-home.css", body)
+        self.assertIn('href="/demo"', body)
 
         status, body = self.request("/privacy")
         self.assertEqual(status, 200)
@@ -88,6 +95,14 @@ class ZttshopSiteTests(unittest.TestCase):
         status, body = self.request("/api/auth/tiktok/callback")
         self.assertEqual(status, 200)
         self.assertIn("TikTok authorization responses will land here", body)
+
+    def test_tiktok_verification_file_is_public(self):
+        status, body = self.request("/tiktoktg7MYH0a4BNmgYhlm5MGQo6HGa1R2DPX.txt")
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            body.strip(),
+            "tiktok-developers-site-verification=tg7MYH0a4BNmgYhlm5MGQo6HGa1R2DPX",
+        )
 
     def test_tiktok_start_redirects_and_callback_exchanges_code(self):
         token_key = app.Fernet.generate_key().decode()
@@ -119,6 +134,7 @@ class ZttshopSiteTests(unittest.TestCase):
             location = headers["Location"]
             query = parse_qs(urlparse(location).query)
             state = query["state"][0]
+            self.assertEqual(urlparse(location).path, "/v2/auth/authorize/")
             self.assertEqual(query["client_key"], ["test-client-key"])
             self.assertEqual(query["response_type"], ["code"])
             self.assertEqual(

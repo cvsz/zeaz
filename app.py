@@ -89,7 +89,7 @@ TIKTOK_REDIRECT_URI = os.environ.get(
 TIKTOK_AUTHORIZE_URL = os.environ.get(
     "TIKTOK_AUTHORIZE_URL",
     "https://www.tiktok.com/v2/auth/authorize/",
-).strip().rstrip("/")
+).strip().rstrip("/") + "/"
 TIKTOK_TOKEN_URL = os.environ.get(
     "TIKTOK_TOKEN_URL",
     "https://open.tiktokapis.com/v2/oauth/token/",
@@ -854,454 +854,178 @@ def zttshop_homepage() -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Loading zTTShop</title>
-  <link rel="stylesheet" href="/assets/zttshop.css">
-  <style>
-    :root {
-      color-scheme: light;
-      --bg: #f6f1e8;
-      --bg-2: #edf6f4;
-      --panel: rgba(255, 255, 255, 0.82);
-      --panel-strong: #ffffff;
-      --ink: #171d29;
-      --muted: #5c6473;
-      --line: rgba(30, 41, 59, 0.12);
-      --accent: #0f766e;
-      --accent-2: #ca8a04;
-      --accent-soft: #e7f5f3;
-      --shadow: 0 28px 80px rgba(15, 23, 42, 0.12);
-    }
-    * { box-sizing: border-box; }
-    html, body { min-height: 100%; }
-    body {
-      margin: 0;
-      color: var(--ink);
-      background:
-        radial-gradient(circle at 12% 18%, rgba(15, 118, 110, 0.16), transparent 26%),
-        radial-gradient(circle at 84% 18%, rgba(202, 138, 4, 0.13), transparent 22%),
-        radial-gradient(circle at 50% 100%, rgba(15, 118, 110, 0.12), transparent 28%),
-        linear-gradient(135deg, #fbfaf6 0%, var(--bg) 46%, var(--bg-2) 100%);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      overflow-x: hidden;
-    }
-    .ambient {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      background:
-        radial-gradient(circle at 20% 18%, rgba(255,255,255,0.72), transparent 18%),
-        radial-gradient(circle at 78% 22%, rgba(255,255,255,0.35), transparent 16%);
-      opacity: .55;
-    }
-    main {
-      position: relative;
-      max-width: 1180px;
-      margin: 0 auto;
-      padding: 24px;
-      min-height: 100vh;
-      display: grid;
-      align-items: center;
-    }
-    .shell {
-      position: relative;
-      overflow: hidden;
-      border: 1px solid rgba(255,255,255,0.7);
-      border-radius: 32px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,255,255,0.72));
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(18px);
-    }
-    .shell::before,
-    .shell::after {
-      content: "";
-      position: absolute;
-      inset: auto;
-      border-radius: 999px;
-      filter: blur(8px);
-      pointer-events: none;
-    }
-    .shell::before {
-      width: 260px;
-      height: 260px;
-      right: -90px;
-      top: -80px;
-      background: radial-gradient(circle, rgba(15,118,110,0.18), transparent 68%);
-    }
-    .shell::after {
-      width: 300px;
-      height: 300px;
-      left: -120px;
-      bottom: -100px;
-      background: radial-gradient(circle, rgba(202,138,4,0.16), transparent 68%);
-    }
-    .content {
-      position: relative;
-      z-index: 1;
-      display: grid;
-      grid-template-columns: 1.15fr 0.85fr;
-      gap: 28px;
-      padding: 34px;
-    }
-    .eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0 0 18px;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: rgba(15, 118, 110, 0.08);
-      color: var(--accent);
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: .14em;
-      text-transform: uppercase;
-      width: fit-content;
-    }
-    .eyebrow-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: currentColor;
-      box-shadow: 0 0 0 6px rgba(15, 118, 110, 0.14);
-    }
-    h1 {
-      margin: 0;
-      max-width: 12ch;
-      font-size: clamp(48px, 6vw, 88px);
-      line-height: .92;
-      letter-spacing: -.06em;
-    }
-    .lead {
-      max-width: 58ch;
-      margin: 18px 0 0;
-      font-size: clamp(17px, 2vw, 20px);
-      line-height: 1.7;
-      color: var(--muted);
-    }
-    .meta-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 24px;
-    }
-    .chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 14px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.74);
-      border: 1px solid var(--line);
-      color: var(--ink);
-      font-size: 14px;
-      font-weight: 700;
-    }
-    .chip b { font-weight: 800; }
-    .chip-soft {
-      background: var(--accent-soft);
-      border-color: rgba(15, 118, 110, 0.14);
-      color: #0f4b45;
-    }
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-top: 28px;
-    }
-    .button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 52px;
-      padding: 0 20px;
-      border-radius: 999px;
-      text-decoration: none;
-      font-weight: 800;
-      border: 1px solid var(--accent);
-      background: linear-gradient(180deg, #0f766e, #0d5f58);
-      color: #fff;
-      box-shadow: 0 12px 24px rgba(15, 118, 110, 0.22);
-      transition: transform .2s ease, box-shadow .2s ease;
-    }
-    .button:hover { transform: translateY(-1px); box-shadow: 0 16px 28px rgba(15, 118, 110, 0.26); }
-    .button-secondary {
-      background: rgba(255,255,255,0.7);
-      color: var(--accent);
-      border-color: rgba(15, 118, 110, 0.18);
-      box-shadow: none;
-    }
-    .button-secondary:hover { box-shadow: 0 12px 20px rgba(15, 23, 42, 0.08); }
-    .status-panel {
-      display: grid;
-      gap: 16px;
-      padding: 22px;
-      border-radius: 24px;
-      background: linear-gradient(180deg, rgba(16, 24, 40, 0.96), rgba(17, 24, 39, 0.92));
-      color: #fff;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
-    }
-    .status-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-    }
-    .status-title {
-      font-size: 14px;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.68);
-      font-weight: 800;
-    }
-    .pulse {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.08);
-      color: rgba(255,255,255,0.9);
-      font-size: 13px;
-      font-weight: 700;
-    }
-    .pulse-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #34d399;
-      box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55);
-      animation: pulse 1.8s infinite;
-    }
-    .loader {
-      display: grid;
-      place-items: center;
-      width: 124px;
-      height: 124px;
-      margin: 10px auto 4px;
-      border-radius: 50%;
-      background:
-        radial-gradient(circle at center, rgba(255,255,255,0.15) 0 28%, transparent 29%),
-        conic-gradient(from 0deg, #34d399, #22c55e, #0f766e, #f59e0b, #34d399);
-      animation: spin 2.4s linear infinite;
-      position: relative;
-    }
-    .loader::after {
-      content: "";
-      width: 88px;
-      height: 88px;
-      border-radius: 50%;
-      background: linear-gradient(180deg, rgba(17,24,39,1), rgba(15,23,42,1));
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
-    }
-    .loader-label {
-      text-align: center;
-      color: rgba(255,255,255,0.82);
-      font-size: 15px;
-      line-height: 1.6;
-      margin: 2px 0 0;
-    }
-    .status-list {
-      display: grid;
-      gap: 10px;
-      margin: 4px 0 0;
-    }
-    .status-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      padding: 14px 14px;
-      border-radius: 18px;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.08);
-    }
-    .status-index {
-      flex: 0 0 auto;
-      display: grid;
-      place-items: center;
-      width: 26px;
-      height: 26px;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.12);
-      color: #fff;
-      font-size: 12px;
-      font-weight: 800;
-    }
-    .status-item strong {
-      display: block;
-      margin-bottom: 3px;
-      font-size: 14px;
-    }
-    .status-item span {
-      display: block;
-      color: rgba(255,255,255,0.7);
-      font-size: 13px;
-      line-height: 1.5;
-    }
-    .footer {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      margin-top: 18px;
-      padding-top: 18px;
-      border-top: 1px solid rgba(255,255,255,0.08);
-      color: rgba(255,255,255,0.72);
-      font-size: 13px;
-    }
-    .footer code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      color: #fff;
-    }
-    .brandline {
-      position: absolute;
-      left: 34px;
-      top: 24px;
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      color: rgba(23,29,41,0.7);
-      font-size: 12px;
-      letter-spacing: .18em;
-      text-transform: uppercase;
-      font-weight: 800;
-    }
-    .brand-mark {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 0 6px rgba(15,118,110,0.12);
-    }
-    .screen {
-      display: grid;
-      gap: 16px;
-      align-content: start;
-    }
-    .mini-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
-    }
-    .mini-card {
-      padding: 14px;
-      border-radius: 18px;
-      background: rgba(255,255,255,0.92);
-      border: 1px solid rgba(15,118,110,0.12);
-      min-height: 112px;
-    }
-    .mini-card .label {
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: .12em;
-      color: var(--accent);
-      font-weight: 800;
-      margin-bottom: 10px;
-    }
-    .mini-card strong {
-      display: block;
-      font-size: 18px;
-      line-height: 1.1;
-      margin-bottom: 8px;
-    }
-    .mini-card p {
-      margin: 0;
-      font-size: 13px;
-      line-height: 1.55;
-      color: var(--muted);
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes pulse {
-      0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5); }
-      70% { box-shadow: 0 0 0 10px rgba(52, 211, 153, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
-    }
-    @media (max-width: 900px) {
-      .content { grid-template-columns: 1fr; padding: 24px; }
-      .brandline { position: static; margin-bottom: 10px; }
-      h1 { max-width: 100%; font-size: clamp(42px, 12vw, 64px); }
-      .mini-grid { grid-template-columns: 1fr; }
-    }
-  </style>
+  <meta name="description" content="zTTShop makes TikTok-connected workflows feel clear, calm, and ready to start.">
+  <meta name="theme-color" content="#f3f4ef">
+  <title>zTTShop / connect TikTok</title>
+  <link rel="stylesheet" href="/assets/zttshop-home.css">
 </head>
 <body>
-  <div class="ambient"></div>
-  <main>
-    <section class="shell" aria-label="zTTShop loading screen">
-      <div class="brandline"><span class="brand-mark"></span> zTTShop / live</div>
-      <div class="content">
-        <div class="screen">
-          <div class="eyebrow"><span class="eyebrow-dot"></span> Loading workspace</div>
-          <h1>Preparing the TikTok sign-in flow</h1>
-          <p class="lead">The public zTTShop experience is coming online. Sign-in, privacy, and callback routing are already wired; the page is now presenting a polished loading state while the integration is finalized.</p>
-          <div class="meta-row">
-            <div class="chip chip-soft"><b>Live:</b> `zttshop.zeaz.dev`</div>
-            <div class="chip"><b>OAuth:</b> TikTok Login Kit</div>
-            <div class="chip"><b>Scope:</b> `user.info.basic`</div>
+  <div class="zt-page">
+    <header class="zt-header">
+      <a class="zt-brand" href="/" aria-label="zTTShop home">
+        <span class="zt-mark" aria-hidden="true">zT</span>
+        <span class="zt-brand-copy">
+          <strong>zTTShop</strong>
+          <small>connect / build / go</small>
+        </span>
+      </a>
+
+      <nav class="zt-nav" aria-label="Primary">
+        <a href="#flow">How it works</a>
+        <a href="#trust">Trust layer</a>
+        <a href="/demo">ERP + AI demo</a>
+      </nav>
+
+      <a class="zt-button zt-button-dark" href="/api/auth/tiktok/start">
+        Start TikTok sign-in <span class="zt-arrow" aria-hidden="true">↗</span>
+      </a>
+    </header>
+
+    <main class="zt-main">
+      <section class="zt-hero" aria-labelledby="zt-hero-title">
+        <div class="zt-hero-copy">
+          <p class="zt-eyebrow"><span class="zt-eyebrow-signal" aria-hidden="true"></span> TikTok-connected workspace</p>
+          <h1 id="zt-hero-title">A calmer way to connect TikTok.</h1>
+          <p class="zt-hero-lead">
+            One clear sign-in, one clean callback, and a workspace that is ready when you are.
+            zTTShop keeps the first step focused so the rest of the flow feels effortless.
+          </p>
+
+          <div class="zt-actions">
+            <a class="zt-button zt-button-primary" href="/api/auth/tiktok/start">
+              Continue with TikTok <span class="zt-arrow" aria-hidden="true">↗</span>
+            </a>
+            <a class="zt-button zt-button-quiet" href="/demo">See ERP + AI demo</a>
           </div>
-          <div class="actions">
-            <a class="button" href="/api/auth/tiktok/start">Continue</a>
-            <a class="button button-secondary" href="/privacy">Privacy</a>
-            <a class="button button-secondary" href="/terms">Terms</a>
-          </div>
-          <div class="mini-grid">
-            <div class="mini-card">
-              <div class="label">Step 01</div>
-              <strong>Open the app</strong>
-              <p>Visitors land on a focused loading screen instead of a generic placeholder.</p>
-            </div>
-            <div class="mini-card">
-              <div class="label">Step 02</div>
-              <strong>Start TikTok sign-in</strong>
-              <p>The CTA sends users to the TikTok authorization flow with the approved callback.</p>
-            </div>
-            <div class="mini-card">
-              <div class="label">Step 03</div>
-              <strong>Continue the flow</strong>
-              <p>Once TikTok approves access, the callback exchanges the code and stores the tokens.</p>
-            </div>
-          </div>
+
+          <p class="zt-helper">
+            <span class="zt-helper-check" aria-hidden="true">✓</span>
+            Secure callback · no setup maze
+          </p>
         </div>
-        <aside class="status-panel">
-          <div class="status-head">
-            <div class="status-title">System status</div>
-            <div class="pulse"><span class="pulse-dot"></span> Loading live</div>
-          </div>
-          <div class="loader" aria-hidden="true"></div>
-          <p class="loader-label">The storefront is warming up while the authentication path is kept ready for review and sign-in.</p>
-          <div class="status-list">
-            <div class="status-item">
-              <div class="status-index">1</div>
-              <div>
-                <strong>Homepage ready</strong>
-                <span>The public root now presents a clear loading state with the key action visible.</span>
+
+        <div class="zt-hero-visual">
+          <span class="zt-float-tag zt-float-tag-top"><b>01</b> identity in</span>
+          <span class="zt-float-tag zt-float-tag-bottom"><b>02</b> workspace ready</span>
+
+          <article class="zt-connection-card" aria-label="TikTok connection preview">
+            <div class="zt-card-head">
+              <span class="zt-card-label">Connection preview</span>
+              <span class="zt-card-window" aria-hidden="true"><i></i><i></i><i></i></span>
+            </div>
+
+            <div class="zt-provider">
+              <span class="zt-provider-mark" aria-hidden="true"><span>♪</span></span>
+              <span class="zt-provider-copy">
+                <small>Provider</small>
+                <strong>TikTok Login Kit</strong>
+              </span>
+              <span class="zt-status"><i aria-hidden="true"></i> Ready</span>
+            </div>
+
+            <div class="zt-connection-list">
+              <div class="zt-connection-row">
+                <span class="zt-row-number">01</span>
+                <span class="zt-row-copy"><span>Permission</span><strong>user.info.basic</strong></span>
+                <span class="zt-row-check" aria-hidden="true">✓</span>
+              </div>
+              <div class="zt-connection-row">
+                <span class="zt-row-number">02</span>
+                <span class="zt-row-copy"><span>Return path</span><strong>zTTShop workspace</strong></span>
+                <span class="zt-row-check" aria-hidden="true">✓</span>
               </div>
             </div>
-            <div class="status-item">
-              <div class="status-index">2</div>
-              <div>
-                <strong>TikTok callback live</strong>
-                <span>The OAuth callback and token exchange are wired into the running app.</span>
-              </div>
+
+            <div class="zt-card-footer">
+              <span><b aria-hidden="true"></b> same-origin callback</span>
+              <code>/callback</code>
             </div>
-            <div class="status-item">
-              <div class="status-index">3</div>
-              <div>
-                <strong>Verification in place</strong>
-                <span>The TikTok signature file is published from the same public hostname.</span>
-              </div>
-            </div>
-          </div>
-          <div class="footer">
-            <span>Origin: <code>127.0.0.1:8080</code></span>
-            <span>Tunnel: <code>Cloudflare</code></span>
+          </article>
+        </div>
+      </section>
+
+      <section class="zt-trust" id="trust" aria-label="Connection details">
+        <div class="zt-trust-item">
+          <span>Provider</span>
+          <strong>TikTok Login Kit</strong>
+        </div>
+        <div class="zt-trust-item">
+          <span>Scope</span>
+          <strong>user.info.basic</strong>
+        </div>
+        <div class="zt-trust-item">
+          <span>Experience</span>
+          <strong>One calm first click</strong>
+        </div>
+      </section>
+
+      <section class="zt-section" id="flow" aria-labelledby="zt-flow-title">
+        <p class="zt-section-kicker">The flow / 01</p>
+        <h2 class="zt-section-title" id="zt-flow-title">Less friction. More signal.</h2>
+        <p class="zt-section-intro">
+          The public surface says exactly what is happening, then gets out of the way.
+          Each step is visible, deliberate, and easy to trust.
+        </p>
+
+        <div class="zt-flow-grid">
+          <article class="zt-flow-card">
+            <span class="zt-flow-number">01 / START</span>
+            <span class="zt-flow-mark" aria-hidden="true">↗</span>
+            <h3>Open the door</h3>
+            <p class="zt-flow-card-copy">Choose Start TikTok sign-in and continue through the official provider screen.</p>
+          </article>
+          <article class="zt-flow-card">
+            <span class="zt-flow-number">02 / RETURN</span>
+            <span class="zt-flow-mark" aria-hidden="true">↺</span>
+            <h3>Come back cleanly</h3>
+            <p class="zt-flow-card-copy">The callback returns you to the same public surface with the connection state intact.</p>
+          </article>
+          <article class="zt-flow-card">
+            <span class="zt-flow-number">03 / READY</span>
+            <span class="zt-flow-mark" aria-hidden="true">✓</span>
+            <h3>Get to work</h3>
+            <p class="zt-flow-card-copy">Once connected, the workspace has the identity signal it needs to move forward.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="zt-reassurance" id="validation" aria-labelledby="zt-reassurance-title">
+        <div class="zt-reassurance-main">
+          <p class="zt-section-kicker">A considered first step</p>
+          <h2 id="zt-reassurance-title">Everything important is close by.</h2>
+          <p>
+            The homepage stays selective: clear action first, useful context second, and operational detail only when it helps.
+            Your account connection is handled server-side and the public policy pages are always one tap away.
+          </p>
+          <ul class="zt-reassurance-list">
+            <li><b aria-hidden="true">✓</b> Encrypted token storage on the server</li>
+            <li><b aria-hidden="true">✓</b> Same-origin callback path</li>
+            <li><b aria-hidden="true">✓</b> Privacy and terms kept visible</li>
+          </ul>
+        </div>
+
+        <aside class="zt-policy-card" aria-label="Policy links">
+          <span>Read before you connect</span>
+          <p>Know what is requested and how the connected session is handled.</p>
+          <div class="zt-policy-links">
+            <a href="/privacy">Privacy <span class="zt-arrow" aria-hidden="true">↗</span></a>
+            <a href="/terms">Terms <span class="zt-arrow" aria-hidden="true">↗</span></a>
           </div>
         </aside>
-      </div>
-    </section>
-  </main>
+      </section>
+    </main>
+
+    <footer class="zt-footer">
+      <span>zTTShop · a clear path into your TikTok-connected workspace</span>
+      <nav class="zt-footer-links" aria-label="Footer">
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="/api/auth/tiktok/start">Start TikTok sign-in <span class="zt-arrow" aria-hidden="true">↗</span></a>
+      </nav>
+    </footer>
+  </div>
 </body>
 </html>"""
-
 def zttshop_privacy_page() -> str:
     return zttshop_page(
         "Privacy Policy",
@@ -2386,7 +2110,14 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed=urlparse(self.path); path, query=parsed.path, parse_qs(parsed.query)
         host=(self.headers.get("Host","").split(":",1)[0] or "").lower()
+        if path.startswith("/application/saml/cloudflare-access/"):
+            return self.html("<html><head><meta http-equiv='refresh' content='0;url=/'></head><body>Redirecting to ZEAZ authentication portal...</body></html>")
         if host == ZTTSHOP_HOSTNAME:
+            if path in {"/demo", "/demo/"}:
+                self.send_response(302)
+                self.send_header("Location", "/platform/sales-demo.html")
+                self.send_header("Cache-Control", "no-store")
+                return self.end_headers()
             if path in {"", "/"}:
                 return self.html(zttshop_homepage())
             if path == "/privacy":
@@ -2574,10 +2305,17 @@ class Handler(SimpleHTTPRequestHandler):
                 orders=all_orders(con,picked)
                 return self.json({"date":picked,"store_name":conf["store_name"],"orders":orders,"summary":summary(orders),"role":role})
         if path.startswith("/api/"): return self.json({"error":"ไม่พบ API"},404)
+        if path.startswith("/application/saml/"):
+            return self.html("<!DOCTYPE html><html><head><meta http-equiv='refresh' content='0;url=/'></head><body>Redirecting to ZEAZ authentication portal...</body></html>")
         return super().do_GET()
     def do_HEAD(self):
         path=urlparse(self.path).path
         host=(self.headers.get("Host","").split(":",1)[0] or "").lower()
+        if host == ZTTSHOP_HOSTNAME and path in {"/demo", "/demo/"}:
+            self.send_response(302)
+            self.send_header("Location", "/platform/sales-demo.html")
+            self.send_header("Cache-Control", "no-store")
+            return self.end_headers()
         if host == ZTTSHOP_HOSTNAME and path == "/api/auth/tiktok/start":
             try:
                 state = zttshop_state()

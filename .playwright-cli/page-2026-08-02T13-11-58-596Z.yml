@@ -1,0 +1,150 @@
+- generic [ref=f1e3]:
+  - complementary [ref=f1e4]:
+    - link "กลับหน้าหลัก zTT Shop" [ref=f1e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f1e6]: Z
+      - generic [ref=f1e7]:
+        - strong [ref=f1e8]: zTT Shop
+        - generic [ref=f1e9]: commerce OS
+    - generic [ref=f1e10]: DEMO WORKSPACE
+    - navigation "Demo navigation" [ref=f1e11]:
+      - button "◈ Command center" [ref=f1e12] [cursor=pointer]:
+        - generic [ref=f1e13]: ◈
+        - text: Command center
+      - button "◌ AI sales inbox 3" [ref=f1e14] [cursor=pointer]:
+        - generic [ref=f1e15]: ◌
+        - text: AI sales inbox
+        - emphasis [ref=f1e16]: "3"
+      - button "✦ Product knowledge" [ref=f1e17] [cursor=pointer]:
+        - generic [ref=f1e18]: ✦
+        - text: Product knowledge
+      - button "▤ Orders & stock" [ref=f1e19] [cursor=pointer]:
+        - generic [ref=f1e20]: ▤
+        - text: Orders & stock
+    - generic [ref=f1e23]:
+      - strong [ref=f1e24]: Demo mode online
+      - generic [ref=f1e25]: ข้อมูลจำลอง ไม่เชื่อมบัญชีจริง
+  - main [ref=f1e26]:
+    - generic [ref=f1e27]:
+      - generic [ref=f1e28]:
+        - generic [ref=f1e29]: Customer presentation
+        - generic [ref=f1e30]: /
+        - strong [ref=f1e31]: Orders & stock
+      - generic [ref=f1e32]:
+        - generic [ref=f1e33]: DEMO DATA
+        - button "↻ Sync channels" [ref=f1e35] [cursor=pointer]
+    - generic [ref=f1e308]:
+      - generic [ref=f1e309]:
+        - generic [ref=f1e310]:
+          - paragraph [ref=f1e311]: CENTRAL ERP · DEMO LEDGER
+          - heading [level=1] [ref=f1e313]:
+            - text: ออเดอร์และสต็อก
+            - emphasis [ref=f1e314]: ไม่ต้องเปิดหลายจอ
+        - button "กลับไปปิดการขาย ↗" [ref=f1e315] [cursor=pointer]:
+          - text: กลับไปปิดการขาย
+          - generic [ref=f1e316]: ↗
+      - generic [ref=f1e317]:
+        - generic [ref=f1e318]:
+          - generic [ref=f1e319]: ORDERS TODAY
+          - strong [ref=f1e320]: "127"
+          - generic [ref=f1e321]: จาก Facebook + Shopee
+        - generic [ref=f1e322]:
+          - generic [ref=f1e323]: PAYMENT PENDING
+          - strong [ref=f1e324]: "2"
+          - generic [ref=f1e325]: ต้องติดตามต่อ
+        - generic [ref=f1e326]:
+          - generic [ref=f1e327]: LIVE STOCK
+          - strong [ref=f1e328]: "384"
+          - generic [ref=f1e329]: ขวดพร้อมขาย
+      - generic [ref=f1e330]:
+        - generic [ref=f1e331]:
+          - generic [ref=f1e332]:
+            - paragraph [ref=f1e333]: RECENT ORDERS
+            - heading "ออเดอร์ล่าสุด" [level=2] [ref=f1e334]
+          - generic [ref=f1e335]: Demo ledger · no real charge
+        - generic [ref=f1e336]:
+          - generic [ref=f1e337]:
+            - generic [ref=f1e338]: Order
+            - generic [ref=f1e339]: Customer
+            - generic [ref=f1e340]: Channel
+            - generic [ref=f1e341]: Items
+            - generic [ref=f1e342]: Total
+            - generic [ref=f1e343]: Status
+          - generic [ref=f1e344]:
+            - strong [ref=f1e345]:
+              - text: ZT-1054
+              - generic [ref=f1e346]: ตอนนี้
+            - generic [ref=f1e347]: คุณเมย์
+            - generic [ref=f1e348]:
+              - generic [ref=f1e349]: f
+              - text: Facebook Messenger
+            - generic [ref=f1e350]: 2 แถม 1
+            - generic [ref=f1e351]: ฿990
+            - emphasis [ref=f1e352]: รอยืนยัน COD
+          - generic [ref=f1e353]:
+            - strong [ref=f1e354]:
+              - text: ZT-1048
+              - generic [ref=f1e355]: 10:42
+            - generic [ref=f1e356]: คุณเมย์
+            - generic [ref=f1e357]:
+              - generic [ref=f1e358]: f
+              - text: Facebook Messenger
+            - generic [ref=f1e359]: 2 แถม 1
+            - generic [ref=f1e360]: ฿990
+            - emphasis [ref=f1e361]: รอยืนยัน COD
+          - generic [ref=f1e362]:
+            - strong [ref=f1e363]:
+              - text: SH-8831
+              - generic [ref=f1e364]: 10:31
+            - generic [ref=f1e365]: คุณนก
+            - generic [ref=f1e366]:
+              - generic [ref=f1e367]: S
+              - text: Shopee
+            - generic [ref=f1e368]: 1 ขวด
+            - generic [ref=f1e369]: ฿390
+            - emphasis [ref=f1e370]: ชำระเงินแล้ว
+          - generic [ref=f1e371]:
+            - strong [ref=f1e372]:
+              - text: ZT-1044
+              - generic [ref=f1e373]: 09:58
+            - generic [ref=f1e374]: คุณพลอย
+            - generic [ref=f1e375]:
+              - generic [ref=f1e376]: f
+              - text: Facebook Messenger
+            - generic [ref=f1e377]: 2 แถม 1
+            - generic [ref=f1e378]: ฿990
+            - emphasis [ref=f1e379]: กำลังแพ็กสินค้า
+          - generic [ref=f1e380]:
+            - strong [ref=f1e381]:
+              - text: SH-8828
+              - generic [ref=f1e382]: 09:22
+            - generic [ref=f1e383]: คุณฝน
+            - generic [ref=f1e384]:
+              - generic [ref=f1e385]: S
+              - text: Shopee
+            - generic [ref=f1e386]: 1 ขวด
+            - generic [ref=f1e387]: ฿390
+            - emphasis [ref=f1e388]: จัดส่งแล้ว
+      - generic [ref=f1e389]:
+        - generic [ref=f1e390]:
+          - paragraph [ref=f1e391]: MULTI-CHANNEL SYNC
+          - heading [level=2] [ref=f1e392]:
+            - text: สต็อกตัวเดียว
+            - emphasis [ref=f1e393]: ทุกช่องทางใช้ร่วมกัน
+          - paragraph [ref=f1e394]: เมื่อ Facebook ปิดการขาย ชุดโปรจะหัก 3 ขวดจาก stock กลาง ก่อนส่งสถานะไป Shopee ต่อ
+          - generic [ref=f1e395]:
+            - generic [ref=f1e396]: Facebook
+            - generic [ref=f1e397]: →
+            - strong [ref=f1e398]: Central stock
+            - generic [ref=f1e399]: →
+            - generic [ref=f1e400]: Shopee
+        - generic [ref=f1e401]:
+          - paragraph [ref=f1e402]: PROMOTION RULE
+          - generic [ref=f1e403]:
+            - strong [ref=f1e404]: 2 แถม 1
+            - generic [ref=f1e405]: ฿990
+          - paragraph [ref=f1e406]: ส่งฟรี · COD available · รวม 3 ขวด
+          - button "ดู product knowledge ↗" [ref=f1e407] [cursor=pointer]
+  - status [ref=f1e408]:
+    - generic [ref=f1e409]: ✓
+    - text: สร้างออเดอร์ Demo แล้ว · ตัดสต็อก 3 ขวดแบบจำลอง

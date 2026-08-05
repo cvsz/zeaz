@@ -1,0 +1,23 @@
+[Unit]
+Description=Arin app builder backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/zeaz/sites/arin
+EnvironmentFile=%h/zeaz/.env.arin
+Environment=PYTHONPATH=%h/zeaz/sites/arin
+ExecStart=/usr/bin/python3 -m arin_app.server
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=%h/zeaz/data/arin
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=default.target

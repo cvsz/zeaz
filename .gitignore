@@ -9,6 +9,7 @@ data/settings.json
 data/*.sqlite3
 data/*.sqlite3-shm
 data/*.sqlite3-wal
+data/arin/
 __pycache__/
 node_modules/
 .turbo/
@@ -44,6 +45,8 @@ infrastructure/terraform/cloudflare/tfplan*
 infrastructure/terraform/cloudflare/.backend.*.hcl
 infrastructure/terraform/cloudflare/.remote-state.*.json
 infrastructure/terraform/cloudflare/.state-*.txt
+sites/arin/dist/
+deploy/arin/
 tools/bin/
 *.zip
 .DS_Store

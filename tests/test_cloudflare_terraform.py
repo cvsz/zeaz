@@ -10,10 +10,10 @@ class CloudflareTerraformTests(unittest.TestCase):
     def test_public_dns_records_are_proxied_tunnel_cnames(self):
         main = (STACK / "main.tf").read_text(encoding="utf-8")
 
-        self.assertEqual(main.count('type    = "CNAME"'), 6)
-        self.assertEqual(main.count("content = local.tunnel_cname"), 6)
-        self.assertEqual(main.count("proxied = true"), 6)
-        self.assertEqual(main.count("ttl     = 1"), 6)
+        self.assertEqual(main.count('type    = "CNAME"'), 8)
+        self.assertEqual(main.count("content = local.tunnel_cname"), 8)
+        self.assertEqual(main.count("proxied = true"), 8)
+        self.assertEqual(main.count("ttl     = 1"), 8)
 
     def test_tunnel_origins_use_reviewed_caddy_proxies(self):
         variables = (STACK / "variables.tf").read_text(encoding="utf-8")
@@ -32,6 +32,10 @@ class CloudflareTerraformTests(unittest.TestCase):
         self.assertIn(
             'var.zttshop_origin == "http://127.0.0.1:8080"', variables
         )
+        self.assertIn('default     = "arin.zeaz.dev"', variables)
+        self.assertIn(
+            'var.arin_origin == "http://127.0.0.1:8080"', variables
+        )
         self.assertIn('default     = "qwen.zeaz.dev"', variables)
         self.assertIn('default     = "http://127.0.0.1:8091"', variables)
         self.assertIn('var.qwen_origin == "http://127.0.0.1:8091"', variables)
@@ -44,6 +48,7 @@ class CloudflareTerraformTests(unittest.TestCase):
         )
         self.assertIn("hostname: moopiew.zeaz.dev", ingress)
         self.assertIn("service: http://127.0.0.1:8080", ingress)
+        self.assertIn("hostname: arin.zeaz.dev", ingress)
         self.assertIn("hostname: zttshop.zeaz.dev", ingress)
         self.assertIn("hostname: qwen.zeaz.dev", ingress)
         self.assertIn("service: http://127.0.0.1:8091", ingress)
@@ -53,7 +58,7 @@ class CloudflareTerraformTests(unittest.TestCase):
         self.assertEqual(
             ingress.count("service: http://127.0.0.1:80\n"), 2
         )
-        self.assertEqual(ingress.count("service: http://127.0.0.1:8080\n"), 2)
+        self.assertEqual(ingress.count("service: http://127.0.0.1:8080\n"), 3)
         self.assertEqual(ingress.count("service: http://127.0.0.1:8091\n"), 1)
         self.assertNotIn("service: http://127.0.0.1:8082", ingress)
 
@@ -95,6 +100,30 @@ class CloudflareTerraformTests(unittest.TestCase):
         self.assertIn('TF_VAR_qwen_origin="${QWEN_ORIGIN:-http://127.0.0.1:8091}"', plan)
         self.assertIn("hostname: qwen.zeaz.dev", ingress)
         self.assertIn("service: http://127.0.0.1:8091", ingress)
+
+    def test_openwebui_chat_hostname_and_public_ingress_are_present(self):
+        main = (STACK / "main.tf").read_text(encoding="utf-8")
+        variables = (STACK / "variables.tf").read_text(encoding="utf-8")
+        outputs = (STACK / "outputs.tf").read_text(encoding="utf-8")
+        plan = (ROOT / "scripts" / "cloudflare-plan.sh").read_text(
+            encoding="utf-8"
+        )
+        ingress = (
+            ROOT / "deploy" / "cloudflared" / "moopiew-ingress.yml.example"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('resource "cloudflare_dns_record" "chat"', main)
+        self.assertIn('comment = "OpenWebUI chat via Cloudflare Tunnel"', main)
+        self.assertIn('var.chat_hostname, service = var.chat_origin', main)
+        self.assertIn('default     = "chat.zeaz.dev"', variables)
+        self.assertIn('default     = "http://127.0.0.1:3000"', variables)
+        self.assertIn('var.chat_origin == "http://127.0.0.1:3000"', variables)
+        self.assertIn('output "chat_url"', outputs)
+        self.assertIn('"https://${var.chat_hostname}"', outputs)
+        self.assertIn('TF_VAR_chat_hostname="${CHAT_HOSTNAME:-chat.zeaz.dev}"', plan)
+        self.assertIn('TF_VAR_chat_origin="${CHAT_ORIGIN:-http://127.0.0.1:3000}"', plan)
+        self.assertIn("hostname: chat.zeaz.dev", ingress)
+        self.assertIn("service: http://127.0.0.1:3000", ingress)
 
     def test_zerp_uses_caddy_proxy_instead_of_direct_dev_server(self):
         variables = (STACK / "variables.tf").read_text(encoding="utf-8")

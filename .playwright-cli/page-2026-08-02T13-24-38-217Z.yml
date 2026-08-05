@@ -1,0 +1,132 @@
+- generic [ref=f5e3]:
+  - complementary [ref=f5e4]:
+    - link "กลับหน้าหลัก zTT Shop" [ref=f5e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=f5e6]: Z
+      - generic [ref=f5e7]:
+        - strong [ref=f5e8]: zTT Shop
+        - generic [ref=f5e9]: commerce OS
+    - navigation "Demo navigation" [ref=f5e10]:
+      - button "◈ Command center" [ref=f5e11] [cursor=pointer]:
+        - generic [ref=f5e12]: ◈
+        - text: Command center
+      - button "◌ AI sales inbox 3" [ref=f5e13] [cursor=pointer]:
+        - generic [ref=f5e14]: ◌
+        - text: AI sales inbox
+        - emphasis [ref=f5e15]: "3"
+      - button "✦ Product knowledge" [ref=f5e16] [cursor=pointer]:
+        - generic [ref=f5e17]: ✦
+        - text: Product knowledge
+      - button "▤ Orders & stock" [ref=f5e18] [cursor=pointer]:
+        - generic [ref=f5e19]: ▤
+        - text: Orders & stock
+  - main [ref=f5e20]:
+    - generic [ref=f5e21]:
+      - generic [ref=f5e22]:
+        - generic [ref=f5e23]: Z
+        - strong [ref=f5e24]: zTT Shop
+      - generic [ref=f5e25]:
+        - generic [ref=f5e26]: DEMO DATA
+        - button "↻" [ref=f5e28] [cursor=pointer]
+    - generic [ref=f5e177]:
+      - generic [ref=f5e178]:
+        - generic [ref=f5e179]:
+          - paragraph [ref=f5e180]: UNIFIED CUSTOMER INBOX
+          - heading [level=1] [ref=f5e182]:
+            - text: คุยกับลูกค้า
+            - emphasis [ref=f5e183]: แบบที่คนขายคุย
+        - generic [ref=f5e184]:
+          - strong [ref=f5e185]: AI is on
+          - generic [ref=f5e186]: กดสถานการณ์ด้านล่างเพื่อสาธิต
+      - generic [ref=f5e187]:
+        - complementary [ref=f5e188]:
+          - generic [ref=f5e189]:
+            - strong [ref=f5e190]: Conversations 3
+            - button "ค้นหาบทสนทนา" [ref=f5e191] [cursor=pointer]: ⌕
+          - generic [ref=f5e192]:
+            - button "ทั้งหมด" [ref=f5e193] [cursor=pointer]
+            - button "รอแอดมิน 1" [ref=f5e194] [cursor=pointer]
+          - generic [ref=f5e195]:
+            - button "ม คุณเมย์ ช่วยเรื่องขาลายกับรอยคล้ำไหมคะ? รอยคล้ำ / ขาลาย ตอบเมื่อ 12 วินาทีก่อน" [ref=f5e196] [cursor=pointer]:
+              - generic [ref=f5e197]: ม
+              - generic [ref=f5e198]:
+                - strong [ref=f5e199]: คุณเมย์
+                - generic [ref=f5e200]: ช่วยเรื่องขาลายกับรอยคล้ำไหมคะ?
+                - emphasis [ref=f5e201]: รอยคล้ำ / ขาลาย
+              - generic [ref=f5e202]: ตอบเมื่อ 12 วินาทีก่อน
+            - button "น คุณนก ผิวแพ้ง่าย ใช้แล้วจะแสบไหมคะ ผิวบอบบาง / แสบแดด ตอบเมื่อ 2 นาทีที่แล้ว" [ref=f5e205] [cursor=pointer]:
+              - generic [ref=f5e206]: น
+              - generic [ref=f5e207]:
+                - strong [ref=f5e208]: คุณนก
+                - generic [ref=f5e209]: ผิวแพ้ง่าย ใช้แล้วจะแสบไหมคะ
+                - emphasis [ref=f5e210]: ผิวบอบบาง / แสบแดด
+              - generic [ref=f5e211]: ตอบเมื่อ 2 นาทีที่แล้ว
+            - button "อ คุณอ้อม ขอคุยกับแอดมินคนได้ไหมคะ ขอคุยกับคน รอแอดมิน 4 นาที" [ref=f5e214] [cursor=pointer]:
+              - generic [ref=f5e215]: อ
+              - generic [ref=f5e216]:
+                - strong [ref=f5e217]: คุณอ้อม
+                - generic [ref=f5e218]: ขอคุยกับแอดมินคนได้ไหมคะ
+                - emphasis [ref=f5e219]: ขอคุยกับคน
+              - generic [ref=f5e220]: รอแอดมิน 4 นาที
+        - generic [ref=f5e223]:
+          - generic [ref=f5e224]:
+            - generic [ref=f5e225]:
+              - generic [ref=f5e226]: ม
+              - generic [ref=f5e227]:
+                - strong [ref=f5e228]: คุณเมย์
+                - generic [ref=f5e229]:
+                  - generic [ref=f5e230]: f
+                  - text: Facebook Messenger · AI active
+            - button "AI auto-reply" [ref=f5e231] [cursor=pointer]
+          - generic [ref=f5e232]:
+            - generic [ref=f5e233]:
+              - generic [ref=f5e234]: คุณเมย์
+              - paragraph [ref=f5e235]: ตัวนี้ช่วยเรื่องขาลายกับรอยแผลเป็นไหมคะ โดนแดดแล้วผิวหมองมาก?
+              - generic [ref=f5e236]: 10:42
+            - generic [ref=f5e237]:
+              - generic [ref=f5e238]: AI Sales Bot
+              - paragraph [ref=f5e239]: เข้าใจปัญหาผิวหมองและรอยคล้ำเลยค่ะคุณพี่ 😊 สูตรนี้มี Niacinamide, Ascorbic Acid และ Licorice Extract ที่ช่วยดูแลสีผิวให้ดูสม่ำเสมอขึ้น พร้อมดูแลผิวที่โดนแดดค่ะ ตอนนี้มีโปร 2 แถม 1 ราคา 990 บาท ส่งฟรี มีเก็บเงินปลายทาง รับเป็นชุดนี้เลยไหมคะ?
+              - generic [ref=f5e240]: 10:42
+          - generic [ref=f5e241]:
+            - generic [ref=f5e242]: ลองเดโม
+            - button "ช่วยเรื่องขาลายกับรอยคล้ำไหมคะ" [ref=f5e243] [cursor=pointer]
+            - button "ผิวแห้งลอก ใช้ตัวนี้ได้ไหม" [ref=f5e244] [cursor=pointer]
+            - button "ผิวแพ้ง่ายและแสบแดดค่ะ" [ref=f5e245] [cursor=pointer]
+            - button "สั่ง 2 แถม 1 เก็บเงินปลายทางค่ะ" [ref=f5e246] [cursor=pointer]
+            - button "ขอคุยกับแอดมินคนได้ไหมคะ" [ref=f5e247] [cursor=pointer]
+          - generic [ref=f5e248]:
+            - textbox "พิมพ์คำถามลูกค้าเพื่อทดสอบ AI…" [ref=f5e249]
+            - button "ส่งข้อความ" [ref=f5e250] [cursor=pointer]: ↗
+          - generic [ref=f5e251]:
+            - generic [ref=f5e252]: AI uses Product Knowledge only
+            - button "＋ สร้างออเดอร์ Demo" [ref=f5e253] [cursor=pointer]
+        - complementary [ref=f5e254]:
+          - paragraph [ref=f5e255]: CONVERSATION CONTEXT
+          - heading "ลูกค้ากำลังสนใจ" [level=2] [ref=f5e256]
+          - generic [ref=f5e257]:
+            - generic [ref=f5e258]: Detected intent
+            - strong [ref=f5e259]: รอยคล้ำ / ขาลาย
+            - text: ความมั่นใจ 94% · จากข้อความล่าสุด
+          - generic [ref=f5e260]:
+            - generic [ref=f5e261]: Suggested knowledge
+            - generic [ref=f5e262]:
+              - generic [ref=f5e263]: ✦
+              - generic [ref=f5e264]:
+                - strong [ref=f5e265]: Niacinamide + Licorice
+                - generic [ref=f5e266]: ข้อมูลจาก Product Knowledge
+          - generic [ref=f5e267]:
+            - generic [ref=f5e268]: Recommended close
+            - paragraph [ref=f5e269]:
+              - text: เสนอชุด
+              - strong [ref=f5e270]: 2 แถม 1
+              - text: ราคา
+              - strong [ref=f5e271]: ฿990
+              - text: · ส่งฟรี · COD
+            - button "สร้างออเดอร์จากแชต ↗" [ref=f5e272] [cursor=pointer]:
+              - text: สร้างออเดอร์จากแชต
+              - generic [ref=f5e273]: ↗
+          - generic [ref=f5e274]:
+            - generic [ref=f5e275]: ✓
+            - paragraph [ref=f5e276]:
+              - strong [ref=f5e277]: Guardrail active
+              - generic [ref=f5e278]: ไม่ตอบนอกข้อมูล · ส่งต่อเมื่อขอคน

@@ -58,6 +58,7 @@ machine-readable CI evidence from `dashboard/data/`; see
 | Merchant registration | `/merchant-register.html` |
 | Provider document intake | `/documents.html` (owner key required for upload) |
 | Owner AI console | `/ai.html` |
+| Customer ERP + AI Sales demo | `https://zttshop.zeaz.dev/demo` |
 | Delivery tracking | `/api/tracking/{trackingCode}` |
 | OpenAPI reference | `docs/openapi.yaml` |
 

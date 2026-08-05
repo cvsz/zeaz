@@ -21,6 +21,12 @@ HANDLER_METHODS = {
     "_do_PATCH": "patch",
     "do_DELETE": "delete",
 }
+# The zTTShop host is a separate public surface from the MooPiew API contract.
+# Its host-gated OAuth routes are covered by test_zttshop_site.py instead.
+HOST_ROUTED_ZTTSHOP_PATHS = {
+    "/api/auth/tiktok/start",
+    "/api/auth/tiktok/callback",
+}
 RUNTIME_PATTERN_TEMPLATES = {
     r"(?:/api)?/providers/([a-z0-9-]+)": {
         "/api/providers/{provider}",
@@ -152,6 +158,8 @@ def runtime_operations():
             if value in {"/api/", "/api/admin/"}:
                 continue
             if value.startswith("/api/") or value == "/auth/scb/callback":
+                if value in HOST_ROUTED_ZTTSHOP_PATHS:
+                    continue
                 if not re.search(r"[()[\]|+?*\\]", value):
                     operations.add((method, value))
                     continue

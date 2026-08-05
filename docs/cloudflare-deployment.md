@@ -2,13 +2,25 @@
 
 The project uses the same split of responsibilities as z-platform:
 
-1. Terraform owns the proxied DNS CNAME for `moopiew.zeaz.dev`.
+1. Terraform owns the proxied DNS CNAMEs for the public application hosts,
+   including `chat.zeaz.dev` for OpenWebUI.
 2. An existing Cloudflare Tunnel owns the public-to-private connection.
 3. `cloudflared` forwards the application to Caddy on `127.0.0.1:8080`.
 4. `cloudflared` forwards the dashboard hostname to Caddy on
    `127.0.0.1:80`; Caddy applies Basic Auth and proxies to
    `127.0.0.1:8082`.
 5. Cloudflare Access and Caddy Basic Auth protect `piewdash.zeaz.dev`.
+
+The Arin frontend is built from `sites/arin`, published to `deploy/arin`, and
+served by the host-specific Caddy route for `arin.zeaz.dev` on the same
+reviewed loopback origin. Caddy proxies Arin's `/api/*`, `/preview/*`, and
+`/app/*` paths to the separate loopback backend on `127.0.0.1:8787`; Arin data
+is kept in the ignored `data/arin/` directory and never shares MooPiew's
+database.
+
+OpenWebUI is published through the same tunnel at `chat.zeaz.dev` and reaches
+the host-published container port `127.0.0.1:3000`. Keep the tunnel origin on
+the host port; the container's internal port `8080` is not the tunnel target.
 
 ## Required operator values
 
@@ -76,3 +88,30 @@ authenticated `https://piewdash.zeaz.dev/api/health`, `/api/ready`, and the
 `401` or a Cloudflare Access login redirect, never dashboard data. A 502
 response indicates an unreachable origin; a 530 indicates that Cloudflare
 cannot reach a healthy tunnel.
+
+## Arin release and runtime
+
+On the origin host, create the ignored runtime environment from
+`sites/arin/.env.arin.example`, set a unique `ARIN_CONNECTOR_KEY`, and keep the
+file mode `0600`. Install the user service and build the frontend:
+
+```bash
+install -m 600 sites/arin/.env.arin.example .env.arin
+# Replace ARIN_CONNECTOR_KEY with a generated Fernet key before starting.
+systemctl --user daemon-reload
+systemctl --user enable --now arin.service
+npm --prefix sites/arin test
+install -d -m 700 deploy/arin
+cp -a sites/arin/dist/. deploy/arin/
+sudo systemctl reload "moopiew-proxy-system@$USER.service"
+```
+
+Verify the backend before opening the public hostname:
+
+```bash
+curl -fsS http://127.0.0.1:8787/api/health
+curl -fsS https://arin.zeaz.dev/api/health
+```
+
+The complete backend flow is covered by
+`PYTHONPATH=sites/arin python3 sites/arin/scripts/integration-smoke.py`.
