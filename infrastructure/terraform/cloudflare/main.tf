@@ -147,6 +147,7 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "moopiew" {
       { hostname = var.qwen_hostname, service = var.qwen_origin },
       { hostname = var.chat_hostname, service = var.chat_origin },
       { hostname = var.piewdash_hostname, service = var.piewdash_origin },
+      { hostname = var.zdash_hostname, service = var.zdash_origin },
       { hostname = var.zerp_hostname, service = var.zerp_origin },
       { hostname = var.cmeerp_hostname, service = var.cmeerp_origin },
       { hostname = var.arin_hostname, service = var.arin_origin },
