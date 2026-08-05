@@ -10,6 +10,8 @@ ingress:
     service: http://127.0.0.1:3000
   - hostname: piewdash.zeaz.dev
     service: http://127.0.0.1:80
+  - hostname: zdash.zeaz.dev
+    service: http://127.0.0.1:18080
   - hostname: zerp.zeaz.dev
     service: http://127.0.0.1:80
   - hostname: cme.zeaz.dev

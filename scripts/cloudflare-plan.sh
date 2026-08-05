@@ -48,6 +48,8 @@ export TF_VAR_chat_hostname="${CHAT_HOSTNAME:-chat.zeaz.dev}"
 export TF_VAR_chat_origin="${CHAT_ORIGIN:-http://127.0.0.1:3000}"
 export TF_VAR_piewdash_hostname="${PIEWDASH_HOSTNAME:-piewdash.zeaz.dev}"
 export TF_VAR_piewdash_origin="${PIEWDASH_ORIGIN:-http://127.0.0.1:80}"
+export TF_VAR_zdash_hostname="${ZDASH_HOSTNAME:-zdash.zeaz.dev}"
+export TF_VAR_zdash_origin="${ZDASH_ORIGIN:-http://127.0.0.1:18080}"
 export TF_VAR_zerp_hostname="${ZERP_HOSTNAME:-zerp.zeaz.dev}"
 export TF_VAR_zerp_origin="${ZERP_ORIGIN:-http://127.0.0.1:80}"
 export TF_VAR_cmeerp_hostname="${CMEERP_HOSTNAME:-cme.zeaz.dev}"
@@ -57,6 +59,9 @@ export TF_VAR_zai_origin="${ZAI_ORIGIN:-http://127.0.0.1:8765}"
 export TF_VAR_auth_hostname="${AUTH_HOSTNAME:-auth.zeaz.dev}"
 export TF_VAR_auth_origin="${AUTH_ORIGIN:-http://127.0.0.1:8080}"
 export TF_VAR_piewdash_access_allowed_emails="$PIEWDASH_ACCESS_ALLOWED_EMAILS"
+if [[ -n "${ZDASH_ACCESS_ALLOWED_EMAILS:-}" ]]; then
+  export TF_VAR_zdash_access_allowed_emails="$ZDASH_ACCESS_ALLOWED_EMAILS"
+fi
 
 "$TF_BIN" -chdir="$STACK" fmt -check -recursive
 if [[ "${TERRAFORM_BACKEND_TYPE:-local}" == "r2" ]]; then
