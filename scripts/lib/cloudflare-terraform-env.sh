@@ -35,6 +35,16 @@ cloudflare_load_terraform_env() {
   source "$CLOUDFLARE_ENV_FILE"
   set +a
 
+  if [[ "${FORCE_ENABLE_ZEAZ_ONE:-false}" == "true" ]]; then
+    ZEAZ_ONE_ENABLED=true
+  fi
+  if [[ "${FORCE_ENABLE_ZEAZ_ONE_API_ROUTE:-false}" == "true" ]]; then
+    ZEAZ_ONE_API_ROUTE_ENABLED=true
+  fi
+  if [[ "${FORCE_ENABLE_ZEAZ_ONE_WWW_REDIRECT:-false}" == "true" ]]; then
+    ZEAZ_ONE_WWW_REDIRECT_ENABLED=true
+  fi
+
   local key
   for key in \
     CLOUDFLARE_API_TOKEN \
@@ -90,6 +100,17 @@ cloudflare_load_terraform_env() {
   export TF_VAR_auth_hostname="${AUTH_HOSTNAME:-auth.zeaz.dev}"
   export TF_VAR_auth_origin="${AUTH_ORIGIN:-http://127.0.0.1:8080}"
   export TF_VAR_piewdash_access_allowed_emails="$PIEWDASH_ACCESS_ALLOWED_EMAILS"
+
+  export TF_VAR_enable_zeaz_one="${ZEAZ_ONE_ENABLED:-false}"
+  export TF_VAR_enable_zeaz_one_api_route="${ZEAZ_ONE_API_ROUTE_ENABLED:-false}"
+  export TF_VAR_enable_zeaz_one_www_redirect="${ZEAZ_ONE_WWW_REDIRECT_ENABLED:-false}"
+  export TF_VAR_zeaz_one_hostname="${ZEAZ_ONE_HOSTNAME:-one.zeaz.dev}"
+  export TF_VAR_zeaz_one_origin="${ZEAZ_ONE_ORIGIN:-http://127.0.0.1:18081}"
+  export TF_VAR_zeaz_one_api_hostname="${ZEAZ_ONE_API_HOSTNAME:-api.zeaz.dev}"
+  export TF_VAR_zeaz_one_api_origin="${ZEAZ_ONE_API_ORIGIN:-http://127.0.0.1:18084}"
+  export TF_VAR_zeaz_one_support_hostname="${ZEAZ_ONE_SUPPORT_HOSTNAME:-support.zeaz.dev}"
+  export TF_VAR_zeaz_one_support_origin="${ZEAZ_ONE_SUPPORT_ORIGIN:-http://127.0.0.1:18083}"
+  export TF_VAR_zeaz_one_www_hostname="${ZEAZ_ONE_WWW_HOSTNAME:-www.zeaz.dev}"
 
   unset TF_VAR_zdash_access_allowed_emails || true
   if [[ -n "${ZDASH_ACCESS_ALLOWED_EMAILS:-}" ]]; then

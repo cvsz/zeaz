@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1.0",
+  "id": "zeaz-one",
+  "name": "ZEAZ One",
+  "status": "product-strategy-baseline",
+  "planningDate": "2026-08",
+  "targetLaunch": {
+    "from": "2028-05",
+    "to": "2028-10"
+  },
+  "canonicalUrl": "https://one.zeaz.dev/",
+  "corporateUrl": "https://www.zeaz.dev/products/zeaz-one/",
+  "businessUrl": "https://one.zeaz.dev/business/",
+  "supportUrl": "https://support.zeaz.dev/zeaz-one/",
+  "apiUrl": "https://api.zeaz.dev/v1/products/zeaz-one",
+  "positioning": "A secure premium work phone that is also an excellent everyday flagship.",
+  "productPromise": "Your secure workday, in one phone.",
+  "platform": "Android",
+  "supportTargets": {
+    "securityYears": 7,
+    "majorAndroidUpgrades": 6
+  },
+  "models": [
+    {
+      "name": "ZEAZ One",
+      "memoryGb": 12,
+      "storageGb": 256,
+      "targetMsrpUsd": 1099
+    },
+    {
+      "name": "ZEAZ One Pro",
+      "memoryGb": 16,
+      "storageGb": 512,
+      "targetMsrpUsd": 1249
+    },
+    {
+      "name": "ZEAZ One Pro Business",
+      "memoryGb": 16,
+      "storageGb": 512,
+      "targetMsrpUsd": 1399
+    }
+  ],
+  "hardwareTargets": {
+    "display": "6.6–6.8-inch premium LTPO OLED, adaptive 1–120 Hz",
+    "batteryMah": {
+      "min": 5200,
+      "max": 5600
+    },
+    "wiredChargingW": 65,
+    "wirelessChargingW": 30,
+    "waterResistance": "IP68 target",
+    "connectivity": [
+      "Global 5G Sub-6",
+      "LTE",
+      "eSIM",
+      "dual SIM",
+      "Wi-Fi",
+      "Bluetooth",
+      "NFC",
+      "multi-band GNSS",
+      "USB 3.x",
+      "DisplayPort Alt Mode"
+    ]
+  },
+  "programme": {
+    "engineeringNreUsd": {
+      "min": 9100000,
+      "max": 24200000
+    },
+    "totalCapitalUsd": {
+      "min": 30000000,
+      "max": 70000000
+    },
+    "yearOneSalesUnits": {
+      "min": 100000,
+      "max": 200000
+    }
+  },
+  "disclaimer": "Planning targets only. Specifications, prices, dates, markets and services may change."
+}

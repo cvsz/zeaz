@@ -22,4 +22,10 @@ ingress:
     service: http://127.0.0.1:8080
   - hostname: zai.zeaz.dev
     service: http://127.0.0.1:8765
+  # ZEAZ One website and support routes. api.zeaz.dev remains the existing
+  # shared API and receives only a path-specific Cloudflare Workers route.
+  - hostname: one.zeaz.dev
+    service: http://127.0.0.1:18081
+  - hostname: support.zeaz.dev
+    service: http://127.0.0.1:18083
   - service: http_status:404

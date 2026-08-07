@@ -19,6 +19,16 @@ set -a
 source "$ENV_FILE"
 set +a
 
+if [[ "${FORCE_ENABLE_ZEAZ_ONE:-false}" == "true" ]]; then
+  ZEAZ_ONE_ENABLED=true
+fi
+if [[ "${FORCE_ENABLE_ZEAZ_ONE_API_ROUTE:-false}" == "true" ]]; then
+  ZEAZ_ONE_API_ROUTE_ENABLED=true
+fi
+if [[ "${FORCE_ENABLE_ZEAZ_ONE_WWW_REDIRECT:-false}" == "true" ]]; then
+  ZEAZ_ONE_WWW_REDIRECT_ENABLED=true
+fi
+
 for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_ZONE_ID CLOUDFLARE_TUNNEL_ID; do
   [[ -n "${!key:-}" ]] || { echo "Missing $key in $ENV_FILE" >&2; exit 1; }
 done
@@ -59,6 +69,16 @@ export TF_VAR_zai_origin="${ZAI_ORIGIN:-http://127.0.0.1:8765}"
 export TF_VAR_auth_hostname="${AUTH_HOSTNAME:-auth.zeaz.dev}"
 export TF_VAR_auth_origin="${AUTH_ORIGIN:-http://127.0.0.1:8080}"
 export TF_VAR_piewdash_access_allowed_emails="$PIEWDASH_ACCESS_ALLOWED_EMAILS"
+export TF_VAR_enable_zeaz_one="${ZEAZ_ONE_ENABLED:-false}"
+export TF_VAR_enable_zeaz_one_api_route="${ZEAZ_ONE_API_ROUTE_ENABLED:-false}"
+export TF_VAR_enable_zeaz_one_www_redirect="${ZEAZ_ONE_WWW_REDIRECT_ENABLED:-false}"
+export TF_VAR_zeaz_one_hostname="${ZEAZ_ONE_HOSTNAME:-one.zeaz.dev}"
+export TF_VAR_zeaz_one_origin="${ZEAZ_ONE_ORIGIN:-http://127.0.0.1:18081}"
+export TF_VAR_zeaz_one_api_hostname="${ZEAZ_ONE_API_HOSTNAME:-api.zeaz.dev}"
+export TF_VAR_zeaz_one_api_origin="${ZEAZ_ONE_API_ORIGIN:-http://127.0.0.1:18084}"
+export TF_VAR_zeaz_one_support_hostname="${ZEAZ_ONE_SUPPORT_HOSTNAME:-support.zeaz.dev}"
+export TF_VAR_zeaz_one_support_origin="${ZEAZ_ONE_SUPPORT_ORIGIN:-http://127.0.0.1:18083}"
+export TF_VAR_zeaz_one_www_hostname="${ZEAZ_ONE_WWW_HOSTNAME:-www.zeaz.dev}"
 if [[ -n "${ZDASH_ACCESS_ALLOWED_EMAILS:-}" ]]; then
   export TF_VAR_zdash_access_allowed_emails="$ZDASH_ACCESS_ALLOWED_EMAILS"
 fi
