@@ -17,6 +17,7 @@ class ZeazOneBundleTests(unittest.TestCase):
             "public/one/privacy/index.html",
             "public/one/terms/index.html",
             "public/one/product-plan/index.html",
+            "public/one/product.json",
             "public/support/zeaz-one/index.html",
             "api/product.json",
             "api/server.mjs",
@@ -33,11 +34,15 @@ class ZeazOneBundleTests(unittest.TestCase):
             self.assertIn(str(port), compose)
         self.assertNotIn('"0.0.0.0:', compose)
 
-    def test_product_api_contains_three_models(self):
+    def test_product_api_contains_three_models_and_public_source_matches(self):
         product = json.loads(
             (SOURCE / "api/product.json").read_text(encoding="utf-8")
         )
+        public_product = json.loads(
+            (SOURCE / "public/one/product.json").read_text(encoding="utf-8")
+        )
         self.assertEqual(len(product["models"]), 3)
+        self.assertEqual(product, public_product)
 
     def test_root_sync_is_atomic_and_does_not_require_remote_ssh(self):
         sync = (ROOT / "scripts" / "zeaz-one-sync.sh").read_text(
@@ -47,6 +52,7 @@ class ZeazOneBundleTests(unittest.TestCase):
         self.assertIn('cp -a "$SOURCE_ROOT/." "$incoming/"', sync)
         self.assertIn("ln -sfn", sync)
         self.assertIn("mv -Tf", sync)
+        self.assertIn("FORCE_ENABLE_ZEAZ_ONE_API_ROUTE=true", sync)
         self.assertNotIn("rsync", sync)
         self.assertNotIn("REMOTE=", sync)
 
