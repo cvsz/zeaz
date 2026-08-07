@@ -152,7 +152,10 @@ class CloudflareTerraformTests(unittest.TestCase):
         loader = read(ROOT / "scripts" / "lib" / "cloudflare-terraform-env.sh")
 
         self.assertNotIn("enable_zeaz_one_www_redirect", zeaz_one)
-        self.assertNotIn("cloudflare_workers_route\" \"zeaz_one_www_redirect", zeaz_one)
+        self.assertNotIn(
+            'resource "cloudflare_workers_route" "zeaz_one_www_redirect"',
+            zeaz_one,
+        )
         self.assertNotIn("zeaz-one-www-redirect", zeaz_one)
         self.assertNotIn("--www-redirect", sync)
         self.assertNotIn("ZEAZ_ONE_WWW_REDIRECT", plan)
