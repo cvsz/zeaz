@@ -1,7 +1,13 @@
 variable "enable_zeaz_one" {
   type        = bool
   default     = false
-  description = "Create ZEAZ One tunnel DNS records and include its ingress routes."
+  description = "Create ZEAZ One website and support tunnel DNS records and include their ingress routes."
+}
+
+variable "enable_zeaz_one_api_route" {
+  type        = bool
+  default     = false
+  description = "Create only the ZEAZ One product path on the existing shared api.zeaz.dev hostname."
 }
 
 variable "enable_zeaz_one_www_redirect" {
@@ -35,18 +41,18 @@ variable "zeaz_one_origin" {
 variable "zeaz_one_api_hostname" {
   type        = string
   default     = "api.zeaz.dev"
-  description = "Public hostname for the ZEAZ One product API."
+  description = "Existing shared API hostname receiving only the ZEAZ One path-specific Worker route."
 
   validation {
-    condition     = endswith(lower(var.zeaz_one_api_hostname), ".${lower(var.zone_name)}")
-    error_message = "zeaz_one_api_hostname must be a subdomain of zone_name."
+    condition     = lower(var.zeaz_one_api_hostname) == "api.${lower(var.zone_name)}"
+    error_message = "zeaz_one_api_hostname must be the shared api hostname of zone_name."
   }
 }
 
 variable "zeaz_one_api_origin" {
   type        = string
   default     = "http://127.0.0.1:18084"
-  description = "Loopback-only ZEAZ One product API origin."
+  description = "Loopback-only API parity and health origin; it is not published as the api.zeaz.dev DNS target."
 
   validation {
     condition     = var.zeaz_one_api_origin == "http://127.0.0.1:18084"
@@ -90,7 +96,6 @@ variable "zeaz_one_www_hostname" {
 locals {
   zeaz_one_ingress = var.enable_zeaz_one ? [
     { hostname = var.zeaz_one_hostname, service = var.zeaz_one_origin },
-    { hostname = var.zeaz_one_api_hostname, service = var.zeaz_one_api_origin },
     { hostname = var.zeaz_one_support_hostname, service = var.zeaz_one_support_origin },
   ] : []
 }
@@ -106,17 +111,6 @@ resource "cloudflare_dns_record" "zeaz_one" {
   comment = "ZEAZ One website via Cloudflare Tunnel"
 }
 
-resource "cloudflare_dns_record" "zeaz_one_api" {
-  count   = var.enable_zeaz_one ? 1 : 0
-  zone_id = var.cloudflare_zone_id
-  name    = var.zeaz_one_api_hostname
-  type    = "CNAME"
-  content = local.tunnel_cname
-  ttl     = 1
-  proxied = true
-  comment = "ZEAZ One product API via Cloudflare Tunnel"
-}
-
 resource "cloudflare_dns_record" "zeaz_one_support" {
   count   = var.enable_zeaz_one ? 1 : 0
   zone_id = var.cloudflare_zone_id
@@ -126,6 +120,23 @@ resource "cloudflare_dns_record" "zeaz_one_support" {
   ttl     = 1
   proxied = true
   comment = "ZEAZ One support via Cloudflare Tunnel"
+}
+
+resource "cloudflare_workers_script" "zeaz_one_api" {
+  count              = var.enable_zeaz_one && var.enable_zeaz_one_api_route ? 1 : 0
+  account_id         = var.cloudflare_account_id
+  script_name        = "zeaz-one-product-api"
+  compatibility_date = "2026-08-07"
+  main_module        = "zeaz-one-product-api.js"
+  content_file       = "${path.module}/workers/zeaz-one-product-api.js"
+  content_sha256     = filesha256("${path.module}/workers/zeaz-one-product-api.js")
+}
+
+resource "cloudflare_workers_route" "zeaz_one_api" {
+  count   = var.enable_zeaz_one && var.enable_zeaz_one_api_route ? 1 : 0
+  zone_id = var.cloudflare_zone_id
+  pattern = "${var.zeaz_one_api_hostname}/v1/products/zeaz-one*"
+  script  = cloudflare_workers_script.zeaz_one_api[0].script_name
 }
 
 resource "cloudflare_workers_script" "zeaz_one_www_redirect" {
@@ -152,7 +163,7 @@ output "zeaz_one_url" {
 
 output "zeaz_one_api_url" {
   value       = "https://${var.zeaz_one_api_hostname}/v1/products/zeaz-one"
-  description = "ZEAZ One product API URL."
+  description = "Path-specific ZEAZ One product API URL on the existing shared API hostname."
 }
 
 output "zeaz_one_support_url" {
