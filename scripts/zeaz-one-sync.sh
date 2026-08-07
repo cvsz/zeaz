@@ -99,6 +99,7 @@ if [[ "$deploy_local" == true ]]; then
   [[ -f "$SOURCE_ROOT/docker-compose.yml" ]] || fail "ZEAZ One source is incomplete: $SOURCE_ROOT"
   [[ -f "$SOURCE_ROOT/api/server.mjs" ]] || fail "ZEAZ One API source is missing."
   [[ -f "$SOURCE_ROOT/public/one/index.html" ]] || fail "ZEAZ One website source is missing."
+  [[ -f "$SOURCE_ROOT/public/one/product.json" ]] || fail "ZEAZ One public product source is missing."
 
   mkdir -p "$RUNTIME_ROOT" "$RELEASES_DIR"
   release_id="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -135,6 +136,7 @@ if [[ "$deploy_local" == true ]]; then
   healthy=false
   for _ in $(seq 1 30); do
     if curl --fail --silent http://127.0.0.1:18081/ >/dev/null \
+      && curl --fail --silent http://127.0.0.1:18081/product.json >/dev/null \
       && curl --fail --silent http://127.0.0.1:18082/products/zeaz-one/ >/dev/null \
       && curl --fail --silent http://127.0.0.1:18083/zeaz-one/ >/dev/null \
       && curl --fail --silent http://127.0.0.1:18084/health >/dev/null; then
@@ -171,6 +173,7 @@ fi
 if [[ "$cloudflare_mode" != "none" ]]; then
   [[ -x "$ROOT/scripts/cloudflare-apply.sh" ]] || fail "Cloudflare apply wrapper is missing."
   export FORCE_ENABLE_ZEAZ_ONE=true
+  export FORCE_ENABLE_ZEAZ_ONE_API_ROUTE=true
   if [[ "$enable_www_redirect" == true ]]; then
     export FORCE_ENABLE_ZEAZ_ONE_WWW_REDIRECT=true
   fi
