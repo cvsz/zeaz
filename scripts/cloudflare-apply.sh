@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
 # shellcheck source=scripts/lib/cloudflare-terraform-env.sh
 source "$SCRIPT_DIR/lib/cloudflare-terraform-env.sh"
 
@@ -17,7 +17,7 @@ Options:
   --apply          Apply the saved plan after it is displayed.
   --skip-import    Do not run DNS import/reconciliation.
   --all-dns        Reconcile all enabled managed DNS records.
-  --zeaz-one       Enable and reconcile only ZEAZ One DNS records before plan.
+  --zeaz-one       Enable ZEAZ One, its shared-API path route and its tunnel DNS.
   --plan-file PATH Save the plan at PATH. Default: Terraform stack/tfplan.
   -h, --help
 USAGE
@@ -52,6 +52,7 @@ done
 }
 if [[ "$zeaz_one" == true ]]; then
   export FORCE_ENABLE_ZEAZ_ONE=true
+  export FORCE_ENABLE_ZEAZ_ONE_API_ROUTE=true
 fi
 
 cloudflare_require_command curl
@@ -69,7 +70,7 @@ if [[ "$reconcile_dns" == true ]]; then
   if [[ "$all_dns" == true ]]; then
     "$SCRIPT_DIR/cloudflare-import-dns.sh" --all
   elif [[ "$zeaz_one" == true ]]; then
-    FORCE_ENABLE_ZEAZ_ONE=true "$SCRIPT_DIR/cloudflare-import-dns.sh" zeaz-one zeaz-one-api zeaz-one-support
+    FORCE_ENABLE_ZEAZ_ONE=true "$SCRIPT_DIR/cloudflare-import-dns.sh" zeaz-one zeaz-one-support
   else
     "$SCRIPT_DIR/cloudflare-import-dns.sh" zai auth zdash
   fi
@@ -149,13 +150,13 @@ if [[ "${ZEAZ_ONE_ENABLED:-false}" == "true" ]]; then
     fi
   done
 
-  declare -a hosts=(
-    "${ZEAZ_ONE_HOSTNAME:-one.zeaz.dev}"
-    "${ZEAZ_ONE_API_HOSTNAME:-api.zeaz.dev}"
-    "${ZEAZ_ONE_SUPPORT_HOSTNAME:-support.zeaz.dev}"
+  declare -a urls=(
+    "https://${ZEAZ_ONE_HOSTNAME:-one.zeaz.dev}/"
+    "https://${ZEAZ_ONE_API_HOSTNAME:-api.zeaz.dev}/v1/products/zeaz-one"
+    "https://${ZEAZ_ONE_SUPPORT_HOSTNAME:-support.zeaz.dev}/zeaz-one/"
   )
-  for hostname in "${hosts[@]}"; do
-    status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --head "https://$hostname" || true)"
-    [[ -z "$status" ]] || echo "Remote $hostname HTTP status: $status"
+  for url in "${urls[@]}"; do
+    status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --head "$url" || true)"
+    [[ -z "$status" ]] || echo "Remote $url HTTP status: $status"
   done
 fi
