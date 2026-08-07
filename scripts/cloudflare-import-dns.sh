@@ -16,8 +16,11 @@ Terraform state. No DNS record is created, updated, or deleted by this script.
 Default resources:
   zai auth zdash
 
-ZEAZ One resources:
-  zeaz-one zeaz-one-api zeaz-one-support
+ZEAZ One tunnel DNS resources:
+  zeaz-one zeaz-one-support
+
+The shared api.zeaz.dev record is deliberately not imported or changed; ZEAZ
+One uses a path-specific Workers route on that existing hostname.
 
 Options:
   --check   Show matching records without changing Terraform state.
@@ -59,7 +62,6 @@ declare -A resources=(
   [zai]="cloudflare_dns_record.zai"
   [auth]="cloudflare_dns_record.auth"
   [zeaz-one]="cloudflare_dns_record.zeaz_one[0]"
-  [zeaz-one-api]="cloudflare_dns_record.zeaz_one_api[0]"
   [zeaz-one-support]="cloudflare_dns_record.zeaz_one_support[0]"
 )
 
@@ -76,13 +78,12 @@ declare -A hostnames=(
   [zai]="${ZAI_HOSTNAME:-zai.zeaz.dev}"
   [auth]="${AUTH_HOSTNAME:-auth.zeaz.dev}"
   [zeaz-one]="${ZEAZ_ONE_HOSTNAME:-one.zeaz.dev}"
-  [zeaz-one-api]="${ZEAZ_ONE_API_HOSTNAME:-api.zeaz.dev}"
   [zeaz-one-support]="${ZEAZ_ONE_SUPPORT_HOSTNAME:-support.zeaz.dev}"
 )
 
 declare -a all_targets=(moopiew arin zttshop qwen chat piewdash zdash zerp cmeerp zai auth)
 if [[ "${ZEAZ_ONE_ENABLED:-false}" == "true" ]]; then
-  all_targets+=(zeaz-one zeaz-one-api zeaz-one-support)
+  all_targets+=(zeaz-one zeaz-one-support)
 fi
 
 declare -a targets=()
