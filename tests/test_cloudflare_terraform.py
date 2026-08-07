@@ -114,7 +114,7 @@ class CloudflareTerraformTests(unittest.TestCase):
         outputs = read(STACK / "outputs.tf")
 
         self.assertIn('variable "enable_zeaz_one"', zeaz_one)
-        self.assertGreaterEqual(zeaz_one.count('default     = false'), 3)
+        self.assertGreaterEqual(zeaz_one.count('default     = false'), 2)
         self.assertIn('default     = "one.zeaz.dev"', zeaz_one)
         self.assertIn('default     = "http://127.0.0.1:18081"', zeaz_one)
         self.assertIn('default     = "api.zeaz.dev"', zeaz_one)
@@ -145,19 +145,19 @@ class CloudflareTerraformTests(unittest.TestCase):
         self.assertIn('const PRODUCT_SOURCE = "https://one.zeaz.dev/product.json";', api_worker)
         self.assertIn("cacheEverything: true", api_worker)
 
-    def test_zeaz_one_worker_redirect_is_separately_gated(self):
+    def test_corporate_www_is_not_managed_by_this_stack(self):
         zeaz_one = read(STACK / "zeaz-one.tf")
-        worker = read(STACK / "workers" / "zeaz-one-www-redirect.js")
+        sync = read(ROOT / "scripts" / "zeaz-one-sync.sh")
+        plan = read(ROOT / "scripts" / "cloudflare-plan.sh")
+        loader = read(ROOT / "scripts" / "lib" / "cloudflare-terraform-env.sh")
 
-        gate = "var.enable_zeaz_one && var.enable_zeaz_one_www_redirect ? 1 : 0"
-        self.assertEqual(zeaz_one.count(gate), 2)
-        self.assertIn(
-            'pattern = "${var.zeaz_one_www_hostname}/products/zeaz-one*"',
-            zeaz_one,
-        )
-        self.assertIn('script_name        = "zeaz-one-www-redirect"', zeaz_one)
-        self.assertIn('const TARGET_ORIGIN = "https://one.zeaz.dev";', worker)
-        self.assertIn("Response.redirect(target.toString(), 308)", worker)
+        self.assertNotIn("enable_zeaz_one_www_redirect", zeaz_one)
+        self.assertNotIn("cloudflare_workers_route\" \"zeaz_one_www_redirect", zeaz_one)
+        self.assertNotIn("zeaz-one-www-redirect", zeaz_one)
+        self.assertNotIn("--www-redirect", sync)
+        self.assertNotIn("ZEAZ_ONE_WWW_REDIRECT", plan)
+        self.assertNotIn("ZEAZ_ONE_WWW_REDIRECT", loader)
+        self.assertFalse((STACK / "workers" / "zeaz-one-www-redirect.js").exists())
 
     def test_zeaz_one_scripts_and_examples_match(self):
         plan = read(ROOT / "scripts" / "cloudflare-plan.sh")
@@ -176,6 +176,7 @@ class CloudflareTerraformTests(unittest.TestCase):
             self.assertIn("TF_VAR_zeaz_one_origin", text)
             self.assertIn("TF_VAR_zeaz_one_api_origin", text)
             self.assertIn("TF_VAR_zeaz_one_support_origin", text)
+            self.assertNotIn("TF_VAR_enable_zeaz_one_www_redirect", text)
         self.assertIn('[zeaz-one]="cloudflare_dns_record.zeaz_one[0]"', importer)
         self.assertIn("--zeaz-one", apply)
         self.assertIn("FORCE_ENABLE_ZEAZ_ONE_API_ROUTE=true", apply)
@@ -183,7 +184,9 @@ class CloudflareTerraformTests(unittest.TestCase):
         self.assertIn("service: http://127.0.0.1:18081", ingress)
         self.assertIn("ZEAZ_ONE_ENABLED=false", env_example)
         self.assertIn("ZEAZ_ONE_API_ROUTE_ENABLED=false", env_example)
-        self.assertIn("enable_zeaz_one_api_route    = false", tfvars_example)
+        self.assertNotIn("ZEAZ_ONE_WWW_REDIRECT_ENABLED", env_example)
+        self.assertIn("enable_zeaz_one_api_route = false", tfvars_example)
+        self.assertNotIn("enable_zeaz_one_www_redirect", tfvars_example)
 
 
 if __name__ == "__main__":
