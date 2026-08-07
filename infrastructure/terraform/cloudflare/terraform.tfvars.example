@@ -27,6 +27,7 @@ zdash_access_allowed_emails = []
 
 # ZEAZ One remains disabled unless an operator explicitly enables it.
 enable_zeaz_one              = false
+enable_zeaz_one_api_route    = false
 enable_zeaz_one_www_redirect = false
 zeaz_one_hostname            = "one.zeaz.dev"
 zeaz_one_origin              = "http://127.0.0.1:18081"
