@@ -1,0 +1,166 @@
+variable "enable_zeaz_one" {
+  type        = bool
+  default     = false
+  description = "Create ZEAZ One tunnel DNS records and include its ingress routes."
+}
+
+variable "enable_zeaz_one_www_redirect" {
+  type        = bool
+  default     = false
+  description = "Create the path-specific Worker route that redirects www.zeaz.dev/products/zeaz-one to one.zeaz.dev."
+}
+
+variable "zeaz_one_hostname" {
+  type        = string
+  default     = "one.zeaz.dev"
+  description = "Primary public hostname for ZEAZ One."
+
+  validation {
+    condition     = endswith(lower(var.zeaz_one_hostname), ".${lower(var.zone_name)}")
+    error_message = "zeaz_one_hostname must be a subdomain of zone_name."
+  }
+}
+
+variable "zeaz_one_origin" {
+  type        = string
+  default     = "http://127.0.0.1:18081"
+  description = "Loopback-only ZEAZ One website origin."
+
+  validation {
+    condition     = var.zeaz_one_origin == "http://127.0.0.1:18081"
+    error_message = "zeaz_one_origin must use the reviewed loopback origin at http://127.0.0.1:18081."
+  }
+}
+
+variable "zeaz_one_api_hostname" {
+  type        = string
+  default     = "api.zeaz.dev"
+  description = "Public hostname for the ZEAZ One product API."
+
+  validation {
+    condition     = endswith(lower(var.zeaz_one_api_hostname), ".${lower(var.zone_name)}")
+    error_message = "zeaz_one_api_hostname must be a subdomain of zone_name."
+  }
+}
+
+variable "zeaz_one_api_origin" {
+  type        = string
+  default     = "http://127.0.0.1:18084"
+  description = "Loopback-only ZEAZ One product API origin."
+
+  validation {
+    condition     = var.zeaz_one_api_origin == "http://127.0.0.1:18084"
+    error_message = "zeaz_one_api_origin must use the reviewed loopback origin at http://127.0.0.1:18084."
+  }
+}
+
+variable "zeaz_one_support_hostname" {
+  type        = string
+  default     = "support.zeaz.dev"
+  description = "Public hostname for ZEAZ One support."
+
+  validation {
+    condition     = endswith(lower(var.zeaz_one_support_hostname), ".${lower(var.zone_name)}")
+    error_message = "zeaz_one_support_hostname must be a subdomain of zone_name."
+  }
+}
+
+variable "zeaz_one_support_origin" {
+  type        = string
+  default     = "http://127.0.0.1:18083"
+  description = "Loopback-only ZEAZ One support origin."
+
+  validation {
+    condition     = var.zeaz_one_support_origin == "http://127.0.0.1:18083"
+    error_message = "zeaz_one_support_origin must use the reviewed loopback origin at http://127.0.0.1:18083."
+  }
+}
+
+variable "zeaz_one_www_hostname" {
+  type        = string
+  default     = "www.zeaz.dev"
+  description = "Existing corporate hostname receiving the path-specific ZEAZ One redirect route."
+
+  validation {
+    condition     = lower(var.zeaz_one_www_hostname) == "www.${lower(var.zone_name)}"
+    error_message = "zeaz_one_www_hostname must be the www hostname of zone_name."
+  }
+}
+
+locals {
+  zeaz_one_ingress = var.enable_zeaz_one ? [
+    { hostname = var.zeaz_one_hostname, service = var.zeaz_one_origin },
+    { hostname = var.zeaz_one_api_hostname, service = var.zeaz_one_api_origin },
+    { hostname = var.zeaz_one_support_hostname, service = var.zeaz_one_support_origin },
+  ] : []
+}
+
+resource "cloudflare_dns_record" "zeaz_one" {
+  count   = var.enable_zeaz_one ? 1 : 0
+  zone_id = var.cloudflare_zone_id
+  name    = var.zeaz_one_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "ZEAZ One website via Cloudflare Tunnel"
+}
+
+resource "cloudflare_dns_record" "zeaz_one_api" {
+  count   = var.enable_zeaz_one ? 1 : 0
+  zone_id = var.cloudflare_zone_id
+  name    = var.zeaz_one_api_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "ZEAZ One product API via Cloudflare Tunnel"
+}
+
+resource "cloudflare_dns_record" "zeaz_one_support" {
+  count   = var.enable_zeaz_one ? 1 : 0
+  zone_id = var.cloudflare_zone_id
+  name    = var.zeaz_one_support_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "ZEAZ One support via Cloudflare Tunnel"
+}
+
+resource "cloudflare_workers_script" "zeaz_one_www_redirect" {
+  count              = var.enable_zeaz_one && var.enable_zeaz_one_www_redirect ? 1 : 0
+  account_id         = var.cloudflare_account_id
+  script_name        = "zeaz-one-www-redirect"
+  compatibility_date = "2026-08-07"
+  main_module        = "zeaz-one-www-redirect.js"
+  content_file       = "${path.module}/workers/zeaz-one-www-redirect.js"
+  content_sha256     = filesha256("${path.module}/workers/zeaz-one-www-redirect.js")
+}
+
+resource "cloudflare_workers_route" "zeaz_one_www_redirect" {
+  count   = var.enable_zeaz_one && var.enable_zeaz_one_www_redirect ? 1 : 0
+  zone_id = var.cloudflare_zone_id
+  pattern = "${var.zeaz_one_www_hostname}/products/zeaz-one*"
+  script  = cloudflare_workers_script.zeaz_one_www_redirect[0].script_name
+}
+
+output "zeaz_one_url" {
+  value       = "https://${var.zeaz_one_hostname}"
+  description = "Primary ZEAZ One product URL."
+}
+
+output "zeaz_one_api_url" {
+  value       = "https://${var.zeaz_one_api_hostname}/v1/products/zeaz-one"
+  description = "ZEAZ One product API URL."
+}
+
+output "zeaz_one_support_url" {
+  value       = "https://${var.zeaz_one_support_hostname}/zeaz-one"
+  description = "ZEAZ One support URL."
+}
+
+output "zeaz_one_corporate_url" {
+  value       = "https://${var.zeaz_one_www_hostname}/products/zeaz-one"
+  description = "Corporate ZEAZ One URL, redirected by the optional path-specific Worker route."
+}
