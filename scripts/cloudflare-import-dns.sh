@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/cloudflare-terraform-env.sh"
 
 usage() {
-  cat <<'EOF'
+  cat <<'USAGE'
 Usage:
   ./scripts/cloudflare-import-dns.sh [--check] [--all] [resource ...]
 
@@ -16,17 +16,14 @@ Terraform state. No DNS record is created, updated, or deleted by this script.
 Default resources:
   zai auth zdash
 
+ZEAZ One resources:
+  zeaz-one zeaz-one-api zeaz-one-support
+
 Options:
   --check   Show matching records without changing Terraform state.
-  --all     Reconcile every DNS resource managed by this Terraform stack.
+  --all     Reconcile every enabled DNS resource managed by this stack.
   -h, --help
-
-Examples:
-  ./scripts/cloudflare-import-dns.sh --check
-  ./scripts/cloudflare-import-dns.sh
-  ./scripts/cloudflare-import-dns.sh zdash
-  ./scripts/cloudflare-import-dns.sh --all
-EOF
+USAGE
 }
 
 mode="import"
@@ -35,24 +32,11 @@ declare -a requested=()
 
 while (($#)); do
   case "$1" in
-    --check)
-      mode="check"
-      ;;
-    --all)
-      use_all=true
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    --*)
-      echo "Unknown option: $1" >&2
-      usage >&2
-      exit 2
-      ;;
-    *)
-      requested+=("$1")
-      ;;
+    --check) mode="check" ;;
+    --all) use_all=true ;;
+    -h|--help) usage; exit 0 ;;
+    --*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+    *) requested+=("$1") ;;
   esac
   shift
 done
@@ -74,6 +58,9 @@ declare -A resources=(
   [cmeerp]="cloudflare_dns_record.cmeerp"
   [zai]="cloudflare_dns_record.zai"
   [auth]="cloudflare_dns_record.auth"
+  [zeaz-one]="cloudflare_dns_record.zeaz_one[0]"
+  [zeaz-one-api]="cloudflare_dns_record.zeaz_one_api[0]"
+  [zeaz-one-support]="cloudflare_dns_record.zeaz_one_support[0]"
 )
 
 declare -A hostnames=(
@@ -88,11 +75,15 @@ declare -A hostnames=(
   [cmeerp]="${CMEERP_HOSTNAME:-cme.zeaz.dev}"
   [zai]="${ZAI_HOSTNAME:-zai.zeaz.dev}"
   [auth]="${AUTH_HOSTNAME:-auth.zeaz.dev}"
+  [zeaz-one]="${ZEAZ_ONE_HOSTNAME:-one.zeaz.dev}"
+  [zeaz-one-api]="${ZEAZ_ONE_API_HOSTNAME:-api.zeaz.dev}"
+  [zeaz-one-support]="${ZEAZ_ONE_SUPPORT_HOSTNAME:-support.zeaz.dev}"
 )
 
-declare -a all_targets=(
-  moopiew arin zttshop qwen chat piewdash zdash zerp cmeerp zai auth
-)
+declare -a all_targets=(moopiew arin zttshop qwen chat piewdash zdash zerp cmeerp zai auth)
+if [[ "${ZEAZ_ONE_ENABLED:-false}" == "true" ]]; then
+  all_targets+=(zeaz-one zeaz-one-api zeaz-one-support)
+fi
 
 declare -a targets=()
 if [[ "$use_all" == true ]]; then
@@ -106,9 +97,13 @@ fi
 for target in "${targets[@]}"; do
   [[ -n "${resources[$target]:-}" ]] || {
     echo "Unknown DNS resource key: $target" >&2
-    echo "Valid keys: ${all_targets[*]}" >&2
+    echo "Valid keys: ${!resources[*]}" >&2
     exit 2
   }
+  if [[ "$target" == zeaz-one* && "${ZEAZ_ONE_ENABLED:-false}" != "true" ]]; then
+    echo "ZEAZ One Terraform resources are disabled. Set ZEAZ_ONE_ENABLED=true or use scripts/zeaz-one-sync.sh." >&2
+    exit 2
+  fi
 done
 
 state_backup=""
@@ -160,7 +155,6 @@ for target in "${targets[@]}"; do
 
   records="$(jq --arg hostname "$hostname" '[.result[] | select((.name | ascii_downcase) == ($hostname | ascii_downcase))]' <<<"$response")"
   count="$(jq 'length' <<<"$records")"
-
   jq -r '.[] | "Found id=\(.id) type=\(.type) name=\(.name) content=\(.content) proxied=\(.proxied)"' <<<"$records"
 
   case "$count" in
@@ -173,17 +167,13 @@ for target in "${targets[@]}"; do
         echo "Check mode: import would use ${CLOUDFLARE_ZONE_ID}/$(jq -r '.[0].id' <<<"$records")"
         continue
       fi
-
       record_id="$(jq -r '.[0].id' <<<"$records")"
       record_type="$(jq -r '.[0].type' <<<"$records")"
       if [[ "$record_type" != "CNAME" ]]; then
         echo "NOTICE: Existing type is $record_type; Terraform declares CNAME."
         echo "Review the next Terraform plan carefully before applying the type change."
       fi
-
-      "$CLOUDFLARE_TF_BIN" -chdir="$CLOUDFLARE_STACK" import \
-        "$resource" \
-        "${CLOUDFLARE_ZONE_ID}/${record_id}"
+      "$CLOUDFLARE_TF_BIN" -chdir="$CLOUDFLARE_STACK" import "$resource" "${CLOUDFLARE_ZONE_ID}/${record_id}"
       state_list+=$'\n'"$resource"
       ((imports += 1))
       ;;
@@ -196,13 +186,6 @@ for target in "${targets[@]}"; do
 done
 
 echo
-printf 'DNS reconciliation summary: imported=%d skipped=%d failures=%d mode=%s\n' \
-  "$imports" "$skipped" "$failures" "$mode"
-
-if ((failures > 0)); then
-  exit 1
-fi
-
-if [[ "$mode" == "import" ]]; then
-  echo "Next: ./scripts/cloudflare-apply.sh"
-fi
+printf 'DNS reconciliation summary: imported=%d skipped=%d failures=%d mode=%s\n' "$imports" "$skipped" "$failures" "$mode"
+((failures == 0)) || exit 1
+[[ "$mode" != "import" ]] || echo "Next: ./scripts/cloudflare-apply.sh"
