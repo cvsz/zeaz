@@ -22,4 +22,11 @@ ingress:
     service: http://127.0.0.1:8080
   - hostname: zai.zeaz.dev
     service: http://127.0.0.1:8765
+  # ZEAZ One routes are enabled by the ZEAZ One Terraform/sync workflow.
+  - hostname: one.zeaz.dev
+    service: http://127.0.0.1:18081
+  - hostname: api.zeaz.dev
+    service: http://127.0.0.1:18084
+  - hostname: support.zeaz.dev
+    service: http://127.0.0.1:18083
   - service: http_status:404
