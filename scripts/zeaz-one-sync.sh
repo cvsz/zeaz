@@ -10,7 +10,6 @@ CURRENT_LINK="$RUNTIME_ROOT/current"
 update_repo=false
 deploy_local=true
 cloudflare_mode="none"
-enable_www_redirect=false
 status_only=false
 stop_only=false
 
@@ -33,7 +32,6 @@ Options:
   --skip-local         Do not stage or deploy the bundled local services.
   --plan-cloudflare    Reconcile ZEAZ One DNS and create a reviewed Terraform plan.
   --apply-cloudflare   Reconcile ZEAZ One DNS and explicitly apply the saved plan.
-  --www-redirect       Also manage www.zeaz.dev/products/zeaz-one as a Worker redirect.
   --status             Show the active local release and service status.
   --stop               Stop the active local ZEAZ One services.
   -h, --help
@@ -42,7 +40,6 @@ Examples:
   ./scripts/zeaz-one-sync.sh --update
   ./scripts/zeaz-one-sync.sh --update --plan-cloudflare
   ./scripts/zeaz-one-sync.sh --skip-local --apply-cloudflare
-  ./scripts/zeaz-one-sync.sh --skip-local --plan-cloudflare --www-redirect
 USAGE
 }
 
@@ -58,7 +55,6 @@ while (($#)); do
       [[ "$cloudflare_mode" == "none" ]] || fail "Choose only one Cloudflare mode."
       cloudflare_mode="apply"
       ;;
-    --www-redirect) enable_www_redirect=true ;;
     --status) status_only=true ;;
     --stop) stop_only=true ;;
     -h|--help) usage; exit 0 ;;
@@ -137,7 +133,6 @@ if [[ "$deploy_local" == true ]]; then
   for _ in $(seq 1 30); do
     if curl --fail --silent http://127.0.0.1:18081/ >/dev/null \
       && curl --fail --silent http://127.0.0.1:18081/product.json >/dev/null \
-      && curl --fail --silent http://127.0.0.1:18082/products/zeaz-one/ >/dev/null \
       && curl --fail --silent http://127.0.0.1:18083/zeaz-one/ >/dev/null \
       && curl --fail --silent http://127.0.0.1:18084/health >/dev/null; then
       healthy=true
@@ -174,9 +169,6 @@ if [[ "$cloudflare_mode" != "none" ]]; then
   [[ -x "$ROOT/scripts/cloudflare-apply.sh" ]] || fail "Cloudflare apply wrapper is missing."
   export FORCE_ENABLE_ZEAZ_ONE=true
   export FORCE_ENABLE_ZEAZ_ONE_API_ROUTE=true
-  if [[ "$enable_www_redirect" == true ]]; then
-    export FORCE_ENABLE_ZEAZ_ONE_WWW_REDIRECT=true
-  fi
 
   args=(--zeaz-one)
   [[ "$cloudflare_mode" == "apply" ]] && args+=(--apply)

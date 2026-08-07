@@ -6,7 +6,6 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:${ZEAZ_ONE_PORT:-18081}:8081"
-      - "127.0.0.1:${ZEAZ_ONE_WWW_PORT:-18082}:8082"
       - "127.0.0.1:${ZEAZ_ONE_SUPPORT_PORT:-18083}:8083"
     volumes:
       - ./public:/srv:ro

@@ -10,12 +10,6 @@ variable "enable_zeaz_one_api_route" {
   description = "Create only the ZEAZ One product path on the existing shared api.zeaz.dev hostname."
 }
 
-variable "enable_zeaz_one_www_redirect" {
-  type        = bool
-  default     = false
-  description = "Create the path-specific Worker route that redirects www.zeaz.dev/products/zeaz-one to one.zeaz.dev."
-}
-
 variable "zeaz_one_hostname" {
   type        = string
   default     = "one.zeaz.dev"
@@ -82,17 +76,6 @@ variable "zeaz_one_support_origin" {
   }
 }
 
-variable "zeaz_one_www_hostname" {
-  type        = string
-  default     = "www.zeaz.dev"
-  description = "Existing corporate hostname receiving the path-specific ZEAZ One redirect route."
-
-  validation {
-    condition     = lower(var.zeaz_one_www_hostname) == "www.${lower(var.zone_name)}"
-    error_message = "zeaz_one_www_hostname must be the www hostname of zone_name."
-  }
-}
-
 locals {
   zeaz_one_ingress = var.enable_zeaz_one ? [
     { hostname = var.zeaz_one_hostname, service = var.zeaz_one_origin },
@@ -139,23 +122,6 @@ resource "cloudflare_workers_route" "zeaz_one_api" {
   script  = cloudflare_workers_script.zeaz_one_api[0].script_name
 }
 
-resource "cloudflare_workers_script" "zeaz_one_www_redirect" {
-  count              = var.enable_zeaz_one && var.enable_zeaz_one_www_redirect ? 1 : 0
-  account_id         = var.cloudflare_account_id
-  script_name        = "zeaz-one-www-redirect"
-  compatibility_date = "2026-08-07"
-  main_module        = "zeaz-one-www-redirect.js"
-  content_file       = "${path.module}/workers/zeaz-one-www-redirect.js"
-  content_sha256     = filesha256("${path.module}/workers/zeaz-one-www-redirect.js")
-}
-
-resource "cloudflare_workers_route" "zeaz_one_www_redirect" {
-  count   = var.enable_zeaz_one && var.enable_zeaz_one_www_redirect ? 1 : 0
-  zone_id = var.cloudflare_zone_id
-  pattern = "${var.zeaz_one_www_hostname}/products/zeaz-one*"
-  script  = cloudflare_workers_script.zeaz_one_www_redirect[0].script_name
-}
-
 output "zeaz_one_url" {
   value       = "https://${var.zeaz_one_hostname}"
   description = "Primary ZEAZ One product URL."
@@ -172,6 +138,6 @@ output "zeaz_one_support_url" {
 }
 
 output "zeaz_one_corporate_url" {
-  value       = "https://${var.zeaz_one_www_hostname}/products/zeaz-one"
-  description = "Corporate ZEAZ One URL, redirected by the optional path-specific Worker route."
+  value       = "https://www.${var.zone_name}/products/zeaz-one"
+  description = "Canonical corporate ZEAZ One URL owned and deployed by cvsz/zeaz-platform."
 }

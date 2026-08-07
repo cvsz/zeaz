@@ -24,14 +24,18 @@ class ZeazOneBundleTests(unittest.TestCase):
         }
         missing = {path for path in required if not (SOURCE / path).is_file()}
         self.assertFalse(missing, missing)
+        self.assertFalse(
+            (SOURCE / "public/www/products/zeaz-one/index.html").exists()
+        )
 
     def test_services_bind_only_to_reviewed_loopback_ports(self):
         compose = (SOURCE / "docker-compose.yml").read_text(
             encoding="utf-8"
         )
-        for port in (18081, 18082, 18083, 18084):
+        for port in (18081, 18083, 18084):
             self.assertIn("127.0.0.1:${", compose)
             self.assertIn(str(port), compose)
+        self.assertNotIn("18082", compose)
         self.assertNotIn('"0.0.0.0:', compose)
 
     def test_product_api_contains_three_models_and_public_source_matches(self):
@@ -53,6 +57,8 @@ class ZeazOneBundleTests(unittest.TestCase):
         self.assertIn("ln -sfn", sync)
         self.assertIn("mv -Tf", sync)
         self.assertIn("FORCE_ENABLE_ZEAZ_ONE_API_ROUTE=true", sync)
+        self.assertNotIn("--www-redirect", sync)
+        self.assertNotIn("18082", sync)
         self.assertNotIn("rsync", sync)
         self.assertNotIn("REMOTE=", sync)
 

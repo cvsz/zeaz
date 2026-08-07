@@ -19,18 +19,6 @@
   }
 }
 
-:8082 {
-  import security_headers
-  handle_path /assets/* {
-    root * /srv/assets
-    file_server
-  }
-  handle {
-    root * /srv/www
-    file_server
-  }
-}
-
 :8083 {
   import security_headers
   handle_path /assets/* {

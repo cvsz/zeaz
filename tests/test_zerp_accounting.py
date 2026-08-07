@@ -63,14 +63,16 @@ class ZerpAccountingTests(unittest.TestCase):
         self.assertEqual(entry["total_credit"], 110)
         self.assertEqual(len(entry["lines"]), 3)
 
-        with app.db() as connection:
-            self.assertEqual(connection.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0], 1)
-            self.assertEqual(connection.execute("SELECT COUNT(*) FROM ledger_lines").fetchone()[0], 3)
-
-        # Projection is idempotent when the endpoint is retried.
+        # Projection is idempotent when the endpoint is retried. The retry also
+        # provides a transaction barrier: Handler.do_GET serializes the first
+        # response while its db() context is still committing the projection.
         status, again = self.request(headers)
         self.assertEqual(status, 200)
         self.assertEqual(again["entries"][0]["id"], entry["id"])
+
+        with app.db() as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM ledger_entries").fetchone()[0], 1)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM ledger_lines").fetchone()[0], 3)
 
     def test_inventory_moves_are_owner_only_and_projected(self):
         now = app.utcnow()
