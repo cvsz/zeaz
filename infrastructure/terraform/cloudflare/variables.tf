@@ -273,7 +273,7 @@ variable "laps_hostname" {
 
 variable "laps_origin" {
   type        = string
-  default     = "http://127.0.0.1:9742"
+  default     = "http://127.0.0.1:8080"
   description = "Loopback origin reached by cloudflared for the LAPS service."
   validation {
     condition     = can(regex("^http://127\\.0\\.0\\.1:[0-9]+$", var.laps_origin))
