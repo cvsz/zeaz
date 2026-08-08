@@ -53,6 +53,11 @@ output "piewdash_access_audience" {
   description = "Audience claim expected on Cloudflare Access JWTs for the dashboard."
 }
 
+output "laps_url" {
+  value       = "https://${var.laps_hostname}"
+  description = "Public LAPS URL after the proxied DNS record and tunnel ingress are active."
+}
+
 output "cloudflared_ingress" {
   value = concat(
     [
@@ -67,6 +72,7 @@ output "cloudflared_ingress" {
       { hostname = var.arin_hostname, service = var.arin_origin },
       { hostname = var.zai_hostname, service = var.zai_origin },
       { hostname = var.auth_hostname, service = var.auth_origin },
+      { hostname = var.laps_hostname, service = var.laps_origin },
     ],
     local.zeaz_one_ingress,
     [{ service = "http_status:404" }],
