@@ -1,13 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, api } from '../api'
+import { safeAuthRedirect } from '../security'
 
 type AuthMode = 'login' | 'register'
-
-function nextPath() {
-  const value = new URLSearchParams(window.location.search).get('next')
-  return value?.startsWith('/') && !value.startsWith('//') ? value : '/studio'
-}
 
 export function AuthPage() {
   const initialMode = new URLSearchParams(window.location.search).get('mode') === 'register' ? 'register' : 'login'
@@ -43,7 +39,7 @@ export function AuthPage() {
     try {
       if (mode === 'register') await api.register(email, name, password)
       await api.login(email, password)
-      window.location.assign(nextPath())
+      window.location.assign(safeAuthRedirect(new URLSearchParams(window.location.search).get('next')))
     } catch (caught) {
       const message = caught instanceof ApiError ? caught.message : 'We could not complete that request.'
       setError(message)

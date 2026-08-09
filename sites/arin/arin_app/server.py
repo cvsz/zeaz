@@ -53,6 +53,22 @@ PUBLIC_APP_ROUTE = re.compile(r"^/app/([A-Za-z0-9-]+)$")
 PRIVATE_ASSET_ROUTE = re.compile(r"^/api/assets/([^/]+)$")
 PUBLIC_ASSET_ROUTE = re.compile(r"^/api/public-assets/([^/]+)$")
 CONNECTOR_ROUTE = re.compile(r"^/api/connectors/([^/]+)$")
+HEADER_NAME = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
+
+
+def safe_header_items(headers: dict[str, str] | None) -> list[tuple[str, str]]:
+    """Validate application-controlled headers before passing them to http.server."""
+    safe: list[tuple[str, str]] = []
+    for key, value in (headers or {}).items():
+        if (
+            not isinstance(key, str)
+            or not HEADER_NAME.fullmatch(key)
+            or not isinstance(value, str)
+            or any(ord(char) < 32 or ord(char) == 127 for char in key + value)
+        ):
+            raise ValueError("invalid response header")
+        safe.append((key, value))
+    return safe
 
 
 class ArinHTTPServer(ThreadingHTTPServer):
@@ -404,7 +420,7 @@ class ArinRequestHandler(BaseHTTPRequestHandler):
         body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
         self.send_security_headers()
-        for key, value in (extra_headers or {}).items():
+        for key, value in safe_header_items(extra_headers):
             self.send_header(key, value)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -421,7 +437,7 @@ class ArinRequestHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         custom_frame_policy = (headers or {}).get("X-Frame-Options", "DENY")
         self.send_security_headers(custom_frame_policy)
-        for key, value in (headers or {}).items():
+        for key, value in safe_header_items(headers):
             if key.lower() == "x-frame-options":
                 continue
             self.send_header(key, value)
@@ -435,7 +451,7 @@ class ArinRequestHandler(BaseHTTPRequestHandler):
     ) -> None:
         self.send_response(status)
         self.send_security_headers()
-        for key, value in (extra_headers or {}).items():
+        for key, value in safe_header_items(extra_headers):
             self.send_header(key, value)
         self.send_header("Content-Length", "0")
         self.end_headers()

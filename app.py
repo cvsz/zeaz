@@ -26,7 +26,7 @@ from html import escape as escape_html
 from pathlib import Path
 from threading import Lock
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, quote, urlencode, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -547,11 +547,50 @@ def zeaz_gateway_config() -> tuple[str,str] | None:
 def qwen_upstream_url() -> str:
     base = QWEN_UPSTREAM_URL
     parsed = urlparse(base)
-    if parsed.query or parsed.fragment or parsed.username or parsed.password or not parsed.hostname:
-        raise ValueError("QWEN_UPSTREAM_URL ไม่ถูกต้อง")
-    if parsed.scheme == "https" or (parsed.scheme == "http" and parsed.hostname.lower() in ZEAZ_GATEWAY_LOOPBACK_HOSTS):
-        return base
-    raise ValueError("QWEN_UPSTREAM_URL ต้องใช้ HTTPS หรือ HTTP บน loopback เท่านั้น")
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname is None
+        or parsed.hostname.lower() not in ZEAZ_GATEWAY_LOOPBACK_HOSTS
+        or parsed.query
+        or parsed.fragment
+        or parsed.username
+        or parsed.password
+        or parsed.path not in {"", "/"}
+    ):
+        raise ValueError("QWEN_UPSTREAM_URL ต้องเป็น HTTP บน loopback ที่ไม่มี path")
+    return base.rstrip("/")
+
+
+def qwen_proxy_target(base: str, request_path: str, query: str = "") -> str:
+    """Build a target only for the dedicated, loopback Qwen service.
+
+    The public host is an intentional reverse proxy, but request paths and
+    queries remain attacker-controlled. Keep the origin fixed to the reviewed
+    local service and reject traversal/control characters before opening it.
+    """
+    parsed = urlparse(base)
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname is None
+        or parsed.hostname.lower() not in ZEAZ_GATEWAY_LOOPBACK_HOSTS
+        or parsed.query
+        or parsed.fragment
+        or parsed.username
+        or parsed.password
+        or parsed.path not in {"", "/"}
+    ):
+        raise ValueError("QWEN_UPSTREAM_URL ต้องเป็น HTTP บน loopback ที่ไม่มี path")
+    if not isinstance(request_path, str) or not request_path.startswith("/"):
+        raise ValueError("QWEN proxy path ไม่ถูกต้อง")
+    if not isinstance(query, str) or any(char in request_path + query for char in "\r\n\\"):
+        raise ValueError("QWEN proxy request มีอักขระต้องห้าม")
+    decoded_path = unquote(request_path)
+    if any(ord(char) < 32 or ord(char) == 127 for char in decoded_path):
+        raise ValueError("QWEN proxy path มีอักขระต้องห้าม")
+    if any(segment in {".", ".."} for segment in decoded_path.split("/")):
+        raise ValueError("QWEN proxy path มี path traversal")
+    origin = base.rstrip("/")
+    return f"{origin}{request_path}{('?' + query) if query else ''}"
 
 def zttshop_page(
     title: str,
@@ -1949,9 +1988,10 @@ class Handler(SimpleHTTPRequestHandler):
         except ValueError as error:
             return self.json({"error": str(error)}, 503)
         parsed = urlparse(self.path)
-        target = f"{base}{parsed.path}"
-        if parsed.query:
-            target = f"{target}?{parsed.query}"
+        try:
+            target = qwen_proxy_target(base, parsed.path, parsed.query)
+        except ValueError as error:
+            return self.json({"error": str(error)}, 400)
         headers = {
             key: value
             for key, value in self.headers.items()

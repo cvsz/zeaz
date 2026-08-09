@@ -6,6 +6,7 @@ import type {
   Provider,
   UploadedDocument,
 } from "@moopiew/types";
+import { isSafeImagePreviewType } from "./security";
 import "./documents.css";
 
 const api = new MoopiewClient({
@@ -80,7 +81,7 @@ function UploadCard({
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
-    if (!file || file.type === "application/pdf") {
+    if (!file || !isSafeImagePreviewType(file.type)) {
       setPreview("");
       return;
     }
