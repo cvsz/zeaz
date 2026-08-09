@@ -20,7 +20,7 @@ output "qwen_url" {
 
 output "chat_url" {
   value       = "https://${var.chat_hostname}"
-  description = "Public OpenWebUI chat URL after the proxied DNS record and tunnel ingress are active."
+  description = "Public NextChat URL after the proxied DNS record and tunnel ingress are active."
 }
 
 output "piewdash_url" {
@@ -65,6 +65,9 @@ output "cloudflared_ingress" {
       { hostname = var.zttshop_hostname, service = var.zttshop_origin },
       { hostname = var.qwen_hostname, service = var.qwen_origin },
       { hostname = var.chat_hostname, service = var.chat_origin },
+      { hostname = var.llmwiki_hostname, service = var.llmwiki_origin },
+      { hostname = var.zksato_hostname, service = var.zksato_origin },
+      { hostname = var.zwf_hostname, service = var.zwf_origin },
       { hostname = var.piewdash_hostname, service = var.piewdash_origin },
       { hostname = var.zdash_hostname, service = var.zdash_origin },
       { hostname = var.zerp_hostname, service = var.zerp_origin },

@@ -58,7 +58,7 @@ resource "cloudflare_dns_record" "chat" {
   content = local.tunnel_cname
   ttl     = 1
   proxied = true
-  comment = "OpenWebUI chat via Cloudflare Tunnel"
+  comment = "NextChat via Cloudflare Tunnel"
 }
 
 resource "cloudflare_dns_record" "piewdash" {
@@ -157,6 +157,9 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "moopiew" {
         { hostname = var.zttshop_hostname, service = var.zttshop_origin },
         { hostname = var.qwen_hostname, service = var.qwen_origin },
         { hostname = var.chat_hostname, service = var.chat_origin },
+        { hostname = var.llmwiki_hostname, service = var.llmwiki_origin },
+        { hostname = var.zksato_hostname, service = var.zksato_origin },
+        { hostname = var.zwf_hostname, service = var.zwf_origin },
         { hostname = var.piewdash_hostname, service = var.piewdash_origin },
         { hostname = var.zdash_hostname, service = var.zdash_origin },
         { hostname = var.zerp_hostname, service = var.zerp_origin },

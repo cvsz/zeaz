@@ -125,7 +125,7 @@ variable "qwen_origin" {
 variable "chat_hostname" {
   type        = string
   default     = "chat.zeaz.dev"
-  description = "Public hostname for the OpenWebUI chat interface."
+  description = "Public hostname for the NextChat interface."
   validation {
     condition     = endswith(lower(var.chat_hostname), ".${lower(var.zone_name)}")
     error_message = "chat_hostname must be a subdomain of zone_name."
@@ -135,10 +135,10 @@ variable "chat_hostname" {
 variable "chat_origin" {
   type        = string
   default     = "http://127.0.0.1:3000"
-  description = "Host-loopback origin published by the OpenWebUI container."
+  description = "Host-loopback origin published by qwen-gen-nextchat-1."
   validation {
     condition     = var.chat_origin == "http://127.0.0.1:3000"
-    error_message = "chat_origin must use the reviewed OpenWebUI host port at http://127.0.0.1:3000."
+    error_message = "chat_origin must use the reviewed NextChat host port at http://127.0.0.1:3000."
   }
 }
 
@@ -213,8 +213,8 @@ variable "cmeerp_hostname" {
 
 variable "cmeerp_origin" {
   type        = string
-  default     = "http://127.0.0.1:8001"
-  description = "Loopback origin reached by cloudflared for CME Pro ERP."
+  default     = "http://127.0.0.1:8000"
+  description = "Reviewed loopback origin reached by cloudflared for the CME Pro ERP API."
   validation {
     condition     = can(regex("^http://127\\.0\\.0\\.1:[0-9]+$", var.cmeerp_origin))
     error_message = "cmeerp_origin must use a loopback address."

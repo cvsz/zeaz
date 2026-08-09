@@ -2,13 +2,18 @@
 
 This stack follows the Cloudflare Tunnel DNS ownership model used by
 `z-platform`: proxied CNAMEs send `moopiew.zeaz.dev`, `arin.zeaz.dev`, `zttshop.zeaz.dev`,
-`piewdash.zeaz.dev`, `qwen.zeaz.dev`, `chat.zeaz.dev`, `zerp.zeaz.dev`, and
-`cme.zeaz.dev` to
-an existing tunnel. Cloudflared forwards the public app hostnames to Caddy on
-port 8080 and the dashboard and ERP hostnames to Caddy on port 80. The
-OpenWebUI chat hostname is forwarded directly to its reviewed host-published
-port 3000, matching the existing container mapping, rather than to the
-container-only port 8080.
+`piewdash.zeaz.dev`, `qwen.zeaz.dev`, `chat.zeaz.dev`, `llmwiki.zeaz.dev`,
+`zwf.zeaz.dev`, `zerp.zeaz.dev`, and `cme.zeaz.dev` to
+an existing tunnel. Cloudflared forwards each hostname to its reviewed
+loopback origin: Caddy on ports 8080/80, NextChat on 3000, LLM Wiki on 5173,
+zksato on 9569, zWorkforce on 9570, and the CME Pro ERP API on 8000. The
+NextChat hostname is forwarded directly to the reviewed host-published port
+3000 for `qwen-gen-nextchat-1`, rather than to a container-only port. The
+secondary Open WebUI instance uses host port 3011 when enabled.
+The LLM Wiki frontend uses its primary Vite origin on host port 5173. Its
+secondary development listener on 5174 and the separate loopback-only desktop
+services on 19827/19828 are not public tunnel origins; see
+[`docs/llmwiki-deployment.md`](../../../docs/llmwiki-deployment.md).
 host-specific dashboard route applies Basic Auth before proxying to the
 loopback dashboard process on port 8082. Never point the tunnel directly at
 port 8082 because that bypasses the origin authentication layer. The zERP
@@ -97,6 +102,10 @@ terraform -chdir=infrastructure/terraform/cloudflare import \
   cloudflare_dns_record.piewdash "<zone-id>/<dns-record-id>"
 terraform -chdir=infrastructure/terraform/cloudflare import \
   cloudflare_dns_record.qwen "<zone-id>/<dns-record-id>"
+terraform -chdir=infrastructure/terraform/cloudflare import \
+  cloudflare_dns_record.llmwiki "<zone-id>/<dns-record-id>"
+terraform -chdir=infrastructure/terraform/cloudflare import \
+  cloudflare_dns_record.zwf "<zone-id>/<dns-record-id>"
 terraform -chdir=infrastructure/terraform/cloudflare import \
   cloudflare_dns_record.zerp "<zone-id>/<dns-record-id>"
 terraform -chdir=infrastructure/terraform/cloudflare import \
