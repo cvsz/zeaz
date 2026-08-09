@@ -339,6 +339,46 @@ def stock_moves_public(con: sqlite3.Connection) -> list[dict]:
 def payment_public(row: dict) -> dict:
     return {key: row[key] for key in ("id", "provider", "provider_reference", "provider_order_id", "amount", "status", "qr_image", "qr_type", "expires_at", "created_at", "confirmed_at")}
 
+def scb_spending_limits() -> tuple[int, int]:
+    """Return conservative server-side SCB single and daily caps in THB."""
+    try:
+        single = int(env("SCB_MAX_PAYMENT_THB", "50000"))
+        daily = int(env("SCB_DAILY_PAYMENT_LIMIT_THB", "200000"))
+    except (TypeError, ValueError) as error:
+        raise ValueError("SCB spending limits must be positive integers") from error
+    if single <= 0 or daily <= 0:
+        raise ValueError("SCB spending limits must be positive integers")
+    if single > daily:
+        raise ValueError("SCB single payment limit cannot exceed daily payment limit")
+    return single, daily
+
+def check_scb_spending_limit(con: sqlite3.Connection, amount: int) -> None:
+    """Fail closed before creating a QR when single or daily budget is exceeded."""
+    if isinstance(amount, bool):
+        raise ValueError("SCB payment amount must be a positive integer")
+    try:
+        amount = int(amount)
+    except (TypeError, ValueError) as error:
+        raise ValueError("SCB payment amount must be a positive integer") from error
+    if amount <= 0:
+        raise ValueError("SCB payment amount must be a positive integer")
+    single, daily = scb_spending_limits()
+    if amount > single:
+        raise ValueError("SCB single payment limit exceeded")
+    now = datetime.now(timezone.utc)
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+    used = con.execute(
+        """SELECT COALESCE(SUM(amount), 0)
+           FROM payment_attempts
+           WHERE provider LIKE 'scb_%'
+             AND status IN ('created', 'pending', 'paid')
+             AND created_at >= ? AND created_at < ?""",
+        (day_start.isoformat(), day_end.isoformat()),
+    ).fetchone()[0]
+    if int(used or 0) + amount > daily:
+        raise ValueError("SCB daily payment limit exceeded")
+
 def row_payment(con, payment_id: str) -> dict | None:
     row = con.execute("SELECT * FROM payment_attempts WHERE id=?", (payment_id,)).fetchone()
     return dict(row) if row else None
@@ -1600,9 +1640,7 @@ def scb_feature_enabled(feature: str, default="false") -> bool:
     products={item.strip() for item in env("SCB_ENABLED_PRODUCTS", "maemanee_qr").split(",") if item.strip()}
     return feature in products and env(f"SCB_{feature.upper()}_ENABLED",default).lower()=="true"
 def scb_active() -> bool:
-    # Existing deployments did not have the feature-gate variable. Preserve
-    # their qr_api behaviour until the reviewed .env.payment template is adopted.
-    return PAYMENTS_ENABLED and SCB_ENABLED and env("SCB_PRODUCT") == "qr_api" and scb_feature_enabled("maemanee_qr", "true")
+    return PAYMENTS_ENABLED and SCB_ENABLED and env("SCB_PRODUCT") == "qr_api" and scb_feature_enabled("maemanee_qr", "false")
 def scb_config_public() -> dict: return {"enabled":scb_active(), "provider":"scb_maemanee", "method":"scb_qr", "payment_types":[value for value in env("SCB_QR_PAYMENT_TYPES", "T30").split(",") if value], "environment":env("PAYMENT_ENVIRONMENT", "sandbox")}
 
 def iso_millis() -> str: return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
@@ -2610,6 +2648,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if order["payment"]["method"]!="scb_qr": raise ValueError("ออเดอร์นี้ไม่ได้เลือกชำระผ่าน SCB QR")
                 existing=active_payment(con,oid)
                 if existing: return self.json({"payment":payment_public(existing)})
+                check_scb_spending_limit(con, order["total"])
             payment=scb_create_qr(order)
             with db() as con:
                 con.execute("INSERT INTO payment_attempts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(payment["id"],oid,payment["provider"],payment["provider_reference"],payment["provider_order_id"],payment["amount"],payment["status"],payment["qr_image"],payment["qr_type"],payment["expires_at"],payment["created_at"],payment["updated_at"],payment["confirmed_at"],payment["provider_response"]))

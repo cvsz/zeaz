@@ -31,6 +31,9 @@ class ScbPreflightTests(unittest.TestCase):
                     "PAYMENT_ENVIRONMENT=sandbox",
                     "SCB_ENABLED=false",
                     "SCB_PRODUCT=qr_api",
+                    "SCB_MAEMANEE_QR_ENABLED=false",
+                    "SCB_MAX_PAYMENT_THB=50000",
+                    "SCB_DAILY_PAYMENT_LIMIT_THB=200000",
                     "SCB_OAUTH_MODE=authorization_code",
                     "SCB_PAYMENT_OAUTH_MODE=client_credentials",
                     "SCB_OAUTH_PKCE_ENABLED=true",
@@ -71,6 +74,13 @@ class ScbPreflightTests(unittest.TestCase):
         result = self.run_preflight("unreviewedField")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("must be codeVerifier or code_verifier", result.stderr)
+
+    def test_payment_template_declares_disabled_flags_and_spending_caps(self):
+        template = (ROOT / ".env.payment.example").read_text(encoding="utf-8")
+        self.assertIn("PAYMENTS_ENABLED=false", template)
+        self.assertIn("SCB_ENABLED=false", template)
+        self.assertIn("SCB_MAX_PAYMENT_THB=50000", template)
+        self.assertIn("SCB_DAILY_PAYMENT_LIMIT_THB=200000", template)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,8 @@
 # SCB application registration — MooPiew
 
+See [`scb-payment-gateway-pack.md`](scb-payment-gateway-pack.md) for the
+fillable billing/spending-limit form, enablement gates, and rollback checklist.
+
 > **Status: held / feature-gated.** Do not enable SCB checkout in production
 > until the merchant has SCB approval and a successful Sandbox payment has been
 > verified by the corresponding Transaction Inquiry API.
@@ -49,6 +52,11 @@ Persist the SCB `orderId`, QR references and expiry alongside the order. Mark
 payment as `paid` only after a verified SCB confirmation or inquiry response;
 the QR image is base64 response data and should be rendered only for its
 associated order.
+
+Before creating a QR, the server enforces `SCB_MAX_PAYMENT_THB` and
+`SCB_DAILY_PAYMENT_LIMIT_THB` from the ignored payment environment. The daily
+counter includes created, pending, and paid attempts for the UTC day so a
+customer cannot bypass the cap by opening multiple pending QR attempts.
 
 Use `SCB_QR_INQUIRY_ENDPOINT` (`/v1/maemanee/payment/transaction/getone`) to
 check a single QR payment if the confirmation webhook has not arrived. Keep the

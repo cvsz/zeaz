@@ -53,7 +53,10 @@ updates; it exposes status, not private delivery details.
 Cash and transfer reconciliation remain an owner process. SCB QR/EASY features
 must stay disabled until SCB approval, Sandbox verification, mTLS material when
 required, and provider transaction inquiry are working. A QR scan, redirect or
-callback alone is never proof of payment.
+callback alone is never proof of payment. Review the approved server-side
+spending caps in `.env.payment`; do not raise them from a customer or browser
+form. To roll back, set `PAYMENTS_ENABLED=false` and `SCB_ENABLED=false`,
+restart, and verify `/api/payments/scb/config` reports `enabled: false`.
 
 ## End-of-day
 

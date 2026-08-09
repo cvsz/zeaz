@@ -260,3 +260,23 @@ variable "auth_origin" {
     error_message = "auth_origin must use a loopback address."
   }
 }
+
+variable "laps_hostname" {
+  type        = string
+  default     = "laps.zeaz.dev"
+  description = "Public hostname for the ZEAZ LAPS (Local Administrator Password Solution) service."
+  validation {
+    condition     = endswith(lower(var.laps_hostname), ".${lower(var.zone_name)}")
+    error_message = "laps_hostname must be a subdomain of zone_name."
+  }
+}
+
+variable "laps_origin" {
+  type        = string
+  default     = "http://127.0.0.1:8080"
+  description = "Loopback origin reached by cloudflared for the LAPS service."
+  validation {
+    condition     = can(regex("^http://127\\.0\\.0\\.1:[0-9]+$", var.laps_origin))
+    error_message = "laps_origin must use a loopback address."
+  }
+}

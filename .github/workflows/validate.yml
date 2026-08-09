@@ -29,7 +29,9 @@ jobs:
           cache: npm
       - name: Install validation dependencies
         run: |
-          python3 -m pip install --requirement requirements-dev.txt
+          python3 -m venv "${RUNNER_TEMP}/zeaz-validation-venv"
+          "${RUNNER_TEMP}/zeaz-validation-venv/bin/python" -m pip install --requirement requirements-dev.txt
+          echo "${RUNNER_TEMP}/zeaz-validation-venv/bin" >> "${GITHUB_PATH}"
           npm ci
       - name: Check shell syntax
         run: find scripts assets/asset-generator -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n

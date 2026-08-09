@@ -132,6 +132,16 @@ resource "cloudflare_zero_trust_access_application" "piewdash" {
   }]
 }
 
+resource "cloudflare_dns_record" "laps" {
+  zone_id = var.cloudflare_zone_id
+  name    = var.laps_hostname
+  type    = "CNAME"
+  content = local.tunnel_cname
+  ttl     = 1
+  proxied = true
+  comment = "ZEAZ LAPS service via Cloudflare Tunnel"
+}
+
 # This is deliberately opt-in: applying it without first importing a live
 # tunnel configuration could replace unrelated ingress rules.
 resource "cloudflare_zero_trust_tunnel_cloudflared_config" "moopiew" {
@@ -154,6 +164,7 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "moopiew" {
         { hostname = var.arin_hostname, service = var.arin_origin },
         { hostname = var.zai_hostname, service = var.zai_origin },
         { hostname = var.auth_hostname, service = var.auth_origin },
+        { hostname = var.laps_hostname, service = var.laps_origin },
       ],
       local.zeaz_one_ingress,
       [{ service = "http_status:404" }],
