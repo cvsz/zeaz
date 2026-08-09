@@ -8,8 +8,9 @@
     "build": "turbo build",
     "lint": "bash scripts/lint.sh",
     "test": "python3 -m unittest discover -s tests -p 'test_*.py'",
+    "test:frontend-security": "node tests/test_frontend_security.mjs",
     "typecheck": "turbo typecheck",
-    "validate": "npm run lint && npm run typecheck && npm run build && npm test",
+    "validate": "npm run lint && npm run typecheck && npm run build && npm test && npm run test:frontend-security",
     "dashboard": "python3 -m dashboard.api.server",
     "publish:platform": "bash scripts/publish-platform.sh",
     "validate:packages": "npm run typecheck"
