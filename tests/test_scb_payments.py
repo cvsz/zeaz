@@ -276,6 +276,42 @@ class ScbPaymentLifecycleTests(unittest.TestCase):
             app.ADMIN_KEY = original_admin
         self.assertEqual(status, 401)
 
+    def test_spending_limit_rejects_single_payment_above_cap(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SCB_MAX_PAYMENT_THB": "100",
+                "SCB_DAILY_PAYMENT_LIMIT_THB": "250",
+            },
+            clear=False,
+        ), app.db() as connection:
+            with self.assertRaisesRegex(ValueError, "single payment limit"):
+                app.check_scb_spending_limit(connection, 101)
+
+    def test_spending_limit_counts_open_and_paid_attempts_for_daily_cap(self):
+        self.seed_payment()
+        with patch.dict(
+            os.environ,
+            {
+                "SCB_MAX_PAYMENT_THB": "250",
+                "SCB_DAILY_PAYMENT_LIMIT_THB": "250",
+            },
+            clear=False,
+        ), app.db() as connection:
+            with self.assertRaisesRegex(ValueError, "daily payment limit"):
+                app.check_scb_spending_limit(connection, 151)
+
+    def test_spending_limit_allows_amount_when_daily_budget_remains(self):
+        with patch.dict(
+            os.environ,
+            {
+                "SCB_MAX_PAYMENT_THB": "250",
+                "SCB_DAILY_PAYMENT_LIMIT_THB": "250",
+            },
+            clear=False,
+        ), app.db() as connection:
+            app.check_scb_spending_limit(connection, 250)
+
 
 if __name__ == "__main__":
     unittest.main()

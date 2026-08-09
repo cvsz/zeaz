@@ -14,10 +14,15 @@ source "$APP_ENV"
 source "$PAYMENT_ENV"
 set +a
 
-required=(SCB_API_KEY SCB_API_SECRET SCB_BILLER_ID SCB_QR_CREATE_ENDPOINT SCB_QR_INQUIRY_ENDPOINT SCB_TOKEN_ENCRYPTION_KEY SCB_PAYMENT_CONFIRMATION_URL)
+required=(SCB_API_KEY SCB_API_SECRET SCB_BILLER_ID SCB_QR_CREATE_ENDPOINT SCB_QR_INQUIRY_ENDPOINT SCB_TOKEN_ENCRYPTION_KEY SCB_PAYMENT_CONFIRMATION_URL SCB_MAEMANEE_QR_ENABLED SCB_MAX_PAYMENT_THB SCB_DAILY_PAYMENT_LIMIT_THB)
 for key in "${required[@]}"; do
   [[ -n "${!key:-}" ]] || { echo "Missing required SCB value: $key" >&2; exit 1; }
 done
+
+[[ "${SCB_MAEMANEE_QR_ENABLED}" == "true" || "${SCB_MAEMANEE_QR_ENABLED}" == "false" ]] || { echo "SCB_MAEMANEE_QR_ENABLED must be true or false" >&2; exit 1; }
+[[ "${SCB_MAX_PAYMENT_THB}" =~ ^[1-9][0-9]*$ ]] || { echo "SCB_MAX_PAYMENT_THB must be a positive integer" >&2; exit 1; }
+[[ "${SCB_DAILY_PAYMENT_LIMIT_THB}" =~ ^[1-9][0-9]*$ ]] || { echo "SCB_DAILY_PAYMENT_LIMIT_THB must be a positive integer" >&2; exit 1; }
+(( SCB_MAX_PAYMENT_THB <= SCB_DAILY_PAYMENT_LIMIT_THB )) || { echo "SCB_MAX_PAYMENT_THB cannot exceed SCB_DAILY_PAYMENT_LIMIT_THB" >&2; exit 1; }
 
 [[ "${PAYMENT_ENVIRONMENT:-}" == "sandbox" || "${PAYMENT_ENVIRONMENT:-}" == "production" ]] || { echo "PAYMENT_ENVIRONMENT must be sandbox or production" >&2; exit 1; }
 [[ "${SCB_PRODUCT:-}" == "qr_api" ]] || { echo "SCB_PRODUCT must be qr_api for Mae Manee QR" >&2; exit 1; }
