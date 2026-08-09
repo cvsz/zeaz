@@ -191,7 +191,9 @@ class ArinService:
             raise ConflictError("an account with that email already exists") from exc
         return {"id": user_id, "email": normalized_email, "name": normalized_name}
 
-    def login_user(self, email: str, password: str) -> dict[str, Any]:
+    def login_user(
+        self, email: str, password: str, *, session_token: str | None = None
+    ) -> dict[str, Any]:
         normalized_email = normalize_email(email)
         row = self.connection.execute(
             "SELECT * FROM users WHERE email = ? COLLATE NOCASE", (normalized_email,)
@@ -201,7 +203,7 @@ class ArinService:
         ):
             raise AuthenticationError("email or password is incorrect")
 
-        session_token = security.new_token()
+        session_token = session_token or security.new_token()
         csrf_token = security.new_token()
         now = utcnow()
         expires = now + timedelta(days=self.session_days)

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import db
+from . import db, security
 from .generator import OpenAICompatibleGenerator
 from .service import (
     ArinService,
@@ -50,7 +50,7 @@ PROJECT_FILE_ROUTE = re.compile(r"^/api/projects/([^/]+)/files/(.+)$")
 PROJECT_PREVIEW_ROUTE = re.compile(r"^/preview/([^/]+)$")
 PROJECT_PUBLISH_ROUTE = re.compile(r"^/api/projects/([^/]+)/publish$")
 PROJECT_UNPUBLISH_ROUTE = re.compile(r"^/api/projects/([^/]+)/unpublish$")
-PUBLIC_APP_ROUTE = re.compile(r"^/app/([A-Za-z0-9-]+)$")
+PUBLIC_APP_ROUTE = re.compile(r"^/app/([A-Za-z0-9_-]+)$")
 PRIVATE_ASSET_ROUTE = re.compile(r"^/api/assets/([^/]+)$")
 PUBLIC_ASSET_ROUTE = re.compile(r"^/api/public-assets/([^/]+)$")
 CONNECTOR_ROUTE = re.compile(r"^/api/connectors/([^/]+)$")
@@ -202,16 +202,17 @@ class ArinRequestHandler(BaseHTTPRequestHandler):
                 )
                 return self.json_response(HTTPStatus.CREATED, {"user": user})
             if path == "/api/auth/login":
+                session_token = security.new_token()
                 session = self.server.service.login_user(
-                    payload.get("email", ""), payload.get("password", "")
+                    payload.get("email", ""),
+                    payload.get("password", ""),
+                    session_token=session_token,
                 )
                 public_session = {key: value for key, value in session.items() if key != "session_token"}
                 return self.json_response(
                     HTTPStatus.OK,
                     public_session,
-                    set_cookie=self.session_cookie(
-                        session["session_token"], self.server.service.session_days
-                    ),
+                    set_cookie=self.session_cookie(session_token, self.server.service.session_days),
                 )
             if path == "/api/auth/logout":
                 user = self.require_session(mutation=True)

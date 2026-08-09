@@ -562,6 +562,15 @@ def qwen_upstream_url() -> str:
     return base.rstrip("/")
 
 
+def qwen_proxy_request_target(request_path: str) -> str:
+    """Return only the fixed API targets exposed by the Qwen gateway."""
+    if request_path == "/v1/models":
+        return "/v1/models"
+    if request_path == "/v1/chat/completions":
+        return "/v1/chat/completions"
+    raise ValueError("QWEN proxy route ไม่รองรับ")
+
+
 def qwen_proxy_target(base: str, request_path: str, query: str = "") -> str:
     """Build a target only for the dedicated, loopback Qwen service.
 
@@ -1990,7 +1999,9 @@ class Handler(SimpleHTTPRequestHandler):
             return self.json({"error": str(error)}, 503)
         parsed = urlparse(self.path)
         try:
-            qwen_proxy_target(base, parsed.path, parsed.query)
+            request_target = qwen_proxy_request_target(parsed.path)
+            if parsed.query:
+                raise ValueError("QWEN proxy query ไม่รองรับ")
             upstream = urlparse(base)
             upstream_port = upstream.port or 80
         except ValueError as error:
@@ -2009,7 +2020,6 @@ class Handler(SimpleHTTPRequestHandler):
             body = self.rfile.read(length) if length > 0 else None
         connection = HTTPConnection(upstream.hostname, upstream_port, timeout=30)
         try:
-            request_target = f"{parsed.path}{('?' + parsed.query) if parsed.query else ''}"
             connection.request(self.command, request_target, body=body, headers=headers)
             response = connection.getresponse()
             raw = response.read()
