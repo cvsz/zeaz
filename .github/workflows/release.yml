@@ -29,7 +29,9 @@ jobs:
           cache: npm
       - name: Install validation dependencies
         run: |
-          python3 -m pip install --requirement requirements-dev.txt
+          python3 -m venv "${RUNNER_TEMP}/zeaz-release-venv"
+          "${RUNNER_TEMP}/zeaz-release-venv/bin/python" -m pip install --requirement requirements-dev.txt
+          echo "${RUNNER_TEMP}/zeaz-release-venv/bin" >> "${GITHUB_PATH}"
           npm ci
       - name: Validate release source
         run: |
