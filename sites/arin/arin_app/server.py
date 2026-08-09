@@ -202,25 +202,20 @@ class ArinRequestHandler(BaseHTTPRequestHandler):
                 )
                 return self.json_response(HTTPStatus.CREATED, {"user": user})
             if path == "/api/auth/login":
-                session_token = security.new_token()
-                session = self.server.service.login_user(
-                    payload.get("email", ""),
-                    payload.get("password", ""),
-                    session_token=session_token,
-                )
-                public_session = {key: value for key, value in session.items() if key != "session_token"}
-                return self.json_response(
-                    HTTPStatus.OK,
-                    public_session,
-                    set_cookie=self.session_cookie(session_token, self.server.service.session_days),
-                )
+                return self.login_response(payload)
             if path == "/api/auth/logout":
                 user = self.require_session(mutation=True)
                 del user
                 self.server.service.logout(self.cookies().get(SESSION_COOKIE, ""))
-                return self.empty_response(
-                    HTTPStatus.NO_CONTENT, set_cookie=self.expired_session_cookie()
+                self.send_response(HTTPStatus.NO_CONTENT)
+                self.send_security_headers()
+                self.send_header(
+                    "Set-Cookie",
+                    f"{SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax",
                 )
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             if path == "/api/workspaces":
                 user = self.require_session(mutation=True)
                 workspace = self.server.service.create_workspace(user["id"], payload.get("name", ""))
@@ -395,14 +390,31 @@ class ArinRequestHandler(BaseHTTPRequestHandler):
             raise ValueError("request body must be a JSON object")
         return value
 
-    def json_response(
-        self, status: HTTPStatus, payload: dict[str, Any], *, set_cookie: str | None = None
-    ) -> None:
+    def login_response(self, payload: dict[str, Any]) -> None:
+        session_token = security.new_token()
+        session = self.server.service.login_user(
+            payload.get("email", ""),
+            payload.get("password", ""),
+            session_token=session_token,
+        )
+        public_session = {key: value for key, value in session.items() if key != "session_token"}
+        body = json.dumps(public_session, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_security_headers()
+        self.send_header(
+            "Set-Cookie",
+            f"{SESSION_COOKIE}={session_token}; Path=/; Max-Age={self.server.service.session_days * 86400}; HttpOnly; Secure; SameSite=Lax",
+        )
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def json_response(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
         self.send_security_headers()
-        if set_cookie is not None:
-            self.send_header("Set-Cookie", set_cookie)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
@@ -431,11 +443,9 @@ class ArinRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def empty_response(self, status: HTTPStatus, *, set_cookie: str | None = None) -> None:
+    def empty_response(self, status: HTTPStatus) -> None:
         self.send_response(status)
         self.send_security_headers()
-        if set_cookie is not None:
-            self.send_header("Set-Cookie", set_cookie)
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -463,15 +473,6 @@ class ArinRequestHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "same-origin")
         self.send_header("X-Frame-Options", "SAMEORIGIN" if same_origin else "DENY")
-
-    @staticmethod
-    def session_cookie(token: str, days: int) -> str:
-        return f"{SESSION_COOKIE}={token}; Path=/; Max-Age={days * 86400}; HttpOnly; Secure; SameSite=Lax"
-
-    @staticmethod
-    def expired_session_cookie() -> str:
-        return f"{SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax"
-
 
 def main() -> None:
     package_root = Path(__file__).resolve().parents[1]
