@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import db
+from . import db, security
 from .generator import OpenAICompatibleGenerator
 from .service import (
     ArinService,
@@ -26,6 +26,7 @@ from .service import (
     ServiceError,
     SessionError,
     SESSION_DAYS,
+    PREVIEW_CSP,
     ValidationError,
 )
 
@@ -49,26 +50,10 @@ PROJECT_FILE_ROUTE = re.compile(r"^/api/projects/([^/]+)/files/(.+)$")
 PROJECT_PREVIEW_ROUTE = re.compile(r"^/preview/([^/]+)$")
 PROJECT_PUBLISH_ROUTE = re.compile(r"^/api/projects/([^/]+)/publish$")
 PROJECT_UNPUBLISH_ROUTE = re.compile(r"^/api/projects/([^/]+)/unpublish$")
-PUBLIC_APP_ROUTE = re.compile(r"^/app/([A-Za-z0-9-]+)$")
+PUBLIC_APP_ROUTE = re.compile(r"^/app/([A-Za-z0-9_-]+)$")
 PRIVATE_ASSET_ROUTE = re.compile(r"^/api/assets/([^/]+)$")
 PUBLIC_ASSET_ROUTE = re.compile(r"^/api/public-assets/([^/]+)$")
 CONNECTOR_ROUTE = re.compile(r"^/api/connectors/([^/]+)$")
-HEADER_NAME = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
-
-
-def safe_header_items(headers: dict[str, str] | None) -> list[tuple[str, str]]:
-    """Validate application-controlled headers before passing them to http.server."""
-    safe: list[tuple[str, str]] = []
-    for key, value in (headers or {}).items():
-        if (
-            not isinstance(key, str)
-            or not HEADER_NAME.fullmatch(key)
-            or not isinstance(value, str)
-            or any(ord(char) < 32 or ord(char) == 127 for char in key + value)
-        ):
-            raise ValueError("invalid response header")
-        safe.append((key, value))
-    return safe
 
 
 class ArinHTTPServer(ThreadingHTTPServer):
@@ -217,25 +202,24 @@ class ArinRequestHandler(BaseHTTPRequestHandler):
                 )
                 return self.json_response(HTTPStatus.CREATED, {"user": user})
             if path == "/api/auth/login":
+                session_token = security.new_token()
                 session = self.server.service.login_user(
-                    payload.get("email", ""), payload.get("password", "")
+                    payload.get("email", ""),
+                    payload.get("password", ""),
+                    session_token=session_token,
                 )
                 public_session = {key: value for key, value in session.items() if key != "session_token"}
                 return self.json_response(
                     HTTPStatus.OK,
                     public_session,
-                    {
-                        "Set-Cookie": self.session_cookie(
-                            session["session_token"], self.server.service.session_days
-                        )
-                    },
+                    set_cookie=self.session_cookie(session_token, self.server.service.session_days),
                 )
             if path == "/api/auth/logout":
                 user = self.require_session(mutation=True)
                 del user
                 self.server.service.logout(self.cookies().get(SESSION_COOKIE, ""))
                 return self.empty_response(
-                    HTTPStatus.NO_CONTENT, {"Set-Cookie": self.expired_session_cookie()}
+                    HTTPStatus.NO_CONTENT, set_cookie=self.expired_session_cookie()
                 )
             if path == "/api/workspaces":
                 user = self.require_session(mutation=True)
@@ -412,16 +396,13 @@ class ArinRequestHandler(BaseHTTPRequestHandler):
         return value
 
     def json_response(
-        self,
-        status: HTTPStatus,
-        payload: dict[str, Any],
-        extra_headers: dict[str, str] | None = None,
+        self, status: HTTPStatus, payload: dict[str, Any], *, set_cookie: str | None = None
     ) -> None:
         body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
         self.send_security_headers()
-        for key, value in safe_header_items(extra_headers):
-            self.send_header(key, value)
+        if set_cookie is not None:
+            self.send_header("Set-Cookie", set_cookie)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
@@ -435,24 +416,26 @@ class ArinRequestHandler(BaseHTTPRequestHandler):
         headers: dict[str, str] | None = None,
     ) -> None:
         self.send_response(HTTPStatus.OK)
-        custom_frame_policy = (headers or {}).get("X-Frame-Options", "DENY")
-        self.send_security_headers(custom_frame_policy)
-        for key, value in safe_header_items(headers):
-            if key.lower() == "x-frame-options":
-                continue
-            self.send_header(key, value)
+        same_origin = (headers or {}).get("X-Frame-Options") == "SAMEORIGIN"
+        self.send_security_headers(same_origin=same_origin)
+        if (headers or {}).get("Content-Security-Policy") == PREVIEW_CSP:
+            self.send_header("Content-Security-Policy", PREVIEW_CSP)
+        cache_control = (
+            "public, max-age=3600"
+            if (headers or {}).get("Cache-Control") == "public, max-age=3600"
+            else "no-store"
+        )
+        self.send_header("Cache-Control", cache_control)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
-    def empty_response(
-        self, status: HTTPStatus, extra_headers: dict[str, str] | None = None
-    ) -> None:
+    def empty_response(self, status: HTTPStatus, *, set_cookie: str | None = None) -> None:
         self.send_response(status)
         self.send_security_headers()
-        for key, value in safe_header_items(extra_headers):
-            self.send_header(key, value)
+        if set_cookie is not None:
+            self.send_header("Set-Cookie", set_cookie)
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -476,10 +459,10 @@ class ArinRequestHandler(BaseHTTPRequestHandler):
             return self.error_response(HTTPStatus.NOT_FOUND, "not_found", str(error))
         return self.error_response(HTTPStatus.BAD_REQUEST, "request_rejected", str(error))
 
-    def send_security_headers(self, frame_policy: str = "DENY") -> None:
+    def send_security_headers(self, *, same_origin: bool = False) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "same-origin")
-        self.send_header("X-Frame-Options", frame_policy)
+        self.send_header("X-Frame-Options", "SAMEORIGIN" if same_origin else "DENY")
 
     @staticmethod
     def session_cookie(token: str, days: int) -> str:

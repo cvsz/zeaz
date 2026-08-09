@@ -21,6 +21,7 @@ from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from cryptography.fernet import Fernet, InvalidToken
 from http import HTTPStatus
+from http.client import HTTPConnection, HTTPException
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from html import escape as escape_html
 from pathlib import Path
@@ -282,10 +283,12 @@ def ensure_receipt_ledger(con: sqlite3.Connection) -> None:
         if total <= 0 or subtotal < 0 or delivery < 0 or subtotal + delivery != total:
             raise ValueError("ใบเสร็จไม่สมดุล ไม่สามารถสร้างรายการบัญชีได้")
         created = str(receipt["issued_at"])
-        con.execute(
-            "INSERT INTO ledger_entries(id,entry_date,reference,journal,state,source_type,source_id,created_at) VALUES (?,?,?,?,?,?,?,?)",
+        inserted = con.execute(
+            "INSERT INTO ledger_entries(id,entry_date,reference,journal,state,source_type,source_id,created_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(source_type,source_id) DO NOTHING",
             (entry_id, created[:10], str(receipt["receipt_number"]), "Sales", "posted", "pos_receipt", str(receipt["id"]), created),
         )
+        if inserted.rowcount != 1:
+            continue
         lines = [("1100", "เงินสด/เงินรับชำระ", total, 0)]
         if subtotal:
             lines.append(("4100", "รายได้จากการขาย", 0, subtotal))
@@ -559,6 +562,15 @@ def qwen_upstream_url() -> str:
     ):
         raise ValueError("QWEN_UPSTREAM_URL ต้องเป็น HTTP บน loopback ที่ไม่มี path")
     return base.rstrip("/")
+
+
+def qwen_proxy_request_target(request_path: str) -> str:
+    """Return only the fixed API targets exposed by the Qwen gateway."""
+    if request_path == "/v1/models":
+        return "/v1/models"
+    if request_path == "/v1/chat/completions":
+        return "/v1/chat/completions"
+    raise ValueError("QWEN proxy route ไม่รองรับ")
 
 
 def qwen_proxy_target(base: str, request_path: str, query: str = "") -> str:
@@ -1989,7 +2001,11 @@ class Handler(SimpleHTTPRequestHandler):
             return self.json({"error": str(error)}, 503)
         parsed = urlparse(self.path)
         try:
-            target = qwen_proxy_target(base, parsed.path, parsed.query)
+            request_target = qwen_proxy_request_target(parsed.path)
+            if parsed.query:
+                raise ValueError("QWEN proxy query ไม่รองรับ")
+            upstream = urlparse(base)
+            upstream_port = upstream.port or 80
         except ValueError as error:
             return self.json({"error": str(error)}, 400)
         headers = {
@@ -2004,20 +2020,17 @@ class Handler(SimpleHTTPRequestHandler):
             except ValueError:
                 return self.json({"error": "ขนาดข้อมูลไม่ถูกต้อง"}, 400)
             body = self.rfile.read(length) if length > 0 else None
+        connection = HTTPConnection(upstream.hostname, upstream_port, timeout=30)
         try:
-            with urlopen(
-                Request(target, data=body, headers=headers, method=self.command),
-                timeout=30,
-            ) as response:
-                raw = response.read()
-                status = response.status
-                response_headers = list(response.getheaders())
-        except HTTPError as error:
-            raw = error.read() if hasattr(error, "read") else b""
-            status = error.code
-            response_headers = list(error.headers.items()) if error.headers else []
-        except (URLError, OSError):
+            connection.request(self.command, request_target, body=body, headers=headers)
+            response = connection.getresponse()
+            raw = response.read()
+            status = response.status
+            response_headers = list(response.getheaders())
+        except (HTTPException, OSError):
             return self.json({"error": "qwen service unavailable"}, 502)
+        finally:
+            connection.close()
         self.send_response(status)
         hop_headers = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade"}
         for key, value in response_headers:
