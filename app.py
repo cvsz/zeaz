@@ -283,10 +283,12 @@ def ensure_receipt_ledger(con: sqlite3.Connection) -> None:
         if total <= 0 or subtotal < 0 or delivery < 0 or subtotal + delivery != total:
             raise ValueError("ใบเสร็จไม่สมดุล ไม่สามารถสร้างรายการบัญชีได้")
         created = str(receipt["issued_at"])
-        con.execute(
-            "INSERT INTO ledger_entries(id,entry_date,reference,journal,state,source_type,source_id,created_at) VALUES (?,?,?,?,?,?,?,?)",
+        inserted = con.execute(
+            "INSERT INTO ledger_entries(id,entry_date,reference,journal,state,source_type,source_id,created_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(source_type,source_id) DO NOTHING",
             (entry_id, created[:10], str(receipt["receipt_number"]), "Sales", "posted", "pos_receipt", str(receipt["id"]), created),
         )
+        if inserted.rowcount != 1:
+            continue
         lines = [("1100", "เงินสด/เงินรับชำระ", total, 0)]
         if subtotal:
             lines.append(("4100", "รายได้จากการขาย", 0, subtotal))
