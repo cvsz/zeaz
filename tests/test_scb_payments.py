@@ -313,5 +313,27 @@ class ScbPaymentLifecycleTests(unittest.TestCase):
             app.check_scb_spending_limit(connection, 250)
 
 
+class ScbFeatureGateTests(unittest.TestCase):
+    def test_missing_maemanee_flag_defaults_to_disabled(self):
+        previous_payments = app.PAYMENTS_ENABLED
+        previous_scb = app.SCB_ENABLED
+        app.PAYMENTS_ENABLED = True
+        app.SCB_ENABLED = True
+        try:
+            with patch.dict(
+                os.environ,
+                {
+                    "SCB_PRODUCT": "qr_api",
+                    "SCB_ENABLED_PRODUCTS": "maemanee_qr",
+                },
+                clear=False,
+            ):
+                os.environ.pop("SCB_MAEMANEE_QR_ENABLED", None)
+                self.assertFalse(app.scb_active())
+        finally:
+            app.PAYMENTS_ENABLED = previous_payments
+            app.SCB_ENABLED = previous_scb
+
+
 if __name__ == "__main__":
     unittest.main()
