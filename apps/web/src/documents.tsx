@@ -6,7 +6,6 @@ import type {
   Provider,
   UploadedDocument,
 } from "@moopiew/types";
-import { isSafeImagePreviewType } from "./security";
 import "./documents.css";
 
 const api = new MoopiewClient({
@@ -75,20 +74,9 @@ function UploadCard({
 }) {
   const [document, setDocument] = useState<UploadedDocument>();
   const [file, setFile] = useState<File>();
-  const [preview, setPreview] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
-
-  useEffect(() => {
-    if (!file || !isSafeImagePreviewType(file.type)) {
-      setPreview("");
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
 
   async function upload(next: File) {
     const allowed = requirement.allowed_mime_types.includes(next.type);
@@ -157,7 +145,7 @@ function UploadCard({
         <h3>{requirement.metadata.label_th || requirement.document_name}</h3>
         <p>{requirement.is_required ? "เอกสารจำเป็น" : "เอกสารทางเลือก"} · สูงสุด {Math.ceil(requirement.max_size_bytes / 1024 / 1024)} MB</p>
       </div>
-      {preview && <img className="preview" src={preview} alt={`ตัวอย่าง ${file?.name}`} />}
+      {file && <div className="preview" role="img" aria-label={`ตัวอย่าง ${file.name}`}>IMAGE</div>}
       {file?.type === "application/pdf" && <div className="pdf-preview">PDF</div>}
       {document && <div className="existing-file"><strong>{document.original_filename}</strong><small>{Math.ceil(document.size_bytes / 1024)} KB</small></div>}
       <label className={`dropzone ${busy ? "busy" : ""}`}>

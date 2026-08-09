@@ -21,6 +21,7 @@ from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from cryptography.fernet import Fernet, InvalidToken
 from http import HTTPStatus
+from http.client import HTTPConnection, HTTPException
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from html import escape as escape_html
 from pathlib import Path
@@ -1989,7 +1990,9 @@ class Handler(SimpleHTTPRequestHandler):
             return self.json({"error": str(error)}, 503)
         parsed = urlparse(self.path)
         try:
-            target = qwen_proxy_target(base, parsed.path, parsed.query)
+            qwen_proxy_target(base, parsed.path, parsed.query)
+            upstream = urlparse(base)
+            upstream_port = upstream.port or 80
         except ValueError as error:
             return self.json({"error": str(error)}, 400)
         headers = {
@@ -2004,20 +2007,18 @@ class Handler(SimpleHTTPRequestHandler):
             except ValueError:
                 return self.json({"error": "ขนาดข้อมูลไม่ถูกต้อง"}, 400)
             body = self.rfile.read(length) if length > 0 else None
+        connection = HTTPConnection(upstream.hostname, upstream_port, timeout=30)
         try:
-            with urlopen(
-                Request(target, data=body, headers=headers, method=self.command),
-                timeout=30,
-            ) as response:
-                raw = response.read()
-                status = response.status
-                response_headers = list(response.getheaders())
-        except HTTPError as error:
-            raw = error.read() if hasattr(error, "read") else b""
-            status = error.code
-            response_headers = list(error.headers.items()) if error.headers else []
-        except (URLError, OSError):
+            request_target = f"{parsed.path}{('?' + parsed.query) if parsed.query else ''}"
+            connection.request(self.command, request_target, body=body, headers=headers)
+            response = connection.getresponse()
+            raw = response.read()
+            status = response.status
+            response_headers = list(response.getheaders())
+        except (HTTPException, OSError):
             return self.json({"error": "qwen service unavailable"}, 502)
+        finally:
+            connection.close()
         self.send_response(status)
         hop_headers = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade"}
         for key, value in response_headers:
