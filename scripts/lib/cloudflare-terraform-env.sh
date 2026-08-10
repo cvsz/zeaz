@@ -102,6 +102,12 @@ cloudflare_load_terraform_env() {
   export TF_VAR_zai_origin="${ZAI_ORIGIN:-http://127.0.0.1:8765}"
   export TF_VAR_auth_hostname="${AUTH_HOSTNAME:-auth.zeaz.dev}"
   export TF_VAR_auth_origin="${AUTH_ORIGIN:-http://127.0.0.1:8080}"
+  export TF_VAR_uperfect_hostname="${UPERFECT_HOSTNAME:-uperfect.zeaz.dev}"
+  export TF_VAR_uperfect_origin="${UPERFECT_ORIGIN:-http://192.168.74.130:18765}"
+  export TF_VAR_zok_hostname="${ZOK_HOSTNAME:-zok.zeaz.dev}"
+  export TF_VAR_zok_origin="${ZOK_ORIGIN:-http://127.0.0.1:5175}"
+  export TF_VAR_z_spark_hostname="${Z_SPARK_HOSTNAME:-z-spark.zeaz.dev}"
+  export TF_VAR_z_spark_origin="${Z_SPARK_ORIGIN:-http://127.0.0.1:8080}"
   export TF_VAR_piewdash_access_allowed_emails="$PIEWDASH_ACCESS_ALLOWED_EMAILS"
 
   export TF_VAR_enable_zeaz_one="${ZEAZ_ONE_ENABLED:-false}"

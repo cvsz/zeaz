@@ -19,6 +19,13 @@ loopback dashboard process on port 8082. Never point the tunnel directly at
 port 8082 because that bypasses the origin authentication layer. The zERP
 hostname also terminates at Caddy port 80, which routes to the zERP web server
 on port 3001.
+The ZOK Social Commerce dashboard adds `zok.zeaz.dev` and forwards it to the
+Vite UI on `127.0.0.1:5175`. The Vite `/api` proxy keeps the Node API on
+`127.0.0.1:3005` private; port 3005 is not a Cloudflare ingress origin.
+The z-spark client adds `z-spark.zeaz.dev` and terminates at Caddy on
+`127.0.0.1:8080`. Caddy serves `/mnt/z-spark/client/dist` and proxies only
+`/api/*` to the private Gemini backend on `127.0.0.1:13131`; port 13131 is not
+a Cloudflare ingress origin.
 Terraform also owns the dashboard's Cloudflare Access application. Its allow
 policy accepts only the exact, nonempty email set supplied through
 `PIEWDASH_ACCESS_ALLOWED_EMAILS`; domain-wide and `everyone` rules are
@@ -110,13 +117,15 @@ terraform -chdir=infrastructure/terraform/cloudflare import \
   cloudflare_dns_record.zerp "<zone-id>/<dns-record-id>"
 terraform -chdir=infrastructure/terraform/cloudflare import \
   cloudflare_dns_record.cmeerp "<zone-id>/<dns-record-id>"
+terraform -chdir=infrastructure/terraform/cloudflare import \
+  cloudflare_dns_record.zok "<zone-id>/<dns-record-id>"
 ./scripts/cloudflare-plan.sh
 ```
 
 Only after review, an operator may apply `tfplan` manually. Keep
 `manage_tunnel_config = false` unless all existing ingress rules have first
 been imported and reviewed. For a local cloudflared configuration, merge the
-rendered `cloudflared_ingress` output before its final fallback rule. The
-reviewed origins are deliberately restricted to `127.0.0.1`: application
-traffic uses Caddy port 8080 and dashboard and ERP traffic uses authenticated
-Caddy port 80; zERP traffic uses Caddy port 80 and is forwarded to port 3001.
+rendered `cloudflared_ingress` output before its final fallback rule. Reviewed
+origins remain restricted to `127.0.0.1` for the existing services; the
+U.Perfect route is the explicit LAN exception at
+`http://192.168.74.130:18765`.

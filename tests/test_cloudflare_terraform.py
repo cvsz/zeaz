@@ -14,11 +14,150 @@ class CloudflareTerraformTests(unittest.TestCase):
     def test_dns_records_are_proxied_tunnel_cnames(self):
         terraform = "\n".join(read(path) for path in sorted(STACK.glob("*.tf")))
 
-        self.assertEqual(terraform.count('resource "cloudflare_dns_record"'), 13)
-        self.assertEqual(terraform.count('type    = "CNAME"'), 13)
-        self.assertEqual(terraform.count("content = local.tunnel_cname"), 13)
-        self.assertEqual(terraform.count("proxied = true"), 13)
-        self.assertEqual(terraform.count("ttl     = 1"), 13)
+        self.assertEqual(terraform.count('resource "cloudflare_dns_record"'), 20)
+        self.assertEqual(terraform.count('type    = "CNAME"'), 20)
+        self.assertEqual(terraform.count("content = local.tunnel_cname"), 20)
+        self.assertEqual(terraform.count("proxied = true"), 20)
+        self.assertEqual(terraform.count("ttl     = 1"), 20)
+
+    def test_uperfect_route_uses_dedicated_lan_origin(self):
+        main = read(STACK / "main.tf")
+        outputs = read(STACK / "outputs.tf")
+        uperfect = read(STACK / "uperfect.tf")
+        plan = read(ROOT / "scripts" / "cloudflare-plan.sh")
+        loader = read(ROOT / "scripts" / "lib" / "cloudflare-terraform-env.sh")
+        importer = read(ROOT / "scripts" / "cloudflare-import-dns.sh")
+        ingress = read(
+            ROOT / "deploy" / "cloudflared" / "moopiew-ingress.yml.example"
+        )
+        env_example = read(ROOT / ".env.cloudflare.example")
+        tfvars_example = read(STACK / "terraform.tfvars.example")
+
+        self.assertIn('default     = "uperfect.zeaz.dev"', uperfect)
+        self.assertIn('default     = "http://192.168.74.130:18765"', uperfect)
+        self.assertIn(
+            'var.uperfect_origin == "http://192.168.74.130:18765"', uperfect
+        )
+        self.assertIn('resource "cloudflare_dns_record" "uperfect"', uperfect)
+        self.assertIn("var.uperfect_hostname, service = var.uperfect_origin", main)
+        self.assertIn("var.uperfect_hostname, service = var.uperfect_origin", outputs)
+        self.assertIn('output "uperfect_url"', uperfect)
+        self.assertIn(
+            'TF_VAR_uperfect_hostname="${UPERFECT_HOSTNAME:-uperfect.zeaz.dev}"',
+            plan,
+        )
+        self.assertIn(
+            'TF_VAR_uperfect_origin="${UPERFECT_ORIGIN:-http://192.168.74.130:18765}"',
+            plan,
+        )
+        self.assertIn(
+            'TF_VAR_uperfect_hostname="${UPERFECT_HOSTNAME:-uperfect.zeaz.dev}"',
+            loader,
+        )
+        self.assertIn('[uperfect]="cloudflare_dns_record.uperfect"', importer)
+        self.assertIn("hostname: uperfect.zeaz.dev", ingress)
+        self.assertIn("service: http://192.168.74.130:18765", ingress)
+        self.assertIn("UPERFECT_HOSTNAME=uperfect.zeaz.dev", env_example)
+        self.assertIn("UPERFECT_ORIGIN=http://192.168.74.130:18765", env_example)
+        self.assertIn('uperfect_hostname = "uperfect.zeaz.dev"', tfvars_example)
+        self.assertIn('uperfect_origin   = "http://192.168.74.130:18765"', tfvars_example)
+
+    def test_zok_route_uses_vite_ui_and_private_api_proxy(self):
+        main = read(STACK / "main.tf")
+        outputs = read(STACK / "outputs.tf")
+        zok = read(STACK / "zok.tf")
+        plan = read(ROOT / "scripts" / "cloudflare-plan.sh")
+        loader = read(ROOT / "scripts" / "lib" / "cloudflare-terraform-env.sh")
+        importer = read(ROOT / "scripts" / "cloudflare-import-dns.sh")
+        ingress = read(
+            ROOT / "deploy" / "cloudflared" / "moopiew-ingress.yml.example"
+        )
+        env_example = read(ROOT / ".env.cloudflare.example")
+        tfvars_example = read(STACK / "terraform.tfvars.example")
+        vite_config = read(Path("/mnt/zok/vite.config.js"))
+
+        self.assertIn('default     = "zok.zeaz.dev"', zok)
+        self.assertIn('default     = "http://127.0.0.1:5175"', zok)
+        self.assertIn('var.zok_origin == "http://127.0.0.1:5175"', zok)
+        self.assertIn('resource "cloudflare_dns_record" "zok"', zok)
+        self.assertIn("var.zok_hostname, service = var.zok_origin", main)
+        self.assertIn("var.zok_hostname, service = var.zok_origin", outputs)
+        self.assertIn('output "zok_url"', zok)
+        self.assertIn(
+            'TF_VAR_zok_hostname="${ZOK_HOSTNAME:-zok.zeaz.dev}"',
+            plan,
+        )
+        self.assertIn(
+            'TF_VAR_zok_origin="${ZOK_ORIGIN:-http://127.0.0.1:5175}"',
+            plan,
+        )
+        self.assertIn(
+            'TF_VAR_zok_hostname="${ZOK_HOSTNAME:-zok.zeaz.dev}"',
+            loader,
+        )
+        self.assertIn(
+            'TF_VAR_zok_origin="${ZOK_ORIGIN:-http://127.0.0.1:5175}"',
+            loader,
+        )
+        self.assertIn('[zok]="cloudflare_dns_record.zok"', importer)
+        self.assertIn("hostname: zok.zeaz.dev", ingress)
+        self.assertIn("service: http://127.0.0.1:5175", ingress)
+        self.assertIn("ZOK_HOSTNAME=zok.zeaz.dev", env_example)
+        self.assertIn("ZOK_ORIGIN=http://127.0.0.1:5175", env_example)
+        self.assertIn('zok_hostname      = "zok.zeaz.dev"', tfvars_example)
+        self.assertIn('zok_origin        = "http://127.0.0.1:5175"', tfvars_example)
+        self.assertIn("target: 'http://127.0.0.1:3005'", vite_config)
+        self.assertIn("allowedHosts: ['zok.zeaz.dev']", vite_config)
+
+    def test_z_spark_route_serves_built_ui_and_private_api_proxy(self):
+        main = read(STACK / "main.tf")
+        outputs = read(STACK / "outputs.tf")
+        z_spark = read(STACK / "z-spark.tf")
+        plan = read(ROOT / "scripts" / "cloudflare-plan.sh")
+        loader = read(ROOT / "scripts" / "lib" / "cloudflare-terraform-env.sh")
+        importer = read(ROOT / "scripts" / "cloudflare-import-dns.sh")
+        ingress = read(
+            ROOT / "deploy" / "cloudflared" / "moopiew-ingress.yml.example"
+        )
+        env_example = read(ROOT / ".env.cloudflare.example")
+        tfvars_example = read(STACK / "terraform.tfvars.example")
+        caddy = read(ROOT / "deploy" / "caddy" / "Caddyfile")
+        client = read(Path("/mnt/z-spark/client/src/App.jsx"))
+
+        self.assertIn('default     = "z-spark.zeaz.dev"', z_spark)
+        self.assertIn('default     = "http://127.0.0.1:8080"', z_spark)
+        self.assertIn('var.z_spark_origin == "http://127.0.0.1:8080"', z_spark)
+        self.assertIn('resource "cloudflare_dns_record" "z_spark"', z_spark)
+        self.assertIn("var.z_spark_hostname, service = var.z_spark_origin", main)
+        self.assertIn("var.z_spark_hostname, service = var.z_spark_origin", outputs)
+        self.assertIn('output "z_spark_url"', z_spark)
+        self.assertIn(
+            'TF_VAR_z_spark_hostname="${Z_SPARK_HOSTNAME:-z-spark.zeaz.dev}"',
+            plan,
+        )
+        self.assertIn(
+            'TF_VAR_z_spark_origin="${Z_SPARK_ORIGIN:-http://127.0.0.1:8080}"',
+            plan,
+        )
+        self.assertIn(
+            'TF_VAR_z_spark_hostname="${Z_SPARK_HOSTNAME:-z-spark.zeaz.dev}"',
+            loader,
+        )
+        self.assertIn(
+            'TF_VAR_z_spark_origin="${Z_SPARK_ORIGIN:-http://127.0.0.1:8080}"',
+            loader,
+        )
+        self.assertIn('[z-spark]="cloudflare_dns_record.z_spark"', importer)
+        self.assertIn("hostname: z-spark.zeaz.dev", ingress)
+        self.assertIn("service: http://127.0.0.1:8080", ingress)
+        self.assertIn("Z_SPARK_HOSTNAME=z-spark.zeaz.dev", env_example)
+        self.assertIn("Z_SPARK_ORIGIN=http://127.0.0.1:8080", env_example)
+        self.assertIn('z_spark_hostname  = "z-spark.zeaz.dev"', tfvars_example)
+        self.assertIn('z_spark_origin    = "http://127.0.0.1:8080"', tfvars_example)
+        self.assertIn("http://z-spark.zeaz.dev:8080", caddy)
+        self.assertIn("root * /mnt/z-spark/client/dist", caddy)
+        self.assertIn("reverse_proxy 127.0.0.1:13131", caddy)
+        self.assertIn("fetch('/api/chat'", client)
 
     def test_zdash_uses_loopback_gateway_and_cloudflare_access(self):
         main = read(STACK / "main.tf")

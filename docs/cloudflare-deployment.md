@@ -10,6 +10,12 @@ The project uses the same split of responsibilities as z-platform:
    `127.0.0.1:80`; Caddy applies Basic Auth and proxies to
    `127.0.0.1:8082`.
 5. Cloudflare Access and Caddy Basic Auth protect `piewdash.zeaz.dev`.
+6. `zok.zeaz.dev` forwards to the `/mnt/zok` Vite UI on `127.0.0.1:5175`.
+   Vite proxies `/api/*` to the private Node API on `127.0.0.1:3005`; the
+   API port is intentionally not exposed as a separate public origin.
+7. `z-spark.zeaz.dev` forwards to Caddy on `127.0.0.1:8080`. Caddy serves the
+   production build from `/mnt/z-spark/client/dist` and proxies `/api/*` to
+   the private Gemini backend on `127.0.0.1:13131`.
 
 The Arin frontend is built from `sites/arin`, published to `deploy/arin`, and
 served by the host-specific Caddy route for `arin.zeaz.dev` on the same
@@ -45,6 +51,10 @@ Populate `.env.cloudflare` locally from the Cloudflare account that owns
 - `MOOPIEW_ORIGIN=http://127.0.0.1:8080` and
   `PIEWDASH_ORIGIN=http://127.0.0.1:80`. The latter must never point directly
   to port 8082 because that bypasses Caddy Basic Auth.
+- `ZOK_ORIGIN=http://127.0.0.1:5175`. Keep the ZOK Node API on
+  `http://127.0.0.1:3005`; the frontend's `/api` proxy handles that hop.
+- `Z_SPARK_ORIGIN=http://127.0.0.1:8080`. Keep the z-spark Gemini backend on
+  `http://127.0.0.1:13131`; Caddy owns the static build and `/api` proxy.
 
 The API token and tunnel token are distinct secrets. Never commit either one.
 
@@ -96,6 +106,69 @@ authenticated `https://piewdash.zeaz.dev/api/health`, `/api/ready`, and the
 `401` or a Cloudflare Access login redirect, never dashboard data. A 502
 response indicates an unreachable origin; a 530 indicates that Cloudflare
 cannot reach a healthy tunnel.
+
+## ZOK runtime and public route
+
+Run the ZOK dashboard from `/mnt/zok` with the existing local development
+process:
+
+```bash
+cd /mnt/zok
+npm run dev
+```
+
+Verify both local listeners before applying the reviewed Cloudflare plan:
+
+```bash
+curl -fsS http://127.0.0.1:5175/
+curl -fsS http://127.0.0.1:3005/api/db
+```
+
+After the DNS record and tunnel ingress are active, verify:
+
+```bash
+curl -fsS https://zok.zeaz.dev/
+curl -fsS https://zok.zeaz.dev/api/db
+```
+
+The second public request is still served by the UI origin and forwarded by
+Vite to port 3005. Do not create a second DNS route to port 3005 unless a
+separate authenticated API hostname is explicitly designed and reviewed.
+
+## z-spark runtime and public route
+
+Build the client into the Caddy static root and keep the Gemini backend on its
+private loopback port:
+
+```bash
+cd /mnt/z-spark/client
+npm ci
+npm run build
+chmod 600 /mnt/z-spark/server/.env
+pm2 status
+```
+
+The PM2-managed `omega-backend` process reads `GEMINI_API_KEYS` only from the
+ignored `/mnt/z-spark/server/.env` and binds the backend to port 13131. The
+browser client uses the same-origin `/api/chat` path, so the API key never
+reaches the browser and no CORS exception is needed.
+
+Verify the local route before the Cloudflare plan:
+
+```bash
+curl -fsS -H 'Host: z-spark.zeaz.dev' http://127.0.0.1:8080/
+curl -fsS -o /dev/null -w '%{http_code}\n' -H 'Host: z-spark.zeaz.dev' http://127.0.0.1:8080/api/chat
+```
+
+After DNS and tunnel ingress are active, verify:
+
+```bash
+curl -fsS https://z-spark.zeaz.dev/
+curl -fsS -o /dev/null -w '%{http_code}\n' https://z-spark.zeaz.dev/api/chat
+```
+
+The API check without a JSON body is expected to return `400`; a `502` means
+the backend on port 13131 is unavailable.
 
 ## Arin release and runtime
 

@@ -179,3 +179,34 @@ http://laps.zeaz.dev:80 {
 	}
 }
 
+http://z-spark.zeaz.dev:8080 {
+	bind 127.0.0.1
+
+	encode zstd gzip
+
+	root * /mnt/z-spark/client/dist
+
+	header {
+		-Server
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	}
+
+	@z_spark_api path /api /api/*
+	handle @z_spark_api {
+		reverse_proxy 127.0.0.1:13131 {
+			header_up Host {http.request.host}
+			header_up X-Forwarded-Proto https
+			header_up X-Real-IP {http.request.header.CF-Connecting-IP}
+			header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+		}
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -25,6 +25,12 @@ zerp_hostname     = "zerp.zeaz.dev"
 zerp_origin       = "http://127.0.0.1:80"
 cmeerp_hostname   = "cme.zeaz.dev"
 cmeerp_origin     = "http://127.0.0.1:8000"
+uperfect_hostname = "uperfect.zeaz.dev"
+uperfect_origin   = "http://192.168.74.130:18765"
+zok_hostname      = "zok.zeaz.dev"
+zok_origin        = "http://127.0.0.1:5175"
+z_spark_hostname  = "z-spark.zeaz.dev"
+z_spark_origin    = "http://127.0.0.1:8080"
 
 piewdash_access_allowed_emails = [
   "operator@example.com",
