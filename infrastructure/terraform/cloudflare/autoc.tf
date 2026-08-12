@@ -11,12 +11,12 @@ variable "autoc_hostname" {
 
 variable "autoc_origin" {
   type        = string
-  default     = "http://127.0.0.1:8000"
+  default     = "http://127.0.0.1:8001"
   description = "Loopback-only autoc gateway reached by cloudflared."
 
   validation {
-    condition     = var.autoc_origin == "http://127.0.0.1:8000"
-    error_message = "autoc_origin must use the local gateway at http://127.0.0.1:8000."
+    condition     = var.autoc_origin == "http://127.0.0.1:8001"
+    error_message = "autoc_origin must use the local gateway at http://127.0.0.1:8001."
   }
 }
 
