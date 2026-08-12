@@ -55,6 +55,9 @@ declare -A resources=(
   [zttshop]="cloudflare_dns_record.zttshop"
   [qwen]="cloudflare_dns_record.qwen"
   [chat]="cloudflare_dns_record.chat"
+  [llmwiki]="cloudflare_dns_record.llmwiki"
+  [zksato]="cloudflare_dns_record.zksato"
+  [zwf]="cloudflare_dns_record.zwf"
   [piewdash]="cloudflare_dns_record.piewdash"
   [zdash]="cloudflare_dns_record.zdash"
   [zerp]="cloudflare_dns_record.zerp"
@@ -71,6 +74,9 @@ declare -A hostnames=(
   [zttshop]="${ZTTSHOP_HOSTNAME:-zttshop.zeaz.dev}"
   [qwen]="${QWEN_HOSTNAME:-qwen.zeaz.dev}"
   [chat]="${CHAT_HOSTNAME:-chat.zeaz.dev}"
+  [llmwiki]="${LLMWIKI_HOSTNAME:-llmwiki.zeaz.dev}"
+  [zksato]="${ZKSATO_HOSTNAME:-zksato.zeaz.dev}"
+  [zwf]="${ZWF_HOSTNAME:-zwf.zeaz.dev}"
   [piewdash]="${PIEWDASH_HOSTNAME:-piewdash.zeaz.dev}"
   [zdash]="${ZDASH_HOSTNAME:-zdash.zeaz.dev}"
   [zerp]="${ZERP_HOSTNAME:-zerp.zeaz.dev}"
@@ -81,7 +87,7 @@ declare -A hostnames=(
   [zeaz-one-support]="${ZEAZ_ONE_SUPPORT_HOSTNAME:-support.zeaz.dev}"
 )
 
-declare -a all_targets=(moopiew arin zttshop qwen chat piewdash zdash zerp cmeerp zai auth)
+declare -a all_targets=(moopiew arin zttshop qwen chat llmwiki zksato zwf piewdash zdash zerp cmeerp zai auth)
 if [[ "${ZEAZ_ONE_ENABLED:-false}" == "true" ]]; then
   all_targets+=(zeaz-one zeaz-one-support)
 fi
