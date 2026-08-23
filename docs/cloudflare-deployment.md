@@ -3,7 +3,7 @@
 The project uses the same split of responsibilities as z-platform:
 
 1. Terraform owns the proxied DNS CNAMEs for the public application hosts,
-   including `chat.zeaz.dev` for OpenWebUI.
+   including `chat.zeaz.dev` for NextChat.
 2. An existing Cloudflare Tunnel owns the public-to-private connection.
 3. `cloudflared` forwards the application to Caddy on `127.0.0.1:8080`.
 4. `cloudflared` forwards the dashboard hostname to Caddy on
@@ -18,9 +18,17 @@ reviewed loopback origin. Caddy proxies Arin's `/api/*`, `/preview/*`, and
 is kept in the ignored `data/arin/` directory and never shares MooPiew's
 database.
 
-OpenWebUI is published through the same tunnel at `chat.zeaz.dev` and reaches
-the host-published container port `127.0.0.1:3000`. Keep the tunnel origin on
-the host port; the container's internal port `8080` is not the tunnel target.
+`cme.zeaz.dev` reaches the reviewed host-local CME/ZEAZ Python API at
+`http://127.0.0.1:8000`, which is also the application's documented default.
+Keep the Terraform origin and the running service on the same port; a 502 on
+this hostname means the tunnel cannot reach that local origin.
+
+NextChat (`qwen-gen-nextchat-1`) is published through the same tunnel at
+`chat.zeaz.dev` and reaches the host-published port `127.0.0.1:3000`. Its
+OpenAI-compatible backend is the sibling LiteLLM service at
+`http://litellm:4000/v1` (`qwen-gen-litellm-1:4000` on the Compose network).
+Keep the tunnel origin on the host port; do not target a container name from a
+host-process cloudflared instance.
 
 ## Required operator values
 

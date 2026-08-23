@@ -31,9 +31,15 @@ for arg in "$@"; do
   esac
 done
 
-mapfile -t ENV_FILES < <(find "$ROOT" /home/cvsz/zeaz-provider -maxdepth 2 -type f \
-  \( -name '.env' -o -name '.env.*' -o -name '*.env' \) \
-  ! -name '*.example' -print 2>/dev/null | sort -u)
+declare -a SCAN_ROOTS=("$ROOT")
+[[ -d /home/cvsz ]] && SCAN_ROOTS+=("/home/cvsz")
+mapfile -t ENV_FILES < <(
+  for scan_root in "${SCAN_ROOTS[@]}"; do
+    find "$scan_root" -maxdepth 3 -type f \
+      \( -name '.env' -o -name '.env.*' -o -name '*.env' \) \
+      ! -name '*.example' -print 2>/dev/null
+  done | sort -u
+)
 
 if (( EXECUTE )); then
   [[ "$APPROVED" == "YES" ]] || { echo "Refusing execute: set ROTATION_APPROVED=YES after reviewing the dry-run." >&2; exit 3; }

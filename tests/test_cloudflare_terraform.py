@@ -14,12 +14,19 @@ class CloudflareTerraformTests(unittest.TestCase):
     def test_dns_records_are_proxied_tunnel_cnames(self):
         terraform = "\n".join(read(path) for path in sorted(STACK.glob("*.tf")))
 
-        # Includes the laps.zeaz.dev route added to the canonical tunnel set.
-        self.assertEqual(terraform.count('resource "cloudflare_dns_record"'), 14)
-        self.assertEqual(terraform.count('type    = "CNAME"'), 14)
-        self.assertEqual(terraform.count("content = local.tunnel_cname"), 14)
-        self.assertEqual(terraform.count("proxied = true"), 14)
-        self.assertEqual(terraform.count("ttl     = 1"), 14)
+        # Includes laps plus the llmwiki, zksato, and zwf routes in the
+        # canonical tunnel set.
+        expected_dns_records = 17
+        self.assertEqual(
+            terraform.count('resource "cloudflare_dns_record"'),
+            expected_dns_records,
+        )
+        self.assertEqual(terraform.count('type    = "CNAME"'), expected_dns_records)
+        self.assertEqual(
+            terraform.count("content = local.tunnel_cname"), expected_dns_records
+        )
+        self.assertEqual(terraform.count("proxied = true"), expected_dns_records)
+        self.assertEqual(terraform.count("ttl     = 1"), expected_dns_records)
 
     def test_zdash_uses_loopback_gateway_and_cloudflare_access(self):
         main = read(STACK / "main.tf")
