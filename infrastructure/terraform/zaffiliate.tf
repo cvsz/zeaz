@@ -1,7 +1,7 @@
 resource "cloudflare_record" "zaffiliate_cname" {
   zone_id = var.cloudflare_zone_id
   name    = "zaffiliate"
-  value   = "45667e7e73834265b53e6a9e770a8554.cfargotunnel.com"
+  value   = "77107d8b-8293-421d-8189-85f74a73b30b.cfargotunnel.com"
   type    = "CNAME"
   proxied = var.zaffiliate_proxied
   ttl     = var.zaffiliate_proxied ? 1 : 300
