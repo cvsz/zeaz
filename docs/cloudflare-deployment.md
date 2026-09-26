@@ -1,5 +1,15 @@
 # Deploy Moopiew through Cloudflare Tunnel
 
+> **Cloudflare is not provisioned from this repository.** DNS records, tunnel
+> ingress and Cloudflare Access applications for every `*.zeaz.dev` hostname are
+> declared and applied in `zworkforce`
+> (`infrastructure/terraform/cloudflare`). The scripts that used to live here
+> have been removed. To add or change a hostname, open a pull request there and
+> let it merge before applying. See the ownership contract in that repository.
+>
+> What remains in this document is what still belongs to this repository: the
+> services, the loopback origins, and the connector that serves them.
+
 The project uses the same split of responsibilities as z-platform:
 
 1. Terraform owns the proxied DNS CNAMEs for the public application hosts,
@@ -54,21 +64,17 @@ The API token and tunnel token are distinct secrets. Never commit either one.
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 ./scripts/start.sh
-./scripts/cloudflare-plan.sh
 ```
 
-If Cloudflare already has a record for any hostname, import each applicable
-records before applying the reviewed plan. Confirm the plan keeps each CNAME
+If Cloudflare already has a record for any hostname, the owning repository
+imports it before applying the reviewed plan. Confirm the plan keeps each CNAME
 proxied and targets the selected tunnel. Keep `manage_tunnel_config = false`;
 merge the generated ingress fragment into the existing tunnel config instead,
 unless the entire existing remote configuration has been imported and
 reviewed.
 
-Start the connector on the origin host with:
-
-```bash
-./scripts/cloudflare-tunnel.sh
-```
+Start the connector on the origin host with the unit installed from
+`deploy/systemd/`:
 
 For durable user services, copy `deploy/systemd/moopiew.service`,
 `deploy/systemd/moopiew-dashboard.service`, and

@@ -36,19 +36,20 @@ authenticated Caddy route at `http://127.0.0.1:80`, not the process directly.
 
 ## Terraform state
 
-Cloudflare state migration and verification are owned by
-`scripts/cloudflare-state.sh` and
-`infrastructure/terraform/cloudflare/backend.r2.tf.example`. The current
-backend mode and write authorization live only in `.env.cloudflare`; the
-script installs ignored `backend.tf` from that canonical template only for R2
-operations. A local backend is not collaborative production state;
-`ROADMAP.md` remains open until an encrypted R2 backend migration and
-lock-backed plan have both succeeded.
+Cloudflare state is owned by `zworkforce`, together with every DNS record and
+tunnel ingress rule for `*.zeaz.dev`. This repository keeps no Cloudflare
+Terraform and no state. Migrating, verifying or backing up that state is an
+operation in the owning repository, using the mode-`0600` `.env.cloudflare`
+there.
+
+The discipline below still applies to whoever operates it: a local backend is
+not collaborative production state, and a recovery decision must be reviewed
+before any mutation.
 
 Migration requires a mode-`0600` version-4 local state with a nonempty lineage
-and managed resource set. It creates a mode-`0700` backup directory containing
-a unique mode-`0600` state copy and checksum, then verifies remote lineage and
-resource-address parity. If backend initialization succeeds but verification
-fails, `backend.tf` intentionally remains installed: stop Terraform writers
-and use the recovery procedure in [`RUNBOOK.md`](RUNBOOK.md) before changing
-backend authority.
+and managed resource set. Backups must be a mode-`0700` directory containing a
+unique mode-`0600` state copy and checksum, and remote lineage and
+resource-address parity must be verified. If backend initialization succeeds
+but verification fails, `backend.tf` intentionally remains installed: stop
+Terraform writers and use the recovery procedure in
+[`RUNBOOK.md`](RUNBOOK.md) before changing backend authority.
