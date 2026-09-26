@@ -1,6 +1,13 @@
 # zDash on Cloudflare
 
-`zdash.zeaz.dev` is managed by the Cloudflare Terraform stack in this repository.
+`zdash.zeaz.dev` is managed by the Cloudflare Terraform stack in
+`zworkforce`, not in this repository. The DNS record, the tunnel ingress rule
+and the Cloudflare Access application are all declared in
+`infrastructure/terraform/cloudflare/zdash.tf` there. To change them, open a
+pull request in that repository and let it merge before applying.
+
+This document keeps only what belongs to this repository: the gateway it serves
+and the loopback port behind it.
 
 ## Data path
 
@@ -44,68 +51,33 @@ chmod 600 .env.cloudflare
 
 ## Existing DNS records
 
-Cloudflare error `81053` means an A, AAAA, or CNAME record with the hostname already exists but is not yet associated with the Terraform state. Do not delete the record merely to make Terraform create it again.
+Cloudflare error `81053` means an A, AAAA, or CNAME record with the hostname
+already exists but is not yet associated with the Terraform state. Do not delete
+the record merely to make Terraform create it again.
 
-Inspect the existing `zai`, `auth`, and `zdash` records without changing state:
-
-```bash
-./scripts/cloudflare-import-dns.sh --check
-```
-
-Import the exact existing records into state:
-
-```bash
-./scripts/cloudflare-import-dns.sh
-```
-
-The script:
+Run these steps in `zworkforce`, which is where the state now lives. Its import
+wrapper is `scripts/cloudflare-import-dns.sh` and behaves the same way:
 
 - initializes the configured Terraform backend;
-- backs up the current state under `backups/cloudflare/`;
+- backs up the current state before touching anything;
 - queries Cloudflare DNS by exact hostname;
 - skips resources already present in state;
 - refuses ambiguous matches;
 - never creates, updates, or deletes DNS records.
 
-To reconcile every DNS resource managed by the stack:
-
-```bash
-./scripts/cloudflare-import-dns.sh --all
-```
-
 ## Plan and apply
 
-Create and display a plan. The command automatically reconciles `zai`, `auth`, and `zdash` before planning:
-
-```bash
-./scripts/cloudflare-apply.sh
-```
-
-After reviewing the full plan, apply that plan explicitly:
-
-```bash
-./scripts/cloudflare-apply.sh --apply
-```
-
-To reconcile every managed DNS record first:
-
-```bash
-./scripts/cloudflare-apply.sh --all-dns
-```
-
-The apply wrapper validates formatting and configuration, backs up Terraform state, saves the plan with mode `600`, and verifies the local zDash origin after a successful apply.
+Create and display a plan, review it in full, and only then apply. Because the
+tunnel also serves unrelated production hostnames, the pull request must merge
+and clear review before the apply step runs.
 
 ## Tunnel configuration safety
 
-The tunnel configuration remains opt-in. Import and review the live tunnel configuration before setting:
+Tunnel configuration is opt-in in the owning repository. Keep
+`manage_tunnel_config` false when the ingress list is managed separately, so an
+apply cannot replace unrelated ingress rules.
 
-```bash
-MANAGE_TUNNEL_CONFIG=true
-```
 
-When this value is true, `cloudflare-apply.sh` refuses to continue unless the existing tunnel configuration is already present in Terraform state. This prevents unrelated ingress rules from being replaced.
-
-Keep the value false when tunnel ingress is managed separately:
 
 ```bash
 MANAGE_TUNNEL_CONFIG=false

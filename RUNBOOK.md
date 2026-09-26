@@ -21,6 +21,10 @@
 
 ## Terraform state migration failure
 
+Cloudflare state now lives in `zworkforce`, so this procedure applies there
+rather than in this repository. The steps below are preserved because the
+failure modes are identical and the recovery discipline still holds.
+
 1. Stop every Terraform writer and preserve `.terraform/`, ignored
    `backend.tf`, the local state, and the newest
    `output/backups/cloudflare-state-*.tfstate{,.sha256}` without modification.
@@ -30,7 +34,7 @@
 3. If `backend.tf` exists after the command failed, assume R2 may already be
    authoritative. Do not delete it, reinitialize the local backend, apply, or
    push state.
-4. Run `./scripts/cloudflare-state.sh verify` with the same mode-`0600`
+4. Run the owning repository's state verification with its mode-`0600`
    `.env.cloudflare`, then compare remote state lineage and managed addresses
    with the verified backup.
 5. If verification cannot establish one authoritative state, make both state

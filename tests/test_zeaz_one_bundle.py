@@ -56,7 +56,13 @@ class ZeazOneBundleTests(unittest.TestCase):
         self.assertIn('cp -a "$SOURCE_ROOT/." "$incoming/"', sync)
         self.assertIn("ln -sfn", sync)
         self.assertIn("mv -Tf", sync)
-        self.assertIn("FORCE_ENABLE_ZEAZ_ONE_API_ROUTE=true", sync)
+        # Cloudflare moved to the repository that owns it, so the sync script no
+        # longer enables those routes or shells out to a provisioning wrapper.
+        self.assertNotIn("FORCE_ENABLE_ZEAZ_ONE", sync)
+        self.assertNotIn("cloudflare-apply.sh", sync)
+        self.assertIn(
+            "DNS records and tunnel ingress are owned by zworkforce", sync
+        )
         self.assertNotIn("--www-redirect", sync)
         self.assertNotIn("18082", sync)
         self.assertNotIn("rsync", sync)

@@ -9,7 +9,6 @@ CURRENT_LINK="$RUNTIME_ROOT/current"
 
 update_repo=false
 deploy_local=true
-cloudflare_mode="none"
 status_only=false
 stop_only=false
 
@@ -30,16 +29,17 @@ Usage:
 Options:
   --update             Fast-forward the checked-out main branch from origin/main.
   --skip-local         Do not stage or deploy the bundled local services.
-  --plan-cloudflare    Reconcile ZEAZ One DNS and create a reviewed Terraform plan.
-  --apply-cloudflare   Reconcile ZEAZ One DNS and explicitly apply the saved plan.
   --status             Show the active local release and service status.
   --stop               Stop the active local ZEAZ One services.
   -h, --help
 
+  Cloudflare is not managed from this repository. DNS records and tunnel ingress
+  are owned by zworkforce, so --plan-cloudflare and --apply-cloudflare are
+  rejected rather than silently doing nothing.
+
 Examples:
   ./scripts/zeaz-one-sync.sh --update
-  ./scripts/zeaz-one-sync.sh --update --plan-cloudflare
-  ./scripts/zeaz-one-sync.sh --skip-local --apply-cloudflare
+  ./scripts/zeaz-one-sync.sh --status
 USAGE
 }
 
@@ -47,13 +47,8 @@ while (($#)); do
   case "$1" in
     --update) update_repo=true ;;
     --skip-local) deploy_local=false ;;
-    --plan-cloudflare)
-      [[ "$cloudflare_mode" == "none" ]] || fail "Choose only one Cloudflare mode."
-      cloudflare_mode="plan"
-      ;;
-    --apply-cloudflare)
-      [[ "$cloudflare_mode" == "none" ]] || fail "Choose only one Cloudflare mode."
-      cloudflare_mode="apply"
+    --plan-cloudflare|--apply-cloudflare)
+      fail "Cloudflare is no longer managed from this repository. DNS records and tunnel ingress are owned by zworkforce; run terraform there instead."
       ;;
     --status) status_only=true ;;
     --stop) stop_only=true ;;
@@ -163,16 +158,6 @@ if [[ "$deploy_local" == true ]]; then
       rm -rf -- "$candidate"
     fi
   done
-fi
-
-if [[ "$cloudflare_mode" != "none" ]]; then
-  [[ -x "$ROOT/scripts/cloudflare-apply.sh" ]] || fail "Cloudflare apply wrapper is missing."
-  export FORCE_ENABLE_ZEAZ_ONE=true
-  export FORCE_ENABLE_ZEAZ_ONE_API_ROUTE=true
-
-  args=(--zeaz-one)
-  [[ "$cloudflare_mode" == "apply" ]] && args+=(--apply)
-  "$ROOT/scripts/cloudflare-apply.sh" "${args[@]}"
 fi
 
 if [[ "$deploy_local" == true ]]; then
