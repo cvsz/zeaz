@@ -1,5 +1,20 @@
 # AGENTS.md
 
+## READ FIRST — REQUIRED
+
+Before doing any work in this repository, read the canonical ZeaZDev operating policy:
+
+**[zeaz.md](https://github.com/cvsz/zeaz/blob/main/zeaz.md)**
+
+Canonical source of truth:
+- Policy file: `zeaz.md`
+- Canonical URL: https://github.com/cvsz/zeaz/blob/main/zeaz.md
+
+The canonical policy defines the ecosystem-wide AI/engineering baseline. This repository's existing rules remain in force; more-specific instructions may add stricter requirements.
+
+---
+
+
 ## Language and Coding Omega Advanced Professional
 - **Communication**: Always talk in Thai when interacting with users.
 - **Code & Technical Assets**: All code, comments, documentation, and technical definitions must be in English.
