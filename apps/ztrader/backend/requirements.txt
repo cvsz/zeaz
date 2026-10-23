@@ -26,7 +26,7 @@ google-auth==2.55.1
 google-auth-oauthlib==1.4.0
 google-auth-httplib2==0.4.0
 qrcode==8.2
-pillow==12.3.0
+pillow==13.0.0
 python-json-logger==4.1.0
 pyyaml==6.0.3
 pytest>=9.0.3,<10
