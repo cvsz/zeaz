@@ -20,14 +20,14 @@ A GitHub repository search for `user:cvsz` returned 171 repositories across two 
 
 The inventory query and page counts are recorded so the result can be reproduced. Repository search and installation visibility can change; refresh the inventory before subsequent rollout batches.
 
-A targeted root `AGENTS.md` check was completed for 24 selected repositories:
+A targeted root `AGENTS.md` check was completed for 32 selected repositories:
 
 | Root instruction evidence | Count |
 |---|---:|
-| Root `AGENTS.md` fetched successfully | 20 |
-| Root `AGENTS.md` returned 404 | 4 |
-| Of the 20 existing files, explicitly contained the canonical policy URL | 4 |
-| Other existing files without that exact URL | 16 |
+| Root `AGENTS.md` fetched successfully | 24 |
+| Root `AGENTS.md` returned 404 | 8 |
+| Of the 24 existing files, explicitly contained the canonical policy URL | 4 |
+| Other existing files without that exact URL | 20 |
 
 The four confirmed root `AGENTS.md` files containing the canonical URL were:
 - `cvsz/autodj`
@@ -35,7 +35,7 @@ The four confirmed root `AGENTS.md` files containing the canonical URL were:
 - `cvsz/zwslcore`
 - `cvsz/zcoder`
 
-The four repositories where root `AGENTS.md` returned 404 in this targeted sample were:
+The eight repositories where root `AGENTS.md` returned 404 in this targeted sample were:
 - `cvsz/zgitcp`
 - `cvsz/zai`
 - `cvsz/zvath`
@@ -45,7 +45,7 @@ The four repositories where root `AGENTS.md` returned 404 in this targeted sampl
 - `cvsz/zcino`
 - `cvsz/zeazchain`
 
-**Correction:** the list above contains eight repository names from multiple sample batches, while the table's 4 count refers to the 24-repository first sample only. The additional four missing-file observations were gathered in a later targeted sample. The consolidated observed sample is therefore 32 repositories: 24 successful root-file checks plus 8 additional checks, with 28 existing root files and 8 root-file 404s. Do not use the initial 24-only count as the final consolidated sample.
+These counts describe the 32 directly queried repositories only. The remaining repositories have not been individually checked for a root `AGENTS.md` in this audit.
 
 ## 2. Method and Evidence
 
@@ -336,4 +336,4 @@ cvsz/zytgen
 - Archive and visibility counts are point-in-time metadata and may change.
 - Repository family and adoption status remain **UNCLASSIFIED / NOT VERIFIED** unless explicitly supported by direct evidence above.
 
-No repository was modified by this audit report. No deployment, merge, release, or production action was performed.
+Only this audit report was added to the `cvsz/zeaz` policy branch. No dependent repository was modified. No deployment, merge, release, or production action was performed.
