@@ -316,7 +316,23 @@ cvsz/zypto
 cvsz/zytgen
 ```
 
-## 6. Next Actions
+## 6. First Adoption Batch (2026-11-08)
+
+Five documentation-only adoption PRs were opened after canonical policy PR #68 merged:
+
+| Repository | PR | Change | Review/CI snapshot |
+|---|---|---|---|
+| `cvsz/zeapay` | [#5](https://github.com/cvsz/zeapay/pull/5) | New root `AGENTS.md`; financial, ledger, signing, and demo boundary | Open; no workflow runs returned |
+| `cvsz/zypto` | [#193](https://github.com/cvsz/zypto/pull/193) | New root `AGENTS.md`; trading-risk, tenant, and simulation-first rules | Open; DAST, SAST, Quality Gate, Security Gate, and pip-audit passed; Secrets workflow failed with GitHub API 403 `Resource not accessible by integration`; Deep Scan Autofix was in progress at snapshot |
+| `cvsz/zcino` | [#35](https://github.com/cvsz/zcino/pull/35) | New root `AGENTS.md`; catalog boundary, demo-auth, tenant, and tracking privacy rules | Open; no workflow runs returned |
+| `cvsz/zpay` | [#4](https://github.com/cvsz/zpay/pull/4) | Minimal canonical policy reference added to existing root `AGENTS.md` | Open; no workflow runs returned |
+| `cvsz/zwallet` | [#236](https://github.com/cvsz/zwallet/pull/236) | Minimal canonical policy reference added to existing root `AGENTS.md`; nested Codex rules preserved | Open; Repo Hygiene passed; CodeQL was in progress; Supply Chain Security failed (Trivy reported 19 HIGH/CRITICAL findings: 16 HIGH, 3 CRITICAL); SSOT Enforcement failed because a test expects missing `.github/workflows/cicd.yml`; CI failed due missing `@zwallet/shared-types/wallet` and `@zwallet/shared-types/contracts` modules during typecheck |
+
+These workflow failures are repository baseline/security issues or workflow permission failures surfaced by the PR checks. They are not evidence that the documentation-only policy additions caused those defects. Do not merge these PRs while required checks are failing or security findings remain untriaged.
+
+The five branches contain only root `AGENTS.md` changes. No application source, infrastructure, secrets, or production state was changed. Workflow states above are a time-specific snapshot and must be refreshed before merge.
+
+## 7. Next Actions
 
 - Re-run the inventory immediately before each rollout batch.
 - Inspect default-branch README, license, root and nested instructions, security docs, workflows, and current deployment status for each target.
@@ -327,7 +343,7 @@ cvsz/zytgen
 - Do not modify archived, upstream, vendor, or sample repositories until their status and ownership are confirmed.
 - Record exact PR URLs, head SHAs, checks, review outcomes, and adoption status in a refreshed ledger.
 
-## 7. Audit Limitations
+## 8. Audit Limitations
 
 - This audit did not inspect source code or all instruction files in all 171 repositories.
 - The 32 root-file checks are a targeted sample, not a statistically representative sample.
@@ -336,4 +352,4 @@ cvsz/zytgen
 - Archive and visibility counts are point-in-time metadata and may change.
 - Repository family and adoption status remain **UNCLASSIFIED / NOT VERIFIED** unless explicitly supported by direct evidence above.
 
-Only this audit report was added to the `cvsz/zeaz` policy branch. No dependent repository was modified. No deployment, merge, release, or production action was performed.
+Only this audit report was added to the `cvsz/zeaz` audit branch. Five dependent-repository PR branches were created, but no dependent repository default branch was changed. No deployment, release, credential, or production action was performed.
