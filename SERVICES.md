@@ -15,7 +15,14 @@
 | Operational procedures | `OPERATIONS.md` and `RUNBOOK.md` |
 | Security policy | `SECURITY.md` |
 | Engineering health | `dashboard/` |
+| zTTShop SaaS architecture decision | `docs/adr/ADR-001-zttshop-saas-service-boundary.md` |
+| zTTShop SaaS threat model | `docs/security/zttshop-saas-threat-model.md` |
+| zTTShop paid-pilot validation | `docs/pilot/paid-pilot-validation.md` |
+| zTTShop SaaS execution status | `docs/rollout/zttshop-saas-execution-status.md` |
+| ZEAZ AI + SaaS commercial strategy | [PR #71](https://github.com/cvsz/zeaz/pull/71) |
 
 Root summary files link to these authorities. Dated `*_REPORT.md` documents are
 historical evidence and must not override executable configuration or current
-contracts.
+contracts. zTTShop SaaS documents describe a proposed service boundary; they do
+not establish that the SaaS API, tenant database, billing provider or live
+channel connectors have been implemented or approved.
