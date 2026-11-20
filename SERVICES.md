@@ -15,7 +15,9 @@
 | Operational procedures | `OPERATIONS.md` and `RUNBOOK.md` |
 | Security policy | `SECURITY.md` |
 | Engineering health | `dashboard/` |
+| ZEAZ AI + SaaS commercial strategy | `docs/zeaz-ai-saas-business-plan.en.md` and `docs/zeaz-ai-saas-business-plan.th.md` |
 
 Root summary files link to these authorities. Dated `*_REPORT.md` documents are
 historical evidence and must not override executable configuration or current
-contracts.
+contracts. The ZEAZ AI + SaaS plan is a proposed commercial strategy; it does
+not supersede the runtime, data ownership, security or release contracts above.

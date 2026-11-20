@@ -27,6 +27,14 @@ Live service: [moopiew.zeaz.dev](https://moopiew.zeaz.dev/) · API menu:
   Gemini, NVIDIA, Z.AI, OpenCode, OpenRouter and Hugging Face models without
   exposing provider keys; see [the AI guide](docs/huggingface.md).
 
+The separate **ZEAZ AI + SaaS commercial strategy** is a proposed business
+initiative, not a claim that this repository already provides a production
+multi-tenant SaaS, subscription billing or live marketplace connectors. See
+the [English plan](docs/zeaz-ai-saas-business-plan.en.md) and
+[Thai plan](docs/zeaz-ai-saas-business-plan.th.md). The existing zTTShop sales
+demo remains a simulation; preserve the current MooPiew and zERP data
+boundaries while validating the commercial opportunity.
+
 SCB payment support is intentionally disabled until approved credentials,
 certificate material and successful Sandbox verification are configured. See
 [the SCB guide](docs/scb-application.md); never commit payment credentials.
