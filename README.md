@@ -27,6 +27,20 @@ Live service: [moopiew.zeaz.dev](https://moopiew.zeaz.dev/) · API menu:
   Gemini, NVIDIA, Z.AI, OpenCode, OpenRouter and Hugging Face models without
   exposing provider keys; see [the AI guide](docs/huggingface.md).
 
+The zTTShop Commerce OS at [zttshop.zeaz.dev](https://zttshop.zeaz.dev/demo)
+is currently a **simulation/demo**, not a production multi-tenant SaaS. It uses
+seeded conversations, orders and stock values and does not call live Facebook,
+Shopee, payment or production order APIs. Its current TikTok Login Kit scope is
+limited to `user.info.basic`; it does not grant messaging, marketplace order or
+content-publishing capability.
+
+The proposed ZEAZ AI + SaaS business plan is tracked in
+[PR #71](https://github.com/cvsz/zeaz/pull/71). The architecture proposal,
+[threat model](docs/security/zttshop-saas-threat-model.md) and
+[paid-pilot validation runbook](docs/pilot/paid-pilot-validation.md) are being
+reviewed separately. Preserve MooPiew's SQLite and restaurant operations
+boundary; the proposed zTTShop service must use its own tenant data store.
+
 SCB payment support is intentionally disabled until approved credentials,
 certificate material and successful Sandbox verification are configured. See
 [the SCB guide](docs/scb-application.md); never commit payment credentials.
