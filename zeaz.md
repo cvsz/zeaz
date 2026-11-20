@@ -389,3 +389,113 @@ A task may be **implementation-complete but not release-ready**. Report these st
 ## Objective
 
 Build and operate reliable ZeaZDev software and infrastructure with minimal unnecessary complexity, strong security and privacy, reproducible delivery, clear ownership, controlled cost, least-privilege automation, reversible change, and verifiable production readiness.
+
+## 21. Standard Repository Task Execution Protocol
+
+This section defines the default execution contract for AI agents and human contributors performing repository-level engineering work. It supplements the change lifecycle, testing, security, and release controls above; it does not grant additional permissions.
+
+### 21.1 Classify the task and establish authority
+
+Before acting, classify the request as one or more of: **research**, **audit**, **implementation**, **refactor**, **migration**, **security remediation**, **release**, or **operations**.
+
+- Identify the requested repository, branch, paths, deliverables, acceptance criteria, and excluded scope.
+- Separate requested outcomes from assumptions. Do not silently expand scope to sibling repositories, production systems, accounts, or external services.
+- Determine which actions are read-only, repository mutations, external mutations, cost-incurring, or production-impacting.
+- If a material ambiguity changes security, data integrity, compatibility, cost, or blast radius, stop at the boundary and obtain clarification.
+- A request to implement does not itself authorize deployment, publication, release, credential changes, infrastructure apply, data deletion, or merge.
+
+### 21.2 Repository preflight and source discovery
+
+Before editing:
+
+1. Confirm repository identity, remote, default branch, current branch, and target commit.
+2. Inspect the complete working-tree state, including staged, unstaged, and untracked files. Preserve pre-existing user changes; never reset, clean, stash-pop over, or overwrite them without authorization.
+3. Read all applicable instructions and the relevant project documentation, manifests, source, tests, workflows, and configuration.
+4. Trace the affected behavior across callers, dependencies, persistence, API/event contracts, runtime configuration, and deployment paths.
+5. Search for existing implementations and reusable abstractions before adding new files, dependencies, services, or directories.
+6. Establish a baseline with the relevant existing tests and checks where practical. Record pre-existing failures separately from regressions.
+
+Do not infer repository state from a README, a search excerpt, a prior run, a stale report, or an agent summary when the underlying source can be inspected.
+
+### 21.3 Plan and implementation discipline
+
+Create a concise, reviewable plan that maps each requirement to affected components, implementation steps, validation, and rollback or recovery where relevant.
+
+- Prefer the smallest complete change that satisfies the requirement. Preserve the existing repository layout and conventions; create files or directories only when the architecture or deliverable genuinely requires them.
+- Do not rewrite unrelated code, perform broad formatting, rename public interfaces, or introduce architectural layers without demonstrated need.
+- Preserve existing behavior and compatibility unless an intentional change is part of the approved scope.
+- Implement complete behavior, including validation, authorization, failure handling, observability, and edge cases appropriate to the risk.
+- Do not leave placeholders, fake success paths, dead code, knowingly failing tests, or undocumented temporary workarounds in a claimed-complete change.
+- Do not weaken tests, linters, scanners, type checks, policy gates, or security controls merely to obtain a green result. Fix the underlying issue or document a justified, approved exception.
+- Keep generated files derived from their tracked source; do not hand-edit generated output as the authoritative implementation.
+
+### 21.4 Agent and subagent orchestration
+
+When subagents or specialized tools are available and authorized, delegate bounded, independently verifiable work such as architecture review, security review, test analysis, documentation review, or targeted implementation.
+
+- Give each delegated task a precise scope, expected evidence, and explicit permission boundary.
+- Parallelize independent inspection and analysis; serialize conflicting edits and mutations.
+- The coordinating agent remains accountable for integrating results, checking consistency, reviewing the final diff, and validating the exact resulting commit.
+- Treat delegated output as untrusted evidence until independently checked against source and execution results.
+- Do not claim that subagents, tools, scans, or reviews ran unless their execution is observable.
+
+### 21.5 Validation loop and completion evidence
+
+Discover the repository's actual toolchain and documented commands; do not assume that every language-specific tool applies. Run the relevant format, lint, static analysis, type, unit, integration, contract, build, security, packaging, and runtime checks according to the change's risk.
+
+For each failure:
+1. determine whether it is pre-existing, caused by the change, environmental, or an external blocker;
+2. fix in-scope defects at their source;
+3. rerun the narrow failing check and the relevant regression suite;
+4. rerun final gates against the final candidate commit.
+
+Do not stop after the first green test if other required checks remain. Do not claim zero warnings, complete coverage, production readiness, or a clean audit without evidence supporting that exact claim.
+
+The final evidence must identify the exact commit, commands or workflow runs, results, skipped or blocked checks, residual risks, and what was not verified. Use the status vocabulary in Section 13.
+
+### 21.6 Documentation and final report
+
+Update existing documentation in the same change when behavior, architecture, configuration, API, security, operations, migration, or deployment contracts change. Prefer the repository's established documentation locations and formats; do not create a new documentation tree solely to satisfy an agent's preferred template.
+
+Provide a concise final report that records:
+- requested scope and actual scope completed;
+- material findings and changes, with affected paths;
+- architecture and security decisions;
+- validation commands and evidence against the exact commit;
+- unresolved findings, skipped or blocked gates, and residual risks;
+- migration, rollout, rollback, and operator actions where applicable.
+
+A report is an evidence index, not a substitute for tests, review, or operational verification.
+
+### 21.7 Git, pull-request, and merge discipline
+
+For repository changes:
+
+- Work on an isolated, descriptively named feature or fix branch. Do not commit policy or implementation changes directly to a protected default branch.
+- Reconcile the target branch and existing open PRs before creating duplicate work.
+- Keep commits focused and reviewable. Use the repository's required signing identity and verify signatures where signing is required.
+- Inspect the staged diff before committing; inspect the complete branch diff before opening or updating a PR. Check for secrets, generated noise, unrelated changes, accidental deletions, and license/attribution issues.
+- Open or update a PR with explicit scope, rationale, risk, validation evidence, known limitations, and rollout/rollback notes.
+- Request genuinely independent review for security-sensitive, high-integrity, infrastructure, authentication, release, and canonical-policy changes. The author or implementing agent must not represent its own review as independent approval.
+- Address review findings and revalidate the exact updated PR head SHA. Re-check required CI and review status after every material change.
+- Do not force-push, rewrite shared history, bypass branch protection, dismiss required reviews, or weaken required checks to make a PR mergeable.
+- Merge only when all repository-required gates pass and the responsible operator has explicitly authorized the merge. A PR being open, approved, or mergeable is not by itself authorization to merge.
+- After merge, verify the resulting base commit and applicable CI, artifacts, release, or deployment state. Report the actual result; do not infer it from the merge request.
+
+### 21.8 Non-interactive automation
+
+For unattended or orchestrated execution:
+
+- Prefer explicit CLI arguments, deterministic inputs, machine-readable output, and documented exit codes.
+- Do not invoke interactive editors, credential prompts, confirmation dialogs, or terminal UI flows when a supported non-interactive interface exists.
+- Never bypass authentication, approval, or safety prompts. If an operation requires human interaction or authorization, stop and report the exact required action.
+- Redact secrets from command output and reports. Avoid shell tracing or verbose diagnostics that can expose credentials.
+- Bound execution time, retries, concurrency, network access, and resource consumption.
+- On interruption or partial failure, inspect actual repository and external state before resuming; do not blindly replay non-idempotent actions.
+
+### 21.9 Honest outcome states
+
+Report each deliverable independently as **COMPLETED**, **PARTIALLY COMPLETED**, **BLOCKED**, **FAILED**, or **NOT STARTED**. A task is not fully complete when required implementation, validation, documentation, review, approval, or post-change verification remains outstanding.
+
+Never fabricate commits, test output, scan results, reviewer identities, approvals, PRs, merges, deployments, or completion metrics. State clearly what was actually changed and what remains for the maintainer or operator.
+
