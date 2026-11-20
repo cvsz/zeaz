@@ -4,7 +4,7 @@
 - Date: 2026-11-20
 - Owners: ZEAZ product owner and designated engineering/security reviewers
 - Scope: zTTShop AI Commerce Assistant, tenant control plane, usage metering, subscription lifecycle and channel connectors
-- Related: `docs/zeaz-ai-saas-business-plan.en.md`, `docs/zeaz-ai-saas-business-plan.th.md`, `docs/sales-demo.md`, `docs/tiktok-submission.md`, `docs/ARCHITECTURE.md`, `docs/DATABASE.md`, `SECURITY.md`, `zeaz.md`
+- Related: [commercial plan PR #71](https://github.com/cvsz/zeaz/pull/71), `docs/sales-demo.md`, `docs/tiktok-submission.md`, `docs/ARCHITECTURE.md`, `docs/DATABASE.md`, `SECURITY.md`, `zeaz.md`
 
 ## Context
 
